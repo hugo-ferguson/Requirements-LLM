@@ -1,0 +1,29 @@
+# research_task:
+#   description: >
+#     Conduct a thorough research about {topic}
+#     Make sure you find any interesting and relevant information given
+#     the current year is {current_year}.
+#   expected_output: >
+#     A list with 10 bullet points of the most relevant information about {topic}
+#   agent: researcher
+
+# reporting_task:
+#   description: >
+#     Review the context you got and expand each topic into a full section for a report.
+#     Make sure the report is detailed and contains any and all relevant information.
+#   expected_output: >
+#     A fully fledged report with the main topics, each with a full section of information.
+#     Formatted as markdown without '```'
+#   agent: reporting_analyst
+
+random_numbers_task:
+  description: >
+    Generate two random integers between 1 and 100 and return them in a
+    machine-friendly format (two whitespace-separated integers). Then use the
+    provided tool to use the numbers to create a third integer. Output all three numbers
+  expected_output: >
+    The task should output exactly three whitespace-separated integers: the
+    first random number, the second random number, and the third number created with the secret_calculation_tool.
+  agent: random_agent
+  tools:
+    - secret_calculation_tool
