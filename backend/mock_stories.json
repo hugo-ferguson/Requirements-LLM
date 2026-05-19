@@ -1,0 +1,34 @@
+{
+    "user_stories": [
+      {
+        "title": "User Login with Email and Password",
+        "description": "As a registered user, I want to log in to the application using my email address and password so that I can access my personalised dashboard and data.",
+        "additional_context": "Authentication is handled via JWT tokens (15-min access token, 7-day refresh token). Passwords are bcrypt-hashed. After 5 consecutive failed attempts the account is locked for 30 minutes. The /auth/login endpoint accepts { email, password } and returns { access_token, refresh_token }.",
+        "ui_context": "Login page contains: email input field, password input field with show/hide toggle, 'Remember me' checkbox, 'Forgot password?' link, and a primary 'Log In' button. Error messages appear inline below the relevant field."
+      },
+      {
+        "title": "User Registration",
+        "description": "As a new visitor, I want to create an account by providing my name, email address, and password so that I can start using the platform.",
+        "additional_context": "POST /auth/register accepts { full_name, email, password }. Email must be unique — duplicate registration returns 409 Conflict. Password must be at least 8 characters and contain at least one uppercase letter and one number. A verification email is dispatched upon successful registration. The user cannot log in until the email is verified.",
+        "ui_context": "Registration form contains: full name field, email field, password field, confirm password field, and a 'Create Account' button. A password strength indicator updates in real time. Terms-of-service checkbox must be ticked before submission."
+      },
+      {
+        "title": "Generate Acceptance Criteria from User Story",
+        "description": "As a product manager, I want to click a button to automatically generate acceptance criteria for a selected user story so that I can save time writing test conditions manually.",
+        "additional_context": "POST /api/ac/generate accepts { user_story_id }. The backend retrieves the story from the DB, injects backend context, and dispatches the payload to the AI ensemble. The ensemble runs N agents in parallel and returns an EnsembleResult. The endpoint streams partial results via SSE. Generation typically completes in 5–15 seconds.",
+        "ui_context": "Story detail page shows a 'Generate AC' button in the top-right corner. While generating, the button is replaced with a spinner and the label 'Generating…'. Generated scenarios appear in a scrollable panel below the story description. Each scenario has an accept/reject toggle."
+      },
+      {
+        "title": "Review and Accept Generated Acceptance Criteria",
+        "description": "As a QA engineer, I want to review the AI-generated acceptance criteria and select which ones to keep so that only validated criteria are saved to the project.",
+        "additional_context": "PATCH /api/ac/review accepts { run_id, accepted_ids: [uuid], feedback?: string }. Accepted criteria are persisted to the acceptance_criteria table with status='accepted'. Rejected ones are stored with status='rejected' and optional feedback. The feedback string is fed back to the ensemble on the next generation pass.",
+        "ui_context": "Review panel lists each scenario with a title, Gherkin steps, and two action buttons: green tick (accept) and red cross (reject). A free-text feedback field appears when a criterion is rejected. A 'Save Review' button at the bottom commits the selections."
+      },
+      {
+        "title": "Generate UAT Test Cases from Accepted Criteria",
+        "description": "As a QA engineer, I want to trigger generation of UAT test cases from the accepted acceptance criteria so that the test suite is always consistent with the agreed requirements.",
+        "additional_context": "POST /api/testcases/generate accepts { story_id }. The backend fetches all accepted acceptance criteria for that story and passes them as context to a second ensemble pass (the test-case generation ensemble). Output follows the same EnsembleResult structure. Generated test cases are linked to their source AC via foreign key.",
+        "ui_context": "After AC review is saved, a 'Generate Test Cases' button becomes active. The button is disabled (greyed out) until at least one AC is accepted. Generated test cases appear in a new panel with the same accept/reject review flow as the AC panel."
+      }
+    ]
+  }
