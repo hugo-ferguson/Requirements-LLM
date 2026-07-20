@@ -1,0 +1,31 @@
+###Task Description:
+An instruction (might include an Input inside it), a response to evaluate, a reference answer that gets a score of 5, and a score rubric representing an evaluation criterion are given.
+1. Write detailed feedback that assesses the quality of the response strictly based on the given score rubric. Do not evaluate aspects outside the rubric.
+2. Compare the response against both the instruction and the reference answer when assigning a score.
+3. After writing the feedback, write a score that is an integer between 1 and 5 according to the score rubric.
+4. The output format should be exactly: "Feedback: (write feedback) [RESULT] (an integer between 1 and 5)"
+5. Do not generate any additional opening, closing, or explanations.
+
+###The instruction to evaluate:
+{orig_instruction}
+
+###Response to evaluate:
+{orig_response}
+
+###Reference Answer (Score 5):
+{orig_reference_answer}
+
+###Score Rubrics:
+[Evaluate how clearly the generated acceptance criteria are written. Consider whether they are easy for developers, testers, and stakeholders to read, interpret, and implement without ambiguity.]
+
+Score 1: The acceptance criteria are confusing, ambiguous, or poorly structured, making them difficult to understand.
+
+Score 2: The acceptance criteria are partially understandable but contain significant ambiguity or unclear wording.
+
+Score 3: The acceptance criteria are generally understandable but include some ambiguous or unnecessarily complex statements.
+
+Score 4: The acceptance criteria are clear and well structured, with only minor opportunities for improving clarity.
+
+Score 5: The acceptance criteria are exceptionally clear, concise, unambiguous, and easy to understand and implement.
+
+###Feedback:

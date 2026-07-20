@@ -1,0 +1,31 @@
+###Task Description:
+An instruction (might include an Input inside it), a response to evaluate, a reference answer that gets a score of 5, and a score rubric representing an evaluation criterion are given.
+1. Write detailed feedback that assesses the quality of the response strictly based on the given score rubric. Do not evaluate aspects outside the rubric.
+2. Compare the response against both the instruction and the reference answer when assigning a score.
+3. After writing the feedback, write a score that is an integer between 1 and 5 according to the score rubric.
+4. The output format should be exactly: "Feedback: (write feedback) [RESULT] (an integer between 1 and 5)"
+5. Do not generate any additional opening, closing, or explanations.
+
+###The instruction to evaluate:
+{orig_instruction}
+
+###Response to evaluate:
+{orig_response}
+
+###Reference Answer (Score 5):
+{orig_reference_answer}
+
+###Score Rubrics:
+[Evaluate how well the generated acceptance criteria address the requirements in the input. Consider whether the criteria focus on the requested functionality and avoid introducing unrelated or unnecessary requirements.]
+
+Score 1: The acceptance criteria are largely unrelated to the input or fail to address the requested functionality.
+
+Score 2: The acceptance criteria address only a small portion of the requested functionality or include substantial irrelevant content.
+
+Score 3: The acceptance criteria address the main functionality but omit some important requirements or include minor irrelevant details.
+
+Score 4: The acceptance criteria address nearly all requested functionality, with only minor omissions or unnecessary details.
+
+Score 5: The acceptance criteria fully address all requested functionality and remain entirely focused on the input without introducing irrelevant requirements.
+
+###Feedback:
