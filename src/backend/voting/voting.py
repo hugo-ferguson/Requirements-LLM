@@ -53,13 +53,11 @@ class OllamaPrometheusClient:
 		*,
 		instruction: str,
 		response: str,
-		reference_answer: str,
 		rubric_name: str,
 	) -> Vote:
 		rubric = (RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
 		prompt = rubric.replace("{orig_instruction}", instruction)
 		prompt = prompt.replace("{orig_response}", response)
-		prompt = prompt.replace("{orig_reference_answer}", reference_answer)
 		request = {
 			"model": self.model,
 			"stream": False,
@@ -90,7 +88,6 @@ async def evaluate_input(evaluation_input: EvaluationInput, client: OllamaPromet
 			*(evaluator.evaluate(
 				instruction=evaluation_input.prompt,
 				response=output,
-				reference_answer=evaluation_input.reference_answer,
 				rubric_name=rubric_name,
 			) for rubric_name in RUBRIC_NAMES)
 		)

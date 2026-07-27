@@ -12,9 +12,6 @@ An instruction (might include an Input inside it), a response to evaluate, a ref
 ###Response to evaluate:
 {orig_response}
 
-###Reference Answer (Score 5):
-{orig_reference_answer}
-
 ###Score Rubrics:
 [Evaluate whether the generated acceptance criteria are logically correct, internally consistent, and technically accurate. Consider whether the criteria make valid assumptions and could reasonably be implemented.]
 

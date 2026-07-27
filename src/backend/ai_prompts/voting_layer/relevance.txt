@@ -12,9 +12,6 @@ An instruction (might include an Input inside it), a response to evaluate, a ref
 ###Response to evaluate:
 {orig_response}
 
-###Reference Answer (Score 5):
-{orig_reference_answer}
-
 ###Score Rubrics:
 [Evaluate how well the generated acceptance criteria address the requirements in the input. Consider whether the criteria focus on the requested functionality and avoid introducing unrelated or unnecessary requirements.]
 

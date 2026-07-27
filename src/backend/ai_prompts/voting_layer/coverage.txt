@@ -12,9 +12,6 @@ An instruction (might include an Input inside it), a response to evaluate, a ref
 ###Response to evaluate:
 {orig_response}
 
-###Reference Answer (Score 5):
-{orig_reference_answer}
-
 ###Score Rubrics:
 [Evaluate how comprehensively the generated acceptance criteria capture the expected behaviour described in the input. Consider whether they include important functional requirements, constraints, edge cases, and expected outcomes.]
 
