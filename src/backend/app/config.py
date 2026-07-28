@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     embedding_provider: Literal["local", "ollama", "api"] = "local"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_dim: int = 384
     ollama_base_url: str = "http://localhost:11434"
     embedding_api_key: str | None = None
     embedding_api_base_url: str | None = None
