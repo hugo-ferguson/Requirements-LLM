@@ -112,14 +112,36 @@ class APIEmbeddingProvider(EmbeddingProvider):
 
 
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
-	"""Constructs the EmbeddingProvider selected by environment variable."""
+	"""
+	Constructs the EmbeddingProvider selected by environment variable.
+	"""
 
+	provider = _construct_provider(settings)
+
+	# Check that the dimension of the embedding provider (model) matches the 
+	# settings.
+	# Basically, this is an unsolved problem at the moment because pgvector
+	# needs a fixed vector dimension, but this can change if the model changes.
+	# For now, just drop document chunk and make sure your dimension setting
+	# matches the model - then the table will be created to match.
+	if provider.dimension != settings.embedding_dim:
+		raise ValueError(
+			f"Embedding provider {settings.embedding_provider!r} with model "
+			f"{settings.embedding_model!r} produces {provider.dimension}-dim vectors."
+			f"EMBEDDING_DIM is set to {settings.embedding_dim}. "
+			f"Update EMBEDDING_DIM to match, or choose a different EMBEDDING_MODEL."
+		)
+
+	return provider
+
+
+def _construct_provider(settings: Settings) -> EmbeddingProvider:
 	if settings.embedding_provider == "local":
 		return LocalEmbeddingProvider(model_name=settings.embedding_model)
 
 	if settings.embedding_provider == "ollama":
 		return OllamaEmbeddingProvider(
-			model=settings.embedding_model, 
+			model=settings.embedding_model,
 			base_url=settings.ollama_base_url
 		)
 
@@ -128,7 +150,7 @@ def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
 			raise ValueError(
 				"EMBEDDING_API_KEY is required when EMBEDDING_PROVIDER=api"
 			)
-		
+
 		return APIEmbeddingProvider(
 			model=settings.embedding_model,
 			api_key=settings.embedding_api_key,
