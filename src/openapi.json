@@ -69,6 +69,88 @@
         }
       }
     },
+    "/conversation/messages": {
+      "post": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "Send Message",
+        "operationId": "send_message_conversation_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationMessage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversation/generate": {
+      "post": {
+        "tags": [
+          "conversation"
+        ],
+        "summary": "Generate",
+        "operationId": "generate_conversation_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -94,6 +176,165 @@
   },
   "components": {
     "schemas": {
+      "AcceptanceCriterion": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "given": {
+            "type": "string",
+            "title": "Given"
+          },
+          "when": {
+            "type": "string",
+            "title": "When"
+          },
+          "then": {
+            "type": "string",
+            "title": "Then"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/AcceptanceCriterionScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "given",
+          "when",
+          "then",
+          "scores",
+          "overall_score"
+        ],
+        "title": "AcceptanceCriterion"
+      },
+      "AcceptanceCriterionScores": {
+        "properties": {
+          "relevance": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Relevance"
+          },
+          "correctness": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Correctness"
+          },
+          "understandability": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Understandability"
+          },
+          "coverage": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "relevance",
+          "correctness",
+          "understandability",
+          "coverage"
+        ],
+        "title": "AcceptanceCriterionScores"
+      },
+      "ConversationAttachment": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "content"
+        ],
+        "title": "ConversationAttachment"
+      },
+      "ConversationMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationAttachment"
+            },
+            "type": "array",
+            "title": "Attachments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "text"
+        ],
+        "title": "ConversationMessage"
+      },
+      "ConversationRequest": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "ConversationRequest"
+      },
+      "GenerateResult": {
+        "properties": {
+          "acceptance_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterion"
+            },
+            "type": "array",
+            "title": "Acceptance Criteria"
+          }
+        },
+        "type": "object",
+        "required": [
+          "acceptance_criteria"
+        ],
+        "title": "GenerateResult"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {

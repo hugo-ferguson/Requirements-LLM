@@ -19,3 +19,6 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

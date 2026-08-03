@@ -22,6 +22,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversation/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Message */
+        post: operations["send_message_conversation_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversation/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate */
+        post: operations["generate_conversation_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -43,6 +77,62 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptanceCriterion */
+        AcceptanceCriterion: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+        };
+        /** AcceptanceCriterionScores */
+        AcceptanceCriterionScores: {
+            /** Relevance */
+            relevance: number;
+            /** Correctness */
+            correctness: number;
+            /** Understandability */
+            understandability: number;
+            /** Coverage */
+            coverage: number;
+        };
+        /** ConversationAttachment */
+        ConversationAttachment: {
+            /** Filename */
+            filename: string;
+            /** Content */
+            content: string;
+        };
+        /** ConversationMessage */
+        ConversationMessage: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments?: components["schemas"]["ConversationAttachment"][];
+        };
+        /** ConversationRequest */
+        ConversationRequest: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /** GenerateResult */
+        GenerateResult: {
+            /** Acceptance Criteria */
+            acceptance_criteria: components["schemas"]["AcceptanceCriterion"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -127,6 +217,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ItemRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_message_conversation_messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationMessage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_conversation_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
                 };
             };
             /** @description Validation Error */

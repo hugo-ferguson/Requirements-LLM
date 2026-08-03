@@ -1,37 +1,20 @@
-import { useEffect, useState } from "react";
-import { itemsApi } from "./api/items";
-import type { Item } from "./api/items";
-import { ItemForm } from "./components/ItemForm";
-import { ItemList } from "./components/ItemList";
+import { Navigate, Route, Routes } from "react-router";
+import { AppLayout } from "./layouts/AppLayout";
+import { InputPage } from "./pages/InputPage";
+import { ComingSoonPage } from "./pages/ComingSoonPage";
+import { ROUTES } from "./routes";
 
 export default function App() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  async function refresh() {
-    try {
-      setItems(await itemsApi.list());
-      setError(null);
-    } catch {
-      setError("Failed to load items. Is the backend running?");
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  async function handleCreate(name: string) {
-    await itemsApi.create({ name });
-    await refresh();
-  }
-
   return (
-    <main style={{ maxWidth: 480, margin: "2rem auto", fontFamily: "sans-serif" }}>
-      <h1>Items</h1>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <ItemForm onSubmit={handleCreate} />
-      <ItemList items={items} />
-    </main>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<Navigate to={ROUTES.input} replace />} />
+        <Route path={ROUTES.input} element={<InputPage />} />
+        <Route path={ROUTES.acReview} element={<ComingSoonPage title="AC Review" />} />
+        <Route path={ROUTES.uatReview} element={<ComingSoonPage title="UAT Review" />} />
+        <Route path={ROUTES.export} element={<ComingSoonPage title="Export" />} />
+        <Route path="*" element={<Navigate to={ROUTES.input} replace />} />
+      </Route>
+    </Routes>
   );
 }
