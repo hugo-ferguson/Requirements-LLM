@@ -54,7 +54,8 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
     evaluator = OllamaPrometheusClient()
 
     async def evaluate_output(output_index: int, output: str) -> list[Vote]:
-        votes = await asyncio.gather(
+        # Gather rubric evaluations concurrently, but don't fail-fast: collect exceptions
+        results = await asyncio.gather(
             *(
                 evaluator.evaluate(
                     instruction=evaluation_input.prompt,
@@ -62,24 +63,64 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                     rubric_name=rubric_name,
                 )
                 for rubric_name in RUBRIC_NAMES
-            )
+            ),
+            return_exceptions=True,
         )
-        return [
-            Vote(
-                output_index=output_index,
-                output=output,
-                rubric=rubric_name,
-                feedback=vote.feedback,
-                score=vote.score,
-            )
-            for rubric_name, vote in zip(RUBRIC_NAMES, votes, strict=True)
-        ]
 
-    output_votes = await asyncio.gather(
-        *(evaluate_output(index, output) for index, output in enumerate(evaluation_input.output))
+        votes: list[Vote] = []
+        for rubric_name, res in zip(RUBRIC_NAMES, results, strict=True):
+            if isinstance(res, Exception):
+                # Convert exceptions into a safe Vote so the caller can continue.
+                feedback = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
+                votes.append(
+                    Vote(
+                        output_index=output_index,
+                        output=output,
+                        rubric=rubric_name,
+                        feedback=feedback,
+                        score=1,
+                    )
+                )
+            else:
+                votes.append(
+                    Vote(
+                        output_index=output_index,
+                        output=output,
+                        rubric=rubric_name,
+                        feedback=res.feedback,
+                        score=res.score,
+                    )
+                )
+
+        return votes
+
+    # Gather outputs concurrently but tolerate exceptions per-output as well.
+    raw_output_votes = await asyncio.gather(
+        *(evaluate_output(index, output) for index, output in enumerate(evaluation_input.output)),
+        return_exceptions=True,
     )
+
+    all_votes: list[Vote] = []
+    for idx, item in enumerate(raw_output_votes):
+        if isinstance(item, Exception):
+            # The whole output failed to evaluate; emit one vote per rubric with the error
+            for rubric_name in RUBRIC_NAMES:
+                feedback = f"Error evaluating output {idx}: {item.__class__.__name__}: {item}"
+                all_votes.append(
+                    Vote(
+                        output_index=idx,
+                        output=evaluation_input.output[idx],
+                        rubric=rubric_name,
+                        feedback=feedback,
+                        score=1,
+                    )
+                )
+        else:
+            # item is a list[Vote]
+            all_votes.extend(item)
+
     return VotingResult(
         ai=evaluation_input.ai,
         model=evaluation_input.model,
-        votes=[vote for votes in output_votes for vote in votes],
+        votes=all_votes,
     )
