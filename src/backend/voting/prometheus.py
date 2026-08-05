@@ -71,6 +71,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
         for rubric_name, res in zip(RUBRIC_NAMES, results, strict=True):
             if isinstance(res, Exception):
                 # Convert exceptions into a safe Vote so the caller can continue.
+                # Use score 0 to clearly indicate an error occurred.
                 feedback = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
                 votes.append(
                     Vote(
@@ -78,7 +79,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                         output=output,
                         rubric=rubric_name,
                         feedback=feedback,
-                        score=1,
+                        score=0,
                     )
                 )
             else:
@@ -112,7 +113,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                         output=evaluation_input.output[idx],
                         rubric=rubric_name,
                         feedback=feedback,
-                        score=1,
+                        score=-1,
                     )
                 )
         else:

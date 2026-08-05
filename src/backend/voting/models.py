@@ -13,7 +13,8 @@ class EvaluationInput(BaseModel):
 
 class PrometheusVote(BaseModel):
     feedback: str
-    score: int = Field(ge=1, le=5)
+    # Allow 0 to indicate an evaluation error; normal scores range 1..5.
+    score: int = Field(ge=0, le=5)
 
 
 class Vote(PrometheusVote):
