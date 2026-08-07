@@ -103,6 +103,14 @@ class AgentResult(BaseModel):
     user_story_id: str
     status: GenerationStatus = GenerationStatus.SUCCESS
     criteria: list[AcceptanceCriteria] = Field(default_factory=list)
+    prompt_used: str = Field(
+        "",
+        description=(
+            "The exact user-turn prompt sent to the model, including any retrieved "
+            "context. The Voting Layer scores criteria against this as the "
+            "instruction, so it must be recorded rather than recomputed."
+        ),
+    )
     raw_response: str = ""
     error_message: str | None = None
     temperature_used: float = 0.7
