@@ -15,6 +15,7 @@ import time
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
+from pydantic_ai.agent import AgentRetries
 from pydantic_ai.settings import ModelSettings
 
 from .context import RunContext
@@ -107,7 +108,7 @@ async def run_generation_agent(
         _model_string(agent_cfg),
         output_type=AgentOutput,
         system_prompt=SYSTEM_PROMPT,
-        output_retries=3,
+        retries=AgentRetries(output=3),
         model_settings=ModelSettings(
             temperature=agent_cfg.temperature,
             max_tokens=agent_cfg.max_tokens,

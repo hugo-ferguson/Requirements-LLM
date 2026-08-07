@@ -1,5 +1,3 @@
-"""Barebones dev runner for the Ensemble Generation Layer."""
-
 from __future__ import annotations
 
 import argparse
@@ -7,7 +5,11 @@ import asyncio
 import json
 from pathlib import Path
 
-from ensemble_layer import (
+from dotenv import find_dotenv, load_dotenv
+
+load_dotenv(find_dotenv())
+
+from ensemble_layer import (  # noqa: E402
     AgentConfig,
     EnsembleConfig,
     EnsembleOrchestrator,
