@@ -8,11 +8,14 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from voting.models import EvaluationInput, Vote, VotingResult
-from voting.prometheus import evaluate_with_prometheus
+from voting.prometheus import OllamaPrometheusClient, evaluate_with_prometheus
 
 
-async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
-	return await evaluate_with_prometheus(evaluation_input)
+async def evaluate_input(
+	evaluation_input: EvaluationInput,
+	evaluator: OllamaPrometheusClient | None = None,
+) -> VotingResult:
+	return await evaluate_with_prometheus(evaluation_input, evaluator)
 
 
 mcp = FastMCP("requirements-voting")

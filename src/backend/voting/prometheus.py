@@ -13,12 +13,27 @@ from voting.models import EvaluationInput, PrometheusVote, Vote, VotingResult
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
 RUBRIC_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer"
 
+ERROR_SCORE = 0
+DEFAULT_MAX_CONCURRENCY = 4
+
 
 class OllamaPrometheusClient:
-    def __init__(self, base_url: str | None = None, model: str | None = None, timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout: float = 120.0,
+        max_concurrency: int | None = None,
+    ) -> None:
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
         self.model = model or os.getenv("PROMETHEUS_MODEL", "ggozad/prometheus2:latest")
         self.timeout = timeout
+        self.max_concurrency = max_concurrency or int(
+            os.getenv("OLLAMA_MAX_CONCURRENCY", DEFAULT_MAX_CONCURRENCY)
+        )
+        # Bounds this client instance. Share one client across all agents in a
+        # run to bound the run as a whole.
+        self._semaphore = asyncio.Semaphore(self.max_concurrency)
 
     async def evaluate(self, *, instruction: str, response: str, rubric_name: str) -> PrometheusVote:
         rubric = (RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
@@ -38,9 +53,10 @@ class OllamaPrometheusClient:
             ],
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            result = await client.post(f"{self.base_url}/api/chat", json=request)
-            result.raise_for_status()
+        async with self._semaphore:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                result = await client.post(f"{self.base_url}/api/chat", json=request)
+                result.raise_for_status()
 
         body: dict[str, Any] = result.json()
         content = body.get("message", {}).get("content")
@@ -50,8 +66,11 @@ class OllamaPrometheusClient:
         return PrometheusVote.model_validate_json(content)
 
 
-async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingResult:
-    evaluator = OllamaPrometheusClient()
+async def evaluate_with_prometheus(
+    evaluation_input: EvaluationInput,
+    evaluator: OllamaPrometheusClient | None = None,
+) -> VotingResult:
+    evaluator = evaluator or OllamaPrometheusClient()
 
     async def evaluate_output(output_index: int, output: str) -> list[Vote]:
         # Gather rubric evaluations concurrently, but don't fail-fast: collect exceptions
@@ -71,7 +90,6 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
         for rubric_name, res in zip(RUBRIC_NAMES, results, strict=True):
             if isinstance(res, Exception):
                 # Convert exceptions into a safe Vote so the caller can continue.
-                # Use score 0 to clearly indicate an error occurred.
                 feedback = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
                 votes.append(
                     Vote(
@@ -79,7 +97,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                         output=output,
                         rubric=rubric_name,
                         feedback=feedback,
-                        score=0,
+                        score=ERROR_SCORE,
                     )
                 )
             else:
@@ -113,7 +131,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                         output=evaluation_input.output[idx],
                         rubric=rubric_name,
                         feedback=feedback,
-                        score=-1,
+                        score=ERROR_SCORE,
                     )
                 )
         else:
