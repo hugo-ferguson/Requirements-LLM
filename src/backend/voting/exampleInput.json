@@ -1,0 +1,14 @@
+{
+    "ai": "ChatGPT",
+    "model": "gpt-5.5",
+    "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
+    "output": [
+        "The system provides a 'Forgot Password' option on the login page.",
+        "Users can request a password reset by entering their registered email address.",
+        "A password reset email is sent to the registered email address.",
+        "The password reset link expires after 30 minutes.",
+        "Users can create a new password that meets the application's password policy.",
+        "The previous password can no longer be used after a successful reset.",
+        "An appropriate error message is displayed if an unregistered email address is entered."
+    ]
+}
