@@ -33,6 +33,7 @@ class AcceptanceCriterion(SQLModel):
     then: str
     scores: AcceptanceCriterionScores
     overall_score: float = Field(ge=0, le=10)
+    status: Literal["pending", "accepted", "rejected"] = "pending"
 
 
 class GenerateResult(SQLModel):

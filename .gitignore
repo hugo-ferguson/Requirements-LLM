@@ -209,6 +209,8 @@ __marimo__/
 # Node / frontend
 node_modules/
 *.tsbuildinfo
+src/frontend/vite.config.js
+src/frontend/vite.config.d.ts
 
 # MacOS
 .DS_Store

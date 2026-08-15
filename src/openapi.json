@@ -69,30 +69,53 @@
         }
       }
     },
-    "/conversation/messages": {
-      "post": {
+    "/sessions": {
+      "get": {
         "tags": [
-          "conversation"
+          "sessions"
         ],
-        "summary": "Send Message",
-        "operationId": "send_message_conversation_messages_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConversationRequest"
-              }
-            }
-          },
-          "required": true
-        },
+        "summary": "List Sessions",
+        "operationId": "list_sessions_sessions_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationMessage"
+                  "items": {
+                    "$ref": "#/components/schemas/SessionSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Sessions Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create Session",
+        "operationId": "create_session_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSummary"
                 }
               }
             }
@@ -110,22 +133,486 @@
         }
       }
     },
-    "/conversation/generate": {
-      "post": {
+    "/sessions/{session_id}": {
+      "get": {
         "tags": [
-          "conversation"
+          "sessions"
         ],
-        "summary": "Generate",
-        "operationId": "generate_conversation_generate_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConversationRequest"
+        "summary": "Get Session Detail",
+        "operationId": "get_session_detail_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetail"
+                }
               }
             }
           },
-          "required": true
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Rename Session",
+        "operationId": "rename_session_sessions__session_id__patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/messages": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Message",
+        "operationId": "post_message_sessions__session_id__messages_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/generate": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Generate",
+        "operationId": "generate_sessions__session_id__generate_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/acceptance-criteria": {
+      "get": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "List Acceptance Criteria",
+        "operationId": "list_acceptance_criteria_sessions__session_id__acceptance_criteria_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}": {
+      "patch": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Update Acceptance Criterion Text",
+        "operationId": "update_acceptance_criterion_text_sessions__session_id__acceptance_criteria__ac_id__patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ac_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Ac Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptanceCriterionTextUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptanceCriterion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/status": {
+      "patch": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Update Acceptance Criterion Status",
+        "operationId": "update_acceptance_criterion_status_sessions__session_id__acceptance_criteria__ac_id__status_patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ac_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Ac Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptanceCriterionStatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptanceCriterion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/regenerate": {
+      "post": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Regenerate Selected",
+        "operationId": "regenerate_selected_sessions__session_id__acceptance_criteria__ac_id__regenerate_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ac_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Ac Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegenerateSelectedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegenerateSelectedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/apply-approved": {
+      "post": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Apply Approved",
+        "operationId": "apply_approved_sessions__session_id__acceptance_criteria__ac_id__apply_approved_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ac_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Ac Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyApprovedRequest"
+              }
+            }
+          }
         },
         "responses": {
           "200": {
@@ -134,6 +621,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GenerateResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff": {
+      "post": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Regenerate All Kickoff",
+        "operationId": "regenerate_all_kickoff_sessions__session_id__acceptance_criteria_regenerate_all_kickoff_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageRead"
                 }
               }
             }
@@ -206,6 +735,16 @@
             "maximum": 10.0,
             "minimum": 0.0,
             "title": "Overall Score"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status",
+            "default": "pending"
           }
         },
         "type": "object",
@@ -256,6 +795,68 @@
         ],
         "title": "AcceptanceCriterionScores"
       },
+      "AcceptanceCriterionStatusUpdate": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AcceptanceCriterionStatusUpdate"
+      },
+      "AcceptanceCriterionTextUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "given": {
+            "type": "string",
+            "title": "Given"
+          },
+          "when": {
+            "type": "string",
+            "title": "When"
+          },
+          "then": {
+            "type": "string",
+            "title": "Then"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "given",
+          "when",
+          "then"
+        ],
+        "title": "AcceptanceCriterionTextUpdate"
+      },
+      "ApplyApprovedRequest": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterion"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "ApplyApprovedRequest"
+      },
       "ConversationAttachment": {
         "properties": {
           "filename": {
@@ -302,22 +903,6 @@
           "text"
         ],
         "title": "ConversationMessage"
-      },
-      "ConversationRequest": {
-        "properties": {
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/ConversationMessage"
-            },
-            "type": "array",
-            "title": "Messages"
-          }
-        },
-        "type": "object",
-        "required": [
-          "messages"
-        ],
-        "title": "ConversationRequest"
       },
       "GenerateResult": {
         "properties": {
@@ -384,6 +969,201 @@
           "created_at"
         ],
         "title": "ItemRead"
+      },
+      "MessageCreate": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationAttachment"
+            },
+            "type": "array",
+            "title": "Attachments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "MessageCreate"
+      },
+      "MessageRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationAttachment"
+            },
+            "type": "array",
+            "title": "Attachments"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "text",
+          "attachments",
+          "created_at"
+        ],
+        "title": "MessageRead"
+      },
+      "RegenerateSelectedRequest": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "RegenerateSelectedRequest"
+      },
+      "RegenerateSelectedResponse": {
+        "properties": {
+          "reply": {
+            "$ref": "#/components/schemas/ConversationMessage"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterion"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reply",
+          "candidates"
+        ],
+        "title": "RegenerateSelectedResponse"
+      },
+      "SessionCreate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "SessionCreate"
+      },
+      "SessionDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageRead"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at",
+          "messages"
+        ],
+        "title": "SessionDetail"
+      },
+      "SessionSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SessionSummary"
+      },
+      "SessionUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SessionUpdate"
       },
       "ValidationError": {
         "properties": {

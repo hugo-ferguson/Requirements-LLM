@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
-import { conversationApi } from "../api/conversation";
-import type { GenerateResult } from "../api/conversation";
+import { useCallback, useEffect, useState } from "react";
+import { sessionsApi } from "../api/sessions";
+import type { MessageRead } from "../api/sessions";
 import { readFilesAsAttachments } from "../lib/attachments";
 import type { Attachment, ChatMessage } from "../types/conversation";
 
@@ -8,13 +8,40 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
-export function useConversation() {
+function toChatMessage(message: MessageRead): ChatMessage {
+  return {
+    id: String(message.id),
+    role: message.role,
+    text: message.text,
+    attachments: message.attachments,
+  };
+}
+
+export function useSessionConversation(sessionId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingHistory(true);
+    setMessages([]);
+    sessionsApi
+      .get(sessionId)
+      .then((detail) => {
+        if (!cancelled) setMessages(detail.messages.map(toChatMessage));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingHistory(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   const attachFiles = useCallback(async (files: FileList) => {
     const read = await readFilesAsAttachments(files);
@@ -36,42 +63,42 @@ export function useConversation() {
         text: trimmed,
         attachments: pendingAttachments,
       };
-      const nextMessages = [...messages, userMessage];
-      setMessages(nextMessages);
+      setMessages((prev) => [...prev, userMessage]);
       setPendingAttachments([]);
       setSendError(null);
       setIsSending(true);
       try {
-        const reply = await conversationApi.sendMessage(nextMessages);
-        setMessages((prev) => [
-          ...prev,
-          { id: newId(), role: "assistant", text: reply.text, attachments: [] },
-        ]);
+        const reply = await sessionsApi.sendMessage(sessionId, {
+          text: trimmed,
+          attachments: pendingAttachments,
+        });
+        setMessages((prev) => [...prev, toChatMessage(reply)]);
       } catch {
         setSendError("Couldn't reach the server. Please try again.");
       } finally {
         setIsSending(false);
       }
     },
-    [messages, pendingAttachments],
+    [sessionId, pendingAttachments],
   );
 
-  const generate = useCallback(async (): Promise<GenerateResult | null> => {
+  const generate = useCallback(async () => {
     setGenerateError(null);
     setIsGenerating(true);
     try {
-      return await conversationApi.generate(messages);
+      return await sessionsApi.generate(sessionId);
     } catch {
       setGenerateError("Couldn't generate acceptance criteria. Please try again.");
       return null;
     } finally {
       setIsGenerating(false);
     }
-  }, [messages]);
+  }, [sessionId]);
 
   return {
     messages,
     pendingAttachments,
+    isLoadingHistory,
     isSending,
     isGenerating,
     sendError,

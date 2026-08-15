@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, KeyboardEvent, ReactNode } from "react";
 import type { Attachment } from "../../types/conversation";
 import { AttachmentChip } from "./AttachmentChip";
 
@@ -9,6 +9,7 @@ interface ChatInputBarProps {
   onRemoveAttachment: (index: number) => void;
   onSend: (text: string) => void;
   disabled: boolean;
+  trailingAction?: ReactNode;
 }
 
 export function ChatInputBar({
@@ -17,6 +18,7 @@ export function ChatInputBar({
   onRemoveAttachment,
   onSend,
   disabled,
+  trailingAction,
 }: ChatInputBarProps) {
   const [text, setText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +92,7 @@ export function ChatInputBar({
         >
           Send
         </button>
+        {trailingAction}
       </div>
     </div>
   );

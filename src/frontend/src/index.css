@@ -4,3 +4,13 @@
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
 }
+
+@layer base {
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}

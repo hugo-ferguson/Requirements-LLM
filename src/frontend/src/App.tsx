@@ -1,20 +1,29 @@
 import { Navigate, Route, Routes } from "react-router";
 import { AppLayout } from "./layouts/AppLayout";
+import { SessionLayout } from "./layouts/SessionLayout";
 import { InputPage } from "./pages/InputPage";
+import { AcReviewPage } from "./pages/AcReviewPage";
+import { EmptyStatePage } from "./pages/EmptyStatePage";
 import { ComingSoonPage } from "./pages/ComingSoonPage";
-import { ROUTES } from "./routes";
+import { SessionsProvider } from "./context/SessionsContext";
+import { TAB_PATHS } from "./routes";
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route index element={<Navigate to={ROUTES.input} replace />} />
-        <Route path={ROUTES.input} element={<InputPage />} />
-        <Route path={ROUTES.acReview} element={<ComingSoonPage title="AC Review" />} />
-        <Route path={ROUTES.uatReview} element={<ComingSoonPage title="UAT Review" />} />
-        <Route path={ROUTES.export} element={<ComingSoonPage title="Export" />} />
-        <Route path="*" element={<Navigate to={ROUTES.input} replace />} />
-      </Route>
-    </Routes>
+    <SessionsProvider>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route index element={<EmptyStatePage />} />
+          <Route path="sessions/:sessionId" element={<SessionLayout />}>
+            <Route index element={<Navigate to={TAB_PATHS.input} replace />} />
+            <Route path={TAB_PATHS.input} element={<InputPage />} />
+            <Route path={TAB_PATHS.acReview} element={<AcReviewPage />} />
+            <Route path={TAB_PATHS.uatReview} element={<ComingSoonPage title="UAT Review" />} />
+            <Route path={TAB_PATHS.export} element={<ComingSoonPage title="Export" />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </SessionsProvider>
   );
 }

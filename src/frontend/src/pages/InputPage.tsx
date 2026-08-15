@@ -1,11 +1,12 @@
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { ChatThread } from "../components/chat/ChatThread";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
-import { useConversation } from "../hooks/useConversation";
+import { useSessionConversation } from "../hooks/useSessionConversation";
 import { ROUTES } from "../routes";
 
 export function InputPage() {
   const navigate = useNavigate();
+  const { sessionId } = useParams<{ sessionId: string }>();
   const {
     messages,
     pendingAttachments,
@@ -17,15 +18,15 @@ export function InputPage() {
     removeAttachment,
     sendMessage,
     generate,
-  } = useConversation();
+  } = useSessionConversation(sessionId!);
 
   const busy = isSending || isGenerating;
+  const generateDisabled = busy || messages.length === 0;
 
   async function handleGenerate() {
     const result = await generate();
     if (result) {
-      console.log("[Story2Spec] generate result", result);
-      navigate(ROUTES.acReview, { state: { generateResult: result } });
+      navigate(ROUTES.acReview(sessionId!));
     }
   }
 
@@ -41,17 +42,17 @@ export function InputPage() {
           onRemoveAttachment={removeAttachment}
           onSend={sendMessage}
           disabled={busy}
+          trailingAction={
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generateDisabled}
+              className="rounded-full bg-primary px-6 py-2 font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              Generate
+            </button>
+          }
         />
-        <div className="mt-3 flex justify-end">
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={busy}
-            className="rounded-full bg-primary px-6 py-2 font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-          >
-            Generate
-          </button>
-        </div>
       </footer>
     </div>
   );

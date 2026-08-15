@@ -1,10 +1,10 @@
 import { Outlet } from "react-router";
-import { Sidebar } from "./Sidebar";
+import { SessionSidebar } from "./SessionSidebar";
 
 export function AppLayout() {
   return (
     <div className="flex h-screen bg-white">
-      <Sidebar />
+      <SessionSidebar />
       <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
