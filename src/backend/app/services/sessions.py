@@ -19,6 +19,7 @@ from app.models_session import (
 from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
+from app.repositories.uat_cases import UatCaseRepository
 from app.services.conversation import ConversationService
 
 
@@ -67,11 +68,13 @@ class SessionService:
         message_repository: MessageRepository,
         conversation_service: ConversationService,
         acceptance_criteria_repository: AcceptanceCriteriaRepository,
+        uat_case_repository: UatCaseRepository,
     ):
         self.sessions = session_repository
         self.messages = message_repository
         self.conversation = conversation_service
         self.acceptance_criteria = acceptance_criteria_repository
+        self.uat_cases = uat_case_repository
 
     def create_session(self, data: SessionCreate) -> ChatSession:
         return self.sessions.create(data.name or "New session")
@@ -106,6 +109,8 @@ class SessionService:
         if chat_session is None:
             return False
         self.messages.delete_for_session(session_id)
+        # UAT rows FK to acceptance_criteria rows, so they must go first.
+        self.uat_cases.delete_for_session(session_id)
         self.acceptance_criteria.delete_for_session(session_id)
         self.sessions.delete(chat_session)
         return True
@@ -141,5 +146,9 @@ class SessionService:
         request = ConversationRequest(messages=[_to_conversation_message(m) for m in history])
         reply = self.conversation.generate(request)
 
+        # Regenerating ACs replaces their ids, so any UAT cases generated
+        # against the old ids would otherwise be left as orphaned rows (or
+        # violate the FK, in a database that enforces it) — clear them too.
+        self.uat_cases.delete_for_session(session_id)
         persisted = self.acceptance_criteria.persist_batch(session_id, reply.acceptance_criteria)
         return GenerateResult(acceptance_criteria=[_to_acceptance_criterion(r) for r in persisted])

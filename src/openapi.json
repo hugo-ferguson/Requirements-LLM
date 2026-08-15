@@ -680,6 +680,334 @@
         }
       }
     },
+    "/sessions/{session_id}/uat-cases": {
+      "get": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "List Uat Cases",
+        "operationId": "list_uat_cases_sessions__session_id__uat_cases_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatCaseGroupsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/uat-cases/generate": {
+      "post": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "Generate Uat Cases",
+        "operationId": "generate_uat_cases_sessions__session_id__uat_cases_generate_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatCaseGroupsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/uat-cases/{uat_id}": {
+      "patch": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "Update Uat Case Text",
+        "operationId": "update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "uat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uat Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UatCaseTextUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatCase"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/uat-cases/{uat_id}/status": {
+      "patch": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "Update Uat Case Status",
+        "operationId": "update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "uat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uat Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UatCaseStatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatCase"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/uat-cases/{uat_id}/regenerate": {
+      "post": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "Regenerate Selected",
+        "operationId": "regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "uat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uat Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UatRegenerateSelectedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatRegenerateSelectedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/uat-cases/{uat_id}/apply-approved": {
+      "post": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "Apply Approved",
+        "operationId": "apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "uat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uat Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UatApplyApprovedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatCaseGroup"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -1164,6 +1492,215 @@
           "name"
         ],
         "title": "SessionUpdate"
+      },
+      "UatApplyApprovedRequest": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/UatCase"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "UatApplyApprovedRequest"
+      },
+      "UatCase": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "ac_id": {
+            "type": "integer",
+            "title": "Ac Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/UatCaseScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status",
+            "default": "pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ac_id",
+          "title",
+          "description",
+          "scores",
+          "overall_score"
+        ],
+        "title": "UatCase"
+      },
+      "UatCaseGroup": {
+        "properties": {
+          "ac": {
+            "$ref": "#/components/schemas/AcceptanceCriterion"
+          },
+          "uat_cases": {
+            "items": {
+              "$ref": "#/components/schemas/UatCase"
+            },
+            "type": "array",
+            "title": "Uat Cases"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ac",
+          "uat_cases"
+        ],
+        "title": "UatCaseGroup"
+      },
+      "UatCaseGroupsResult": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/UatCaseGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "UatCaseGroupsResult"
+      },
+      "UatCaseScores": {
+        "properties": {
+          "relevance": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Relevance"
+          },
+          "correctness": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Correctness"
+          },
+          "understandability": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Understandability"
+          },
+          "coverage": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "relevance",
+          "correctness",
+          "understandability",
+          "coverage"
+        ],
+        "title": "UatCaseScores"
+      },
+      "UatCaseStatusUpdate": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "UatCaseStatusUpdate"
+      },
+      "UatCaseTextUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description"
+        ],
+        "title": "UatCaseTextUpdate"
+      },
+      "UatRegenerateSelectedRequest": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "UatRegenerateSelectedRequest"
+      },
+      "UatRegenerateSelectedResponse": {
+        "properties": {
+          "reply": {
+            "$ref": "#/components/schemas/ConversationMessage"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/UatCase"
+            },
+            "type": "array",
+            "title": "Candidates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reply",
+          "candidates"
+        ],
+        "title": "UatRegenerateSelectedResponse"
       },
       "ValidationError": {
         "properties": {

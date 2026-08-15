@@ -195,6 +195,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/uat-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Uat Cases */
+        get: operations["list_uat_cases_sessions__session_id__uat_cases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Uat Cases */
+        post: operations["generate_uat_cases_sessions__session_id__uat_cases_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Uat Case Text */
+        patch: operations["update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Uat Case Status */
+        patch: operations["update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Selected */
+        post: operations["regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/apply-approved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Approved */
+        post: operations["apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -401,6 +503,79 @@ export interface components {
         SessionUpdate: {
             /** Name */
             name: string;
+        };
+        /** UatApplyApprovedRequest */
+        UatApplyApprovedRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["UatCase"][];
+        };
+        /** UatCase */
+        UatCase: {
+            /** Id */
+            id: number;
+            /** Ac Id */
+            ac_id: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** UatCaseGroup */
+        UatCaseGroup: {
+            ac: components["schemas"]["AcceptanceCriterion"];
+            /** Uat Cases */
+            uat_cases: components["schemas"]["UatCase"][];
+        };
+        /** UatCaseGroupsResult */
+        UatCaseGroupsResult: {
+            /** Groups */
+            groups: components["schemas"]["UatCaseGroup"][];
+        };
+        /** UatCaseScores */
+        UatCaseScores: {
+            /** Relevance */
+            relevance: number;
+            /** Correctness */
+            correctness: number;
+            /** Understandability */
+            understandability: number;
+            /** Coverage */
+            coverage: number;
+        };
+        /** UatCaseStatusUpdate */
+        UatCaseStatusUpdate: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** UatCaseTextUpdate */
+        UatCaseTextUpdate: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+        };
+        /** UatRegenerateSelectedRequest */
+        UatRegenerateSelectedRequest: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /** UatRegenerateSelectedResponse */
+        UatRegenerateSelectedResponse: {
+            reply: components["schemas"]["ConversationMessage"];
+            /** Candidates */
+            candidates: components["schemas"]["UatCase"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -884,6 +1059,212 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_uat_cases_sessions__session_id__uat_cases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroupsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_uat_cases_sessions__session_id__uat_cases_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroupsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatCaseTextUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatCaseStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatRegenerateSelectedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatRegenerateSelectedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatApplyApprovedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroup"];
                 };
             };
             /** @description Validation Error */

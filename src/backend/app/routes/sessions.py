@@ -14,6 +14,7 @@ from app.models_session import (
 from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
+from app.repositories.uat_cases import UatCaseRepository
 from app.services.conversation import ConversationService
 from app.services.sessions import SessionService
 
@@ -26,6 +27,7 @@ def get_session_service(session: Session = Depends(get_session)) -> SessionServi
         MessageRepository(session),
         ConversationService(),
         AcceptanceCriteriaRepository(session),
+        UatCaseRepository(session),
     )
 
 

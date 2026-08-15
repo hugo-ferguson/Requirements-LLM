@@ -1,6 +1,4 @@
 import { useCallback, useState } from "react";
-import { acceptanceCriteriaApi } from "../api/acceptanceCriteria";
-import type { AcceptanceCriterion } from "../api/acceptanceCriteria";
 import { readFilesAsAttachments } from "../lib/attachments";
 import type { Attachment, ChatMessage } from "../types/conversation";
 
@@ -8,15 +6,38 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
+interface WireMessage {
+  role: "user" | "assistant";
+  text: string;
+  attachments: Attachment[];
+}
+
+interface FetchCandidatesResult<T> {
+  reply: { text: string };
+  candidates: T[];
+}
+
+type FetchCandidates<T> = (
+  targetId: number,
+  messages: WireMessage[],
+) => Promise<FetchCandidatesResult<T>>;
+
 /**
  * Owns the ephemeral "regenerate selected" mini-chat + candidate review state.
  * None of this is persisted — it's local to the sub-view and discarded on
  * Cancel (or once the approved candidates are merged into the main list).
+ *
+ * Generic over the candidate item type `T` so both AC's and UAT's
+ * regenerate-selected sub-flows can share this hook — the actual API call is
+ * injected via `fetchCandidates` rather than hard-wired to one endpoint.
  */
-export function useRegenerateSelected(sessionId: string, targetId: number | null) {
+export function useRegenerateSelected<T>(
+  targetId: number | null,
+  fetchCandidates: FetchCandidates<T>,
+) {
   const [miniChatMessages, setMiniChatMessages] = useState<ChatMessage[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
-  const [candidates, setCandidates] = useState<AcceptanceCriterion[]>([]);
+  const [candidates, setCandidates] = useState<T[]>([]);
   const [approvedIndexes, setApprovedIndexes] = useState<Set<number>>(new Set());
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -52,13 +73,10 @@ export function useRegenerateSelected(sessionId: string, targetId: number | null
       setSendError(null);
       setIsSending(true);
       try {
-        const response = await acceptanceCriteriaApi.regenerateSelected(sessionId, targetId, {
-          messages: nextHistory.map((m) => ({
-            role: m.role,
-            text: m.text,
-            attachments: m.attachments,
-          })),
-        });
+        const response = await fetchCandidates(
+          targetId,
+          nextHistory.map((m) => ({ role: m.role, text: m.text, attachments: m.attachments })),
+        );
         setMiniChatMessages((prev) => [
           ...prev,
           { id: newId(), role: "assistant", text: response.reply.text, attachments: [] },
@@ -72,7 +90,7 @@ export function useRegenerateSelected(sessionId: string, targetId: number | null
         setIsSending(false);
       }
     },
-    [sessionId, targetId, miniChatMessages, pendingAttachments],
+    [targetId, fetchCandidates, miniChatMessages, pendingAttachments],
   );
 
   const setApproved = useCallback((index: number, approved: boolean) => {
