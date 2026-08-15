@@ -117,15 +117,25 @@ export function UatReviewPage() {
             <AcGroupHeader ac={targetGroup.ac} index={groupIndex} expanded onToggle={() => {}} />
           )}
           {target && (
-            <UatCard uatCase={target} index={targetIndex} onAccept={() => {}} onReject={() => {}} />
+            <UatCard
+              uatCase={{ ...target, status: "rejected" }}
+              index={targetIndex}
+              onAccept={() => {}}
+              onReject={() => {}}
+            />
           )}
+        </div>
+
+        {regenerate.candidates.length > 0 && <hr className="my-4 border-gray-200" />}
+
+        <div className="space-y-3">
           {regenerate.candidates.map((candidate, i) => {
             const displayIndex = i === 0 ? targetIndex : (targetGroup?.uat_cases.length ?? 0) + (i - 1);
             const approved = regenerate.approvedIndexes.has(i);
             return (
               <UatCard
                 key={i}
-                uatCase={{ ...candidate, status: approved ? "accepted" : "pending" }}
+                uatCase={{ ...candidate, status: approved ? "accepted" : "rejected" }}
                 index={displayIndex}
                 onAccept={() => regenerate.setApproved(i, true)}
                 onReject={() => regenerate.setApproved(i, false)}

@@ -123,14 +123,26 @@ export function AcReviewPage() {
     return (
       <div className="flex h-full flex-col overflow-y-auto p-6">
         <div className="space-y-3">
-          {target && <AcCard criterion={target} index={targetIndex} onAccept={() => {}} onReject={() => {}} />}
+          {target && (
+            <AcCard
+              criterion={{ ...target, status: "rejected" }}
+              index={targetIndex}
+              onAccept={() => {}}
+              onReject={() => {}}
+            />
+          )}
+        </div>
+
+        {regenerate.candidates.length > 0 && <hr className="my-4 border-gray-200" />}
+
+        <div className="space-y-3">
           {regenerate.candidates.map((candidate, i) => {
             const displayIndex = i === 0 ? targetIndex : items.length + (i - 1);
             const approved = regenerate.approvedIndexes.has(i);
             return (
               <AcCard
                 key={i}
-                criterion={{ ...candidate, status: approved ? "accepted" : "pending" }}
+                criterion={{ ...candidate, status: approved ? "accepted" : "rejected" }}
                 index={displayIndex}
                 onAccept={() => regenerate.setApproved(i, true)}
                 onReject={() => regenerate.setApproved(i, false)}

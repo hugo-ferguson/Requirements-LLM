@@ -115,3 +115,8 @@ class UatCaseRepository:
         for record in self.list_for_session(session_id):
             self.session.delete(record)
         self.session.commit()
+
+    def delete_for_ac(self, ac_id: int) -> None:
+        for record in self.list_for_ac(ac_id):
+            self.session.delete(record)
+        self.session.commit()

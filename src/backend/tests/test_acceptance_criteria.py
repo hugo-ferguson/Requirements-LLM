@@ -167,6 +167,43 @@ def test_apply_approved_replaces_target_and_leaves_rest_untouched(client: TestCl
     assert len(updated_list) == len(others) + len(candidates)
 
 
+def test_apply_approved_clears_uat_cases_generated_for_the_replaced_ac(
+    client: TestClient,
+) -> None:
+    """Regression test: an AC that already has UAT cases generated against it
+    (via /uat-cases/generate) FKs to that exact ac_id. Replacing the AC via
+    apply-approved must clear those UAT rows first, or deleting the AC row
+    would violate the FK in a database that enforces it (e.g. Postgres,
+    unlike the SQLite engine this test runs against).
+    """
+    session = _create_session(client)
+    items = _generate(client, session["id"])
+    target = items[0]
+    client.patch(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/status",
+        json={"status": "accepted"},
+    )
+    uat_generate = client.post(f"/sessions/{session['id']}/uat-cases/generate")
+    assert uat_generate.status_code == 200
+    assert len(uat_generate.json()["groups"]) == 1
+
+    regenerate_response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/regenerate",
+        json={"messages": []},
+    )
+    candidates = regenerate_response.json()["candidates"]
+
+    apply_response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/apply-approved",
+        json={"candidates": candidates},
+    )
+    assert apply_response.status_code == 200
+
+    uat_listed = client.get(f"/sessions/{session['id']}/uat-cases")
+    assert uat_listed.status_code == 200
+    assert uat_listed.json()["groups"] == []
+
+
 def test_apply_approved_400_when_no_candidates(client: TestClient) -> None:
     session = _create_session(client)
     items = _generate(client, session["id"])

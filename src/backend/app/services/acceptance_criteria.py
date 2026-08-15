@@ -11,6 +11,7 @@ from app.models_session import MessageRead
 from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
+from app.repositories.uat_cases import UatCaseRepository
 
 
 def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
@@ -43,10 +44,12 @@ class AcceptanceCriteriaService:
         session_repository: SessionRepository,
         ac_repository: AcceptanceCriteriaRepository,
         message_repository: MessageRepository,
+        uat_case_repository: UatCaseRepository,
     ):
         self.sessions = session_repository
         self.ac = ac_repository
         self.messages = message_repository
+        self.uat_cases = uat_case_repository
 
     def list_items(self, session_id: int) -> list[AcceptanceCriterion] | None:
         if self.sessions.get(session_id) is None:
@@ -126,6 +129,11 @@ class AcceptanceCriteriaService:
         if not data.candidates:
             raise ValueError("Must approve at least one candidate; use Cancel to discard instead.")
 
+        # The AC row being replaced may already have UAT cases generated
+        # against it (via "Generate test cases..."). Those FK to this exact
+        # ac_id, so they must be cleared before the row is deleted+replaced —
+        # otherwise this would violate the FK in a database that enforces it.
+        self.uat_cases.delete_for_ac(ac_id)
         updated = self.ac.replace_one(session_id, ac_id, data.candidates)
         return [_to_acceptance_criterion(r) for r in updated]
 

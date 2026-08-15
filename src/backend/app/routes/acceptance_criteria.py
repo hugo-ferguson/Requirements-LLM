@@ -14,6 +14,7 @@ from app.models_session import MessageRead
 from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
+from app.repositories.uat_cases import UatCaseRepository
 from app.services.acceptance_criteria import AcceptanceCriteriaService
 
 router = APIRouter(
@@ -28,6 +29,7 @@ def get_acceptance_criteria_service(
         SessionRepository(session),
         AcceptanceCriteriaRepository(session),
         MessageRepository(session),
+        UatCaseRepository(session),
     )
 
 
