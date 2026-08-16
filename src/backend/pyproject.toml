@@ -13,6 +13,7 @@ dependencies = [
     "fastembed>=0.3",
     "openai>=1.40",
     "pgvector>=0.3",
+    "mcp>=1.26",
 ]
 
 [dependency-groups]
