@@ -7,7 +7,15 @@ from typing import Any
 
 import httpx
 
-from voting.models import EvaluationInput, PrometheusVote, Vote, VotingResult
+from voting.models import (
+    EvaluationInput,
+    EvaluatedOutput,
+    PrometheusVote,
+    ProviderFeedback,
+    RubricAverage,
+    RubricFeedback,
+    VotingResult,
+)
 
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
@@ -53,7 +61,7 @@ class OllamaPrometheusClient:
 async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingResult:
     evaluator = OllamaPrometheusClient()
 
-    async def evaluate_output(output_index: int, output: str) -> list[Vote]:
+    async def evaluate_output(output: str) -> EvaluatedOutput:
         # Gather rubric evaluations concurrently, but don't fail-fast: collect exceptions
         results = await asyncio.gather(
             *(
@@ -67,61 +75,67 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
             return_exceptions=True,
         )
 
-        votes: list[Vote] = []
+        rubric_feedback: list[RubricFeedback] = []
         for rubric_name, res in zip(RUBRIC_NAMES, results, strict=True):
             if isinstance(res, Exception):
                 # Convert exceptions into a safe Vote so the caller can continue.
-                # Use score 0 to clearly indicate an error occurred.
-                feedback = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
-                votes.append(
-                    Vote(
-                        output_index=output_index,
-                        output=output,
-                        rubric=rubric_name,
-                        feedback=feedback,
-                        score=0,
-                    )
-                )
+                # Use value -1 to clearly indicate an error occurred.
+                error_message = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
+                rubric_feedback.append(RubricFeedback(rubric=rubric_name, value=-1, feedback=error_message))
             else:
-                votes.append(
-                    Vote(
-                        output_index=output_index,
-                        output=output,
-                        rubric=rubric_name,
-                        feedback=res.feedback,
-                        score=res.score,
-                    )
-                )
+                rubric_feedback.append(RubricFeedback(rubric=rubric_name, value=res.score, feedback=res.feedback))
 
-        return votes
+        provider_feedback = ProviderFeedback(
+            ai="Prometheus",
+            model=evaluator.model,
+            feedback=rubric_feedback,
+            overall_score=sum(item.value for item in rubric_feedback) / len(rubric_feedback),
+        )
+        rubric_averages = [RubricAverage(rubric=item.rubric, value=float(item.value)) for item in rubric_feedback]
+        return EvaluatedOutput(
+            output=output,
+            feedback=[provider_feedback],
+            rubric_averages=rubric_averages,
+            overall_score=provider_feedback.overall_score,
+        )
 
     # Gather outputs concurrently but tolerate exceptions per-output as well.
     raw_output_votes = await asyncio.gather(
-        *(evaluate_output(index, output) for index, output in enumerate(evaluation_input.output)),
+        *(evaluate_output(output) for output in evaluation_input.output),
         return_exceptions=True,
     )
 
-    all_votes: list[Vote] = []
+    evaluated_outputs: list[EvaluatedOutput] = []
     for idx, item in enumerate(raw_output_votes):
         if isinstance(item, Exception):
-            # The whole output failed to evaluate; emit one vote per rubric with the error
-            for rubric_name in RUBRIC_NAMES:
-                feedback = f"Error evaluating output {idx}: {item.__class__.__name__}: {item}"
-                all_votes.append(
-                    Vote(
-                        output_index=idx,
-                        output=evaluation_input.output[idx],
-                        rubric=rubric_name,
-                        feedback=feedback,
-                        score=-1,
-                    )
+            error_feedback = [
+                RubricFeedback(
+                    rubric=rubric_name,
+                    value=-1,
+                    feedback=f"Error evaluating output {idx}: {item.__class__.__name__}: {item}",
                 )
+                for rubric_name in RUBRIC_NAMES
+            ]
+            provider_feedback = ProviderFeedback(
+                ai="Prometheus",
+                model=evaluator.model,
+                feedback=error_feedback,
+                overall_score=-1.0,
+            )
+            evaluated_outputs.append(
+            EvaluatedOutput(
+                output=evaluation_input.output[idx],
+                feedback=[provider_feedback],
+                rubric_averages=[RubricAverage(rubric=name, value=-1.0) for name in RUBRIC_NAMES],
+                overall_score=-1.0,
+            )
+        )
         else:
-            # item is a list[Vote]
-            all_votes.extend(item)
+            evaluated_outputs.append(item)
 
     return VotingResult(
         ai=evaluation_input.ai,
         model=evaluation_input.model,
-        votes=all_votes,
+        prompt=evaluation_input.prompt,
+        output=evaluated_outputs,
     )

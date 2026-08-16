@@ -1,6 +1,7 @@
 {
     "ai": "ChatGPT",
     "model": "gpt-5.5",
+    "providers": ["prometheus", "qwen"],
     "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
     "output": [
         "The system provides a 'Forgot Password' option on the login page.",
