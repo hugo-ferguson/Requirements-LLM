@@ -37,43 +37,50 @@ async def main() -> None:
 	payload = json.loads(input_path.read_text(encoding="utf-8"))
 
 	# Select only two of the three available providers for this evaluation.
-	# Valid values are: "prometheus", "qwen", and "llama".
+	# Valid values are: "prometheus", "qwen", and "llama". now also added "gemini"
+	# if isinstance(payload, list):
+	# 	for item in payload:
+	# 		item["providers"] = ["prometheus", "qwen"]
+	# else:
+	# 	payload["providers"] = ["prometheus", "qwen"]
+
 	if isinstance(payload, list):
 		for item in payload:
-			item["providers"] = ["prometheus", "qwen"]
+			item["providers"] = ["claude"]
 	else:
-		payload["providers"] = ["prometheus", "qwen"]
+		payload["providers"] = ["claude"]
 
 	inputs = payload if isinstance(payload, list) else [payload]
 	results = await evaluate_inputs([EvaluationInput.model_validate(item) for item in inputs])
 
-	#example with feedback text
-	# for result in results:
-	# 	print(f"AI: {result.ai} | Model: {result.model}")
-	# 	for evaluated_output in result.output:
-	# 		print(f"Output: {evaluated_output.output}")
-	# 		print(f"Overall score: {evaluated_output.overall_score:.2f}")
-	# 		for provider in evaluated_output.feedback:
-	# 			print(f"  Feedback from {provider.ai} ({provider.model}):")
-	# 			for rubric_feedback in provider.feedback:
-	# 				print(f"    {rubric_feedback.rubric}: {rubric_feedback.value}/5")
-	# 				print(f"      {rubric_feedback.feedback}")
-
-	#example with no feedback text
+	# example with feedback text
 	for result in results:
 		print(f"AI: {result.ai} | Model: {result.model}")
 		for evaluated_output in result.output:
 			print(f"Output: {evaluated_output.output}")
-			print("Rubric averages:")
-			for rubric_average in evaluated_output.rubric_averages:
-				print(f"  {rubric_average.rubric}: {rubric_average.value:.2f}/5")
-			print(f"Overall average score: {evaluated_output.overall_score:.2f}")
+			print(f"Overall score: {evaluated_output.overall_score:.2f}")
 			for provider in evaluated_output.feedback:
 				print(f"  Feedback from {provider.ai} ({provider.model}):")
 				for rubric_feedback in provider.feedback:
 					print(f"    {rubric_feedback.rubric}: {rubric_feedback.value}/5")
-			print() 
-		print("===============================================")
+					print(f"      {rubric_feedback.feedback}")
+
+	# #example with no feedback text
+	# for result in results:
+	# 	print(f"AI: {result.ai} | Model: {result.model}")
+	# 	for evaluated_output in result.output:
+	# 		print(f"Output: {evaluated_output.output}")
+	# 		print("Rubric averages:")
+	# 		for rubric_average in evaluated_output.rubric_averages:
+	# 			print(f"  {rubric_average.rubric}: {rubric_average.value:.2f}/5")
+	# 		print(f"Overall average score: {evaluated_output.overall_score:.2f}")
+	# 		for provider in evaluated_output.feedback:
+	# 			print(f"  Feedback from {provider.ai} ({provider.model}):")
+	# 			for rubric_feedback in provider.feedback:
+	# 				print(f"    {rubric_feedback.rubric}: {rubric_feedback.value}/5")
+	# 		print() 
+	# 	print("===============================================")
+
 
 
 if __name__ == "__main__":

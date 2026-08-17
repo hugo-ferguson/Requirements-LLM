@@ -15,6 +15,8 @@ from voting.models import (
 	RubricFeedback,
 	VotingResult,
 )
+from voting.claude import evaluate_with_claude
+from voting.gemini import evaluate_with_gemini
 from voting.llama import evaluate_with_llama
 from voting.prometheus import evaluate_with_prometheus
 from voting.qwen import evaluate_with_qwen
@@ -87,6 +89,8 @@ async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
 		"prometheus": ("Prometheus", "ggozad/prometheus2:latest", evaluate_with_prometheus),
 		"qwen": ("Qwen", "qwen2.5:7b", evaluate_with_qwen),
 		"llama": ("Llama", "llama3.1:8b", evaluate_with_llama),
+		"gemini": ("Gemini", "gemini-flash-latest", evaluate_with_gemini),
+		"claude": ("Claude", "claude-3-5-sonnet-20241022", evaluate_with_claude),
 	}
 	selected = [provider_details[name] for name in evaluation_input.providers]
 	provider_results = await asyncio.gather(

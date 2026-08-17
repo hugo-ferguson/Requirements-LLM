@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-ProviderName = Literal["prometheus", "qwen", "llama"]
+ProviderName = Literal["prometheus", "qwen", "llama", "gemini", "claude"]
 
 
 class EvaluationInput(BaseModel):
@@ -14,7 +14,7 @@ class EvaluationInput(BaseModel):
     prompt: str
     output: list[str] = Field(min_length=1)
     reference_answer: str = ""
-    providers: list[ProviderName] = Field(default_factory=lambda: ["prometheus", "qwen", "llama"], min_length=1)
+    providers: list[ProviderName] = Field(default_factory=lambda: ["prometheus", "qwen", "llama", "gemini", "claude"], min_length=1)
 
 
 class PrometheusVote(BaseModel):
