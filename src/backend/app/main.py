@@ -5,12 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import create_db_and_tables
-from app.routes import items
+from app.routes import documents, items
+from app.vector_store.embeddings import get_embedding_provider
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
+    # Load the embedding model up front so the first upload isn't slow.
+    get_embedding_provider()
     yield
 
 
@@ -25,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(items.router)
+app.include_router(documents.router)
 
 
 @app.get("/health")
