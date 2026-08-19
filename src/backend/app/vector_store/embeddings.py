@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from functools import lru_cache
 
 import httpx
 
-from app.config import Settings
+from app.config import Settings, settings
 
 
 class EmbeddingProvider(ABC):
@@ -109,6 +110,17 @@ class APIEmbeddingProvider(EmbeddingProvider):
 		)
 		
 		return [item.embedding for item in response.data]
+
+
+@lru_cache(maxsize=1)
+def get_embedding_provider() -> EmbeddingProvider:
+	"""
+	Returns the process-wide provider, building it on first use.
+
+	Construction loads a model and issues a test embedding, so it must not
+	happen per request.
+	"""
+	return build_embedding_provider(settings)
 
 
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
