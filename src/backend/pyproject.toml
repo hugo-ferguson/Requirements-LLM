@@ -14,6 +14,8 @@ dependencies = [
     "openai>=1.40",
     "pgvector>=0.3",
     "mcp>=1.26",
+    "pypdf>=6.16.1",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]
