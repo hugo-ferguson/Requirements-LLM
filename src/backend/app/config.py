@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_api_base_url: str | None = None
 
+    # Gemini reads text out of images during ingest.
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+
+    chunk_size: int = 1000
+    chunk_overlap: int = 150
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
