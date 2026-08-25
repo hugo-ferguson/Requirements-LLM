@@ -15,10 +15,8 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_api_base_url: str | None = None
 
-    # Gemini reads text out of images during ingest.
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    # Local Ollama vision model that reads text out of images during ingest.
+    ollama_vision_model: str = "qwen2.5vl:7b"
 
     chunk_size: int = 1000
     chunk_overlap: int = 150
