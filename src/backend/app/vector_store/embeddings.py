@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from functools import lru_cache
-
 import httpx
+from functools import lru_cache
 
 from app.config import Settings, settings
 
