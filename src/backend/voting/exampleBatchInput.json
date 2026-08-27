@@ -1,0 +1,20 @@
+[
+    {
+        "ai": "ChatGPT",
+        "model": "gpt-5.5",
+        "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
+        "output": [
+            "The system provides a 'Forgot Password' option on the login page.",
+            "Users can request a password reset by entering their registered email address."
+        ]
+    },
+    {
+        "ai": "Gemini",
+        "model": "gemini-2.5-pro",
+        "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
+        "output": [
+            "A password reset request can be started from the login page.",
+            "The reset process sends a link to the user's registered email address."
+        ]
+    }
+]

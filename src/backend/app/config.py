@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_api_base_url: str | None = None
 
+    # Local Ollama vision model that reads text out of images during ingest.
+    ollama_vision_model: str = "qwen2.5vl:7b"
+
+    chunk_size: int = 1000
+    chunk_overlap: int = 150
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
