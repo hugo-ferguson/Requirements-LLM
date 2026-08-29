@@ -1,37 +1,30 @@
-import { useEffect, useState } from "react";
-import { itemsApi } from "./api/items";
-import type { Item } from "./api/items";
-import { ItemForm } from "./components/ItemForm";
-import { ItemList } from "./components/ItemList";
+import { Navigate, Route, Routes } from "react-router";
+import { AppLayout } from "./layouts/AppLayout";
+import { SessionLayout } from "./layouts/SessionLayout";
+import { InputPage } from "./pages/InputPage";
+import { AcReviewPage } from "./pages/AcReviewPage";
+import { UatReviewPage } from "./pages/UatReviewPage";
+import { EmptyStatePage } from "./pages/EmptyStatePage";
+import { ComingSoonPage } from "./pages/ComingSoonPage";
+import { SessionsProvider } from "./context/SessionsContext";
+import { TAB_PATHS } from "./routes";
 
 export default function App() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  async function refresh() {
-    try {
-      setItems(await itemsApi.list());
-      setError(null);
-    } catch {
-      setError("Failed to load items. Is the backend running?");
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  async function handleCreate(name: string) {
-    await itemsApi.create({ name });
-    await refresh();
-  }
-
   return (
-    <main style={{ maxWidth: 480, margin: "2rem auto", fontFamily: "sans-serif" }}>
-      <h1>Items</h1>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <ItemForm onSubmit={handleCreate} />
-      <ItemList items={items} />
-    </main>
+    <SessionsProvider>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route index element={<EmptyStatePage />} />
+          <Route path="sessions/:sessionId" element={<SessionLayout />}>
+            <Route index element={<Navigate to={TAB_PATHS.input} replace />} />
+            <Route path={TAB_PATHS.input} element={<InputPage />} />
+            <Route path={TAB_PATHS.acReview} element={<AcReviewPage />} />
+            <Route path={TAB_PATHS.uatReview} element={<UatReviewPage />} />
+            <Route path={TAB_PATHS.export} element={<ComingSoonPage title="Export" />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </SessionsProvider>
   );
 }

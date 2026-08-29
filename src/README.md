@@ -82,7 +82,7 @@ src/
         │   ├── client.ts         # thin typed fetch wrapper
         │   ├── items.ts          # typed calls for the items resource
         │   └── schema.d.ts       # generated from the backend's OpenAPI schema — don't hand-edit
-        ├── components/           # ItemList, ItemForm
+        ├── components/           # reusable UI (e.g. components/chat/)
         ├── App.tsx
         └── main.tsx
 ```
@@ -106,8 +106,13 @@ end-to-end:
 - `POST /items` — create an item (validated via the `ItemCreate` SQLModel schema)
 - `GET /items` — list all items
 
-The frontend's homepage lists items and has a form to create new ones,
-using `frontend/src/api/items.ts` — no raw `fetch` calls in components.
+The backend still exposes `items` as a minimal end-to-end layering
+reference, but the frontend no longer has a dedicated Items screen (it's
+been superseded by the Story2Spec pages under `frontend/src/pages/`). The
+per-resource API module pattern it established — typed calls in
+`frontend/src/api/*.ts`, no raw `fetch` calls in components — is still the
+one to follow; see `frontend/src/api/conversation.ts` for the current
+example.
 
 ## Regenerating the typed API client
 

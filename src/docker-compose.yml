@@ -20,7 +20,7 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file:
-      - ../.env
+      - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/app}
       CORS_ORIGINS: '["http://localhost:5173"]'

@@ -22,6 +22,281 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sessions */
+        get: operations["list_sessions_sessions_get"];
+        put?: never;
+        /** Create Session */
+        post: operations["create_session_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Session Detail */
+        get: operations["get_session_detail_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Session */
+        delete: operations["delete_session_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Session */
+        patch: operations["rename_session_sessions__session_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Message */
+        post: operations["post_message_sessions__session_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate */
+        post: operations["generate_sessions__session_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Acceptance Criteria */
+        get: operations["list_acceptance_criteria_sessions__session_id__acceptance_criteria_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Acceptance Criterion Text */
+        patch: operations["update_acceptance_criterion_text_sessions__session_id__acceptance_criteria__ac_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Acceptance Criterion Status */
+        patch: operations["update_acceptance_criterion_status_sessions__session_id__acceptance_criteria__ac_id__status_patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Selected */
+        post: operations["regenerate_selected_sessions__session_id__acceptance_criteria__ac_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/apply-approved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Approved */
+        post: operations["apply_approved_sessions__session_id__acceptance_criteria__ac_id__apply_approved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate All Kickoff */
+        post: operations["regenerate_all_kickoff_sessions__session_id__acceptance_criteria_regenerate_all_kickoff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Uat Cases */
+        get: operations["list_uat_cases_sessions__session_id__uat_cases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Uat Cases */
+        post: operations["generate_uat_cases_sessions__session_id__uat_cases_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Uat Case Text */
+        patch: operations["update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Uat Case Status */
+        patch: operations["update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Selected */
+        post: operations["regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/apply-approved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Approved */
+        post: operations["apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/upload": {
         parameters: {
             query?: never;
@@ -77,6 +352,63 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptanceCriterion */
+        AcceptanceCriterion: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** AcceptanceCriterionScores */
+        AcceptanceCriterionScores: {
+            /** Relevance */
+            relevance: number;
+            /** Correctness */
+            correctness: number;
+            /** Understandability */
+            understandability: number;
+            /** Coverage */
+            coverage: number;
+        };
+        /** AcceptanceCriterionStatusUpdate */
+        AcceptanceCriterionStatusUpdate: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** AcceptanceCriterionTextUpdate */
+        AcceptanceCriterionTextUpdate: {
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+        };
+        /** ApplyApprovedRequest */
+        ApplyApprovedRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["AcceptanceCriterion"][];
+        };
         /** Body_upload_document_documents_upload_post */
         Body_upload_document_documents_upload_post: {
             /** File */
@@ -100,6 +432,25 @@ export interface components {
             /** Content */
             content: string;
         };
+        /** ConversationAttachment */
+        ConversationAttachment: {
+            /** Filename */
+            filename: string;
+            /** Content */
+            content: string;
+        };
+        /** ConversationMessage */
+        ConversationMessage: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments?: components["schemas"]["ConversationAttachment"][];
+        };
         /** DocumentRead */
         DocumentRead: {
             /** Id */
@@ -117,6 +468,11 @@ export interface components {
             created_at: string;
             /** Chunk Count */
             chunk_count: number;
+        };
+        /** GenerateResult */
+        GenerateResult: {
+            /** Acceptance Criteria */
+            acceptance_criteria: components["schemas"]["AcceptanceCriterion"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -139,6 +495,162 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** MessageCreate */
+        MessageCreate: {
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments?: components["schemas"]["ConversationAttachment"][];
+        };
+        /** MessageRead */
+        MessageRead: {
+            /** Id */
+            id: number;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments: components["schemas"]["ConversationAttachment"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** RegenerateSelectedRequest */
+        RegenerateSelectedRequest: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /** RegenerateSelectedResponse */
+        RegenerateSelectedResponse: {
+            reply: components["schemas"]["ConversationMessage"];
+            /** Candidates */
+            candidates: components["schemas"]["AcceptanceCriterion"][];
+        };
+        /** SessionCreate */
+        SessionCreate: {
+            /** Name */
+            name?: string | null;
+        };
+        /** SessionDetail */
+        SessionDetail: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Messages */
+            messages: components["schemas"]["MessageRead"][];
+        };
+        /** SessionSummary */
+        SessionSummary: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SessionUpdate */
+        SessionUpdate: {
+            /** Name */
+            name: string;
+        };
+        /** UatApplyApprovedRequest */
+        UatApplyApprovedRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["UatCase"][];
+        };
+        /** UatCase */
+        UatCase: {
+            /** Id */
+            id: number;
+            /** Ac Id */
+            ac_id: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** UatCaseGroup */
+        UatCaseGroup: {
+            ac: components["schemas"]["AcceptanceCriterion"];
+            /** Uat Cases */
+            uat_cases: components["schemas"]["UatCase"][];
+        };
+        /** UatCaseGroupsResult */
+        UatCaseGroupsResult: {
+            /** Groups */
+            groups: components["schemas"]["UatCaseGroup"][];
+        };
+        /** UatCaseScores */
+        UatCaseScores: {
+            /** Relevance */
+            relevance: number;
+            /** Correctness */
+            correctness: number;
+            /** Understandability */
+            understandability: number;
+            /** Coverage */
+            coverage: number;
+        };
+        /** UatCaseStatusUpdate */
+        UatCaseStatusUpdate: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /** UatCaseTextUpdate */
+        UatCaseTextUpdate: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+        };
+        /** UatRegenerateSelectedRequest */
+        UatRegenerateSelectedRequest: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /** UatRegenerateSelectedResponse */
+        UatRegenerateSelectedResponse: {
+            reply: components["schemas"]["ConversationMessage"];
+            /** Candidates */
+            candidates: components["schemas"]["UatCase"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -202,6 +714,632 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ItemRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sessions_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummary"][];
+                };
+            };
+        };
+    };
+    create_session_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_detail_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_session_sessions__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_message_sessions__session_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_sessions__session_id__generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_acceptance_criteria_sessions__session_id__acceptance_criteria_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_acceptance_criterion_text_sessions__session_id__acceptance_criteria__ac_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptanceCriterionTextUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceCriterion"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_acceptance_criterion_status_sessions__session_id__acceptance_criteria__ac_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptanceCriterionStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceCriterion"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_selected_sessions__session_id__acceptance_criteria__ac_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateSelectedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegenerateSelectedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_approved_sessions__session_id__acceptance_criteria__ac_id__apply_approved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyApprovedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_all_kickoff_sessions__session_id__acceptance_criteria_regenerate_all_kickoff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_uat_cases_sessions__session_id__uat_cases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroupsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_uat_cases_sessions__session_id__uat_cases_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroupsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatCaseTextUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatCaseStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatRegenerateSelectedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatRegenerateSelectedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatApplyApprovedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroup"];
                 };
             };
             /** @description Validation Error */
