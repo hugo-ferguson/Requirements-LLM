@@ -1,0 +1,53 @@
+###Task Description:
+An instruction and a response to evaluate are given. Evaluate the response against all four score rubrics below.
+
+1. Write detailed feedback for each rubric strictly based on that rubric.
+2. Compare the response against the instruction when assigning each score.
+3. Return an integer score from 1 to 5 for each rubric.
+4. Return only valid JSON matching the requested response schema.
+
+###The instruction to evaluate:
+{orig_instruction}
+
+###Response to evaluate:
+{orig_response}
+
+###Score Rubrics:
+
+[Correctness]
+Evaluate whether the generated acceptance criteria are logically correct, internally consistent, and technically accurate. Consider whether the criteria make valid assumptions and could reasonably be implemented.
+
+1: The acceptance criteria contain major errors, contradictions, or invalid assumptions that make them unusable.
+2: The acceptance criteria contain multiple inaccuracies or inconsistencies that would require significant correction.
+3: The acceptance criteria are mostly correct but contain some inaccuracies, ambiguities, or questionable assumptions.
+4: The acceptance criteria are accurate and internally consistent, with only minor issues that do not significantly affect implementation.
+5: The acceptance criteria are completely accurate, logically consistent, and technically sound with no identifiable errors.
+
+[Coverage]
+Evaluate how comprehensively the generated acceptance criteria capture the expected behaviour described in the input. Consider important functional requirements, constraints, edge cases, and expected outcomes.
+
+1: The acceptance criteria cover very little of the expected behaviour and omit most important requirements.
+2: The acceptance criteria cover some expected behaviour but miss many important requirements or scenarios.
+3: The acceptance criteria cover the primary functionality but omit several important requirements, constraints, or edge cases.
+4: The acceptance criteria cover almost all important requirements, with only minor omissions.
+5: The acceptance criteria comprehensively cover all important functional requirements, constraints, expected outcomes, and relevant edge cases described or implied by the input.
+
+[Relevance]
+Evaluate how well the generated acceptance criteria address the requirements in the input. Consider whether they focus on the requested functionality and avoid unrelated or unnecessary requirements.
+
+1: The acceptance criteria are largely unrelated to the input or fail to address the requested functionality.
+2: The acceptance criteria address only a small portion of the requested functionality or include substantial irrelevant content.
+3: The acceptance criteria address the main functionality but omit some important requirements or include minor irrelevant details.
+4: The acceptance criteria address nearly all requested functionality, with only minor omissions or unnecessary details.
+5: The acceptance criteria fully address all requested functionality and remain entirely focused on the input without introducing irrelevant requirements.
+
+[Understandability]
+Evaluate how clearly the generated acceptance criteria are written. Consider whether they are easy for developers, testers, and stakeholders to read, interpret, and implement without ambiguity.
+
+1: The acceptance criteria are confusing, ambiguous, or poorly structured, making them difficult to understand.
+2: The acceptance criteria are partially understandable but contain significant ambiguity or unclear wording.
+3: The acceptance criteria are generally understandable but include some ambiguous or unnecessarily complex statements.
+4: The acceptance criteria are clear and well structured, with only minor opportunities for improving clarity.
+5: The acceptance criteria are exceptionally clear, concise, unambiguous, and easy to understand and implement.
+
+###Feedback:
