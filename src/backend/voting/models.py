@@ -66,3 +66,5 @@ class VotingResult(BaseModel):
     model: str
     prompt: str
     output: list[EvaluatedOutput]
+    overall_score: float = -1.0
+    rank: int = 0

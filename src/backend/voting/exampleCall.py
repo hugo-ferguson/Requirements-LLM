@@ -40,9 +40,9 @@ async def main() -> None:
 	# Valid values are: "prometheus", "qwen", and "llama", "gemini", "claude".
 	if isinstance(payload, list):
 		for item in payload:
-			item["providers"] = ["gemini"]
+			item["providers"] = ["gemini", "prometheus", "qwen", "llama"]
 	else:
-		payload["providers"] = ["gemini"]
+		payload["providers"] = ["gemini", "prometheus", "qwen", "llama"]
 
 	# if isinstance(payload, list):
 	# 	for item in payload:

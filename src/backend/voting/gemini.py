@@ -12,12 +12,57 @@ import httpx
 from dotenv import load_dotenv
 
 from voting.combined_provider import evaluate_with_combined_model
-from voting.models import CombinedVote, EvaluationInput, VotingResult
+from voting.models import CombinedVote, EvaluationInput, PrometheusVote, VotingResult
 
 
 load_dotenv()
 
 COMBINED_PROMPT = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer" / "combined.txt"
+
+
+def _build_generation_config() -> dict[str, Any]:
+    return {
+        "temperature": 0.1,
+        "responseMimeType": "application/json",
+        "responseSchema": {
+            "type": "OBJECT",
+            "properties": {
+                "correctness": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "score": {"type": "INTEGER", "minimum": 1, "maximum": 5},
+                        "feedback": {"type": "STRING"},
+                    },
+                    "required": ["score", "feedback"],
+                },
+                "coverage": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "score": {"type": "INTEGER", "minimum": 1, "maximum": 5},
+                        "feedback": {"type": "STRING"},
+                    },
+                    "required": ["score", "feedback"],
+                },
+                "relevance": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "score": {"type": "INTEGER", "minimum": 1, "maximum": 5},
+                        "feedback": {"type": "STRING"},
+                    },
+                    "required": ["score", "feedback"],
+                },
+                "understandability": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "score": {"type": "INTEGER", "minimum": 1, "maximum": 5},
+                        "feedback": {"type": "STRING"},
+                    },
+                    "required": ["score", "feedback"],
+                },
+            },
+            "required": ["correctness", "coverage", "relevance", "understandability"],
+        },
+    }
 
 
 def _normalize_gemini_schema(value: Any) -> Any:
@@ -32,6 +77,108 @@ def _normalize_gemini_schema(value: Any) -> Any:
     return value
 
 
+def _coerce_score(value: Any) -> int:
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return -1
+        for pattern in (
+            r"(?i)\b(?:score|rating)\s*[:=]\s*(-?\d+)\s*(?:/\s*5|out\s+of\s+5)?\b",
+            r"(?i)\b(-?\d+)\s*(?:/\s*5|out\s+of\s+5)\b",
+            r"(?i)\b(-?\d+)\b",
+        ):
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    result = int(float(match.group(1)))
+                except ValueError:
+                    continue
+                if -1 <= result <= 5:
+                    return result
+    return -1
+
+
+def _parse_prometheus_vote(raw_value: Any) -> PrometheusVote:
+    if isinstance(raw_value, PrometheusVote):
+        return raw_value
+
+    if isinstance(raw_value, dict):
+        score = raw_value.get("score")
+        feedback = raw_value.get("feedback")
+        if score is not None:
+            return PrometheusVote(score=_coerce_score(score), feedback=str(feedback or ""))
+
+    text = str(raw_value).strip()
+    if not text:
+        return PrometheusVote(score=-1, feedback="No rubric feedback returned.")
+
+    score_match = re.search(r"(?i)\b(?:score|rating)\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*(?:/\s*5|out\s+of\s+5)?\b", text)
+    if not score_match:
+        score_match = re.search(r"(?i)\b(-?\d+(?:\.\d+)?)\s*(?:/\s*5|out\s+of\s+5)\b", text)
+    if not score_match:
+        score_match = re.search(r"(?i)\b(-?\d+(?:\.\d+)?)\b", text)
+
+    feed_match = re.search(r"(?is)(?:feedback|reason|explanation)\s*[:=]\s*(.*)$", text)
+    score = _coerce_score(score_match.group(1)) if score_match else -1
+    feedback = feed_match.group(1).strip() if feed_match else text
+    return PrometheusVote(score=score, feedback=feedback)
+
+
+def _fallback_vote_for_text(raw_text: str) -> CombinedVote:
+    rubric_names = ("correctness", "coverage", "relevance", "understandability")
+    fallback: dict[str, PrometheusVote] = {}
+    for rubric in rubric_names:
+        section = raw_text
+        label_match = re.search(rf"(?is)\b{rubric}\b\s*[:\-]\s*(.*?)(?=\n\s*(?:correctness|coverage|relevance|understandability)\s*[:\-]|\Z)", raw_text)
+        if label_match:
+            section = label_match.group(1).strip()
+            score = _coerce_score(section)
+            feedback = section if score == -1 else section
+            fallback[rubric] = PrometheusVote(score=score, feedback=feedback)
+        else:
+            fallback[rubric] = PrometheusVote(score=-1, feedback=raw_text.strip() or "Gemini returned no structured rubric payload.")
+    return CombinedVote(**fallback)
+
+
+def _coerce_rubric_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_gemini_schema(payload)
+
+    if all(name in normalized for name in ("correctness", "coverage", "relevance", "understandability")):
+        return {
+            rubric: _parse_prometheus_vote(normalized[rubric])
+            for rubric in ("correctness", "coverage", "relevance", "understandability")
+        }
+
+    feedback = normalized.get("feedback")
+    if isinstance(feedback, dict):
+        rubric_payload = {
+            rubric: _parse_prometheus_vote(feedback[rubric])
+            for rubric in ("correctness", "coverage", "relevance", "understandability")
+            if rubric in feedback
+        }
+        if len(rubric_payload) == 4:
+            return rubric_payload
+
+    nested = normalized.get("result")
+    if isinstance(nested, dict):
+        return _coerce_rubric_payload(nested)
+
+    coerced = {
+        rubric: _parse_prometheus_vote(normalized.get(rubric))
+        for rubric in ("correctness", "coverage", "relevance", "understandability")
+        if rubric in normalized and normalized.get(rubric) not in ({}, None)
+    }
+    if len(coerced) == 4:
+        return coerced
+    return {}
+
+
+def _extract_rubric_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return _coerce_rubric_payload(payload)
+
+
 def _parse_response_text(raw_text: str) -> CombinedVote:
     cleaned = raw_text.strip()
     if cleaned.startswith("```"):
@@ -41,8 +188,19 @@ def _parse_response_text(raw_text: str) -> CombinedVote:
     match = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if match:
         cleaned = match.group(0)
-    payload = json.loads(cleaned)
-    return CombinedVote.model_validate(_normalize_gemini_schema(payload))
+
+    try:
+        payload = json.loads(cleaned)
+    except (TypeError, ValueError):
+        return _fallback_vote_for_text(cleaned)
+
+    if not isinstance(payload, dict):
+        return _fallback_vote_for_text(cleaned)
+
+    coerced = _extract_rubric_payload(payload)
+    if len(coerced) != 4:
+        return _fallback_vote_for_text(cleaned)
+    return CombinedVote.model_validate(coerced)
 
 
 class GeminiCombinedClient:
@@ -115,9 +273,7 @@ class GeminiCombinedClient:
                     "parts": [{"text": prompt}],
                 }
             ],
-            "generationConfig": {
-                "temperature": 0.1,
-            },
+            "generationConfig": _build_generation_config(),
         }
         headers = {
             "Content-Type": "application/json",
