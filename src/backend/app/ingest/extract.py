@@ -24,17 +24,25 @@ IMAGE_PROMPT = (
 	"be searched later. Do not add commentary about the image quality."
 )
 
-# Vision models tile images into blocks, so anything much larger than this
-# costs time and tokens without making the text easier to read.
-MAX_IMAGE_DIMENSION = 1568
+# Vision models tile images into blocks, so anything larger than this costs
+# time and tokens without making the text easier to read. 1024 is the floor:
+# measured on qwen2.5vl, a 1440px screenshot took 19.3s and a 1024px one
+# 14.8s with identical transcripts, while shrinking further saved nothing —
+# the model pads back up to the same tile grid, so 768px cost the same 14.4s
+# but started dropping text.
+MAX_IMAGE_DIMENSION = 1024
 JPEG_QUALITY = 90
-RESIZE_MARGIN = 1.2
 
 # A local model loads its weights on the first call and decodes far more
 # slowly than a hosted API, so it needs a generous leash.
 OLLAMA_TIMEOUT_SECONDS = 300.0
 OLLAMA_MAX_ATTEMPTS = 3
 OLLAMA_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+# Ollama evicts an idle model after 5 minutes by default, and reloading this
+# one off disk costs ~4s. Uploads come in bursts with long gaps between them,
+# which is the worst case for that default.
+OLLAMA_KEEP_ALIVE = "30m"
 
 
 class UnsupportedFileError(ValueError):
@@ -90,6 +98,7 @@ def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
 	payload = {
 		"model": settings.ollama_vision_model,
 		"stream": False,
+		"keep_alive": OLLAMA_KEEP_ALIVE,
 		"messages": [
 			{
 				"role": "user",
@@ -133,9 +142,9 @@ def _prepare_image(data: bytes, extension: str) -> bytes:
 		logger.warning("Could not open image for resizing: %s", error)
 		return data
 
-	# Re-encoding to shave a few pixels off costs more bytes than it saves,
-	# so only resize images that are meaningfully oversized.
-	if max(image.size) <= MAX_IMAGE_DIMENSION * RESIZE_MARGIN:
+	# Resizing costs ~40ms and saves seconds of vision-model time, so there's
+	# no tolerance band worth keeping here — anything over the cap gets shrunk.
+	if max(image.size) <= MAX_IMAGE_DIMENSION:
 		return data
 
 	original_size = image.size
