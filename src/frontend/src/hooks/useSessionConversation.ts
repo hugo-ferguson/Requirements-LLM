@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { sessionsApi } from "../api/sessions";
 import type { MessageRead } from "../api/sessions";
-import { readFilesAsAttachments } from "../lib/attachments";
-import type { Attachment, ChatMessage } from "../types/conversation";
+import type { ChatMessage } from "../types/conversation";
+import { useAttachmentUploads } from "./useAttachmentUploads";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -19,11 +19,12 @@ function toChatMessage(message: MessageRead): ChatMessage {
 
 export function useSessionConversation(sessionId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const uploads = useAttachmentUploads();
+  const { pendingAttachments, clearAttachments } = uploads;
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,15 +44,6 @@ export function useSessionConversation(sessionId: string) {
     };
   }, [sessionId]);
 
-  const attachFiles = useCallback(async (files: FileList) => {
-    const read = await readFilesAsAttachments(files);
-    setPendingAttachments((prev) => [...prev, ...read]);
-  }, []);
-
-  const removeAttachment = useCallback((index: number) => {
-    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
   const sendMessage = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -64,7 +56,7 @@ export function useSessionConversation(sessionId: string) {
         attachments: pendingAttachments,
       };
       setMessages((prev) => [...prev, userMessage]);
-      setPendingAttachments([]);
+      clearAttachments();
       setSendError(null);
       setIsSending(true);
       try {
@@ -79,7 +71,7 @@ export function useSessionConversation(sessionId: string) {
         setIsSending(false);
       }
     },
-    [sessionId, pendingAttachments],
+    [sessionId, pendingAttachments, clearAttachments],
   );
 
   const generate = useCallback(async () => {
@@ -96,15 +88,13 @@ export function useSessionConversation(sessionId: string) {
   }, [sessionId]);
 
   return {
+    ...uploads,
     messages,
-    pendingAttachments,
     isLoadingHistory,
     isSending,
     isGenerating,
     sendError,
     generateError,
-    attachFiles,
-    removeAttachment,
     sendMessage,
     generate,
   };

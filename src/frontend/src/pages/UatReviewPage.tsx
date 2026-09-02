@@ -148,6 +148,9 @@ export function UatReviewPage() {
           <ChatThread messages={regenerate.miniChatMessages} pending={regenerate.isSending} />
         </div>
 
+        {regenerate.uploadError && (
+          <p className="mb-2 text-sm text-red-600">{regenerate.uploadError}</p>
+        )}
         {regenerate.sendError && <p className="mb-2 text-sm text-red-600">{regenerate.sendError}</p>}
         <ChatInputBar
           pendingAttachments={regenerate.pendingAttachments}
@@ -155,6 +158,8 @@ export function UatReviewPage() {
           onRemoveAttachment={regenerate.removeAttachment}
           onSend={regenerate.sendMiniChatMessage}
           disabled={regenerate.isSending}
+          isUploading={regenerate.isUploading}
+          uploadCount={regenerate.uploadCount}
         />
 
         {applyError && <p className="mt-2 text-sm text-red-600">{applyError}</p>}

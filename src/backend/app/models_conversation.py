@@ -6,6 +6,9 @@ from sqlmodel import Field, SQLModel
 class ConversationAttachment(SQLModel):
     filename: str
     content: str
+    # Set when the attachment came from /documents/upload, so the message can
+    # be traced back to the ingested (and embedded) document.
+    document_id: int | None = None
 
 
 class ConversationMessage(SQLModel):
