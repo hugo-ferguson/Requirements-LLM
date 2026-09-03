@@ -1,248 +1,89 @@
 [
   {
-    "ai": "Gemini",
-    "model": "gemini-2.5-pro",
+    "ai": "ChatGPT",
+    "model": "gpt-5.5",
     "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
     "output": [
       {
-        "output": "The reset process sends a link to the user's registered email address.",
+        "output": "Users can request a password reset by entering their registered email address.",
         "feedback": [
           {
-            "ai": "Gemini",
-            "model": "gemini-3.5-flash-lite",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 3,
-                "feedback": "The response describes a basic mechanism of the requirement correctly, but it is phrased as a single factual statement rather than a set of testable acceptance criteria."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response fails to provide a list of acceptance criteria and completely omits edge cases, error states, constraints, and explicit expected outcomes."
-              },
-              {
-                "rubric": "relevance",
-                "value": 2,
-                "feedback": "While it touches upon the password reset via email, it does not provide acceptance criteria addressing the requested functionality."
-              },
-              {
-                "rubric": "understandability",
-                "value": 2,
-                "feedback": "The sentence is understandable on its own, but it is structured poorly for use as acceptance criteria, lacking the standard format like Given-When-Then or clear test conditions."
-              }
-            ],
-            "overall_score": 2.0
-          },
-          {
             "ai": "Prometheus",
-            "model": "ggozad/prometheus2:latest",
+            "model": "ollama/ggozad/prometheus2:latest",
             "feedback": [
               {
                 "rubric": "correctness",
-                "value": 2,
-                "feedback": "The response provided is a simplified version of the software requirement. It does not fully capture the complexity of the password reset process. While it correctly states that a link is sent to the user's registered email address, it fails to mention any specific steps or conditions that must be met for this process to work properly. For example, it does not consider potential issues such as the user's email being invalid or if the user has multiple email addresses associated with their account. Additionally, there is no mention of how the system would handle situations where the user might not receive the email due to spam filters or other delivery issues. These omissions result in a lack of clarity and completeness in the acceptance criteria. Therefore, based on the score rubric, this response contains multiple inaccuracies and inconsistencies that would require significant correction."
+                "value": 1,
+                "feedback": "The response provided is a simplified version of the software requirement. It does not fully capture the complexity of the task at hand. The acceptance criteria should be more detailed and should include specific steps or actions that the user should be able to perform. For example, the criteria should mention that the user should be able to reset their password using their registered email address, and that this process should be secure and user-friendly. Additionally, the criteria should be testable, which means that they should be able to be verified through a series of tests or procedures. The response lacks these details and does not provide a comprehensive list of acceptance criteria. Therefore, the response does not meet the requirements of the score rubric, which calls for logically correct, internally consistent, and technically accurate acceptance criteria. So the overall score is 1."
               },
               {
                 "rubric": "coverage",
                 "value": 1,
-                "feedback": "The response provided a very basic acceptance criterion that only touches on one aspect of the software requirement. It mentions the process of sending a link to the user's registered email address, but it fails to capture other important functional requirements such as verifying the user's identity before resetting their password, handling cases where the user might not have access to their registered email, or ensuring that the password is securely stored and transmitted. The response also does not consider any constraints or edge cases that could affect the functionality of the password reset feature. Therefore, it only partially addresses the expected behaviour described in the input. So the overall score is 1."
+                "feedback": "The response provided a very basic acceptance criterion, which only covers the primary functionality of the software requirement. It does not address any constraints, edge cases, or expected outcomes. The criterion is limited to the user's ability to request a password reset using their registered email address. It fails to mention any specifics about the password reset process, such as the user's ability to confirm their email address, the system's response to the request, or the subsequent steps after the request is made. The response does not provide a comprehensive understanding of the expected behaviour, which is crucial for testing and acceptance. Therefore, the response does not meet the requirements of the score rubric, as it does not cover all important functional requirements, constraints, expected outcomes, and relevant edge cases described or implied by the input. So the score is 1."
               },
               {
                 "rubric": "relevance",
-                "value": 1,
-                "feedback": "The response provided a very basic statement about the password reset process, which is indeed related to the user's registered email address. However, it lacks specificity and does not provide clear, testable acceptance criteria as requested in the instruction. The response fails to elaborate on how the link will be sent or what happens after the user clicks on the link. It also omits important aspects such as verifying the user's identity before sending the reset link, ensuring that the user's registered email address is correct and active, and handling potential errors or issues during the password reset process. These omissions make the response incomplete and not fully aligned with the requirements of the input. Therefore, based on the score rubric, the acceptance criteria generated by this response are largely unrelated to the input and fail to address the requested functionality. So the overall score is 1."
+                "value": 3,
+                "feedback": "The response provided a single acceptance criterion, which is to allow users to request a password reset by entering their registered email address. This criterion is directly related to the software requirement and focuses on the requested functionality. However, it lacks the detail and specificity that would make it a comprehensive acceptance criterion. For example, it does not mention the need for the system to confirm the user's identity or the process of resetting the password. It also omits the requirement for the system to handle potential errors or exceptions that may occur during the password reset process. These omissions result in a criterion that, while relevant, is not as thorough as it could be. Therefore, the response does not fully address all requested functionality, and it includes minor irrelevant details. So the overall score is 3."
               },
               {
                 "rubric": "understandability",
-                "value": 2,
-                "feedback": "The response provided is a single sentence that does not fully capture the complexity of the password reset process. It lacks specificity in terms of what happens after the link is sent, such as whether the user must confirm their email address or if there are any additional steps involved. This ambiguity could lead to confusion among developers and testers who need clear instructions on how to implement this feature. Additionally, the response does not provide a comprehensive list of acceptance criteria, which would be necessary for stakeholders to understand what is expected from the software in terms of user experience and security measures. Therefore, based on the score rubric, the response falls short in providing clear, testable acceptance criteria that are easy for developers, testers, and stakeholders to read, interpret, and implement without ambiguity."
+                "value": 5,
+                "feedback": "The response provided is a clear and concise statement that aligns with the software requirement. It is easy for developers, testers, and stakeholders to understand and implement. The response directly addresses the requirement by stating that users can request a password reset by entering their registered email address. This is a straightforward and unambiguous statement that leaves no room for interpretation or confusion. The response is well-structured and does not contain any unnecessary complexity or ambiguity. Therefore, based on the score rubric, the response is exceptionally clear, concise, unambiguous, and easy to understand and implement. So the overall score is 5."
               }
             ],
-            "overall_score": 1.5
+            "overall_score": 2.5
           },
           {
-            "ai": "Qwen",
-            "model": "qwen2.5:7b",
+            "ai": "Qwen3 14B",
+            "model": "ollama/qwen3:14b",
             "feedback": [
               {
                 "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response does not provide a list of acceptance criteria as requested. It only describes one part of the process. This response lacks detail and does not address all aspects of the requirement."
+                "value": 3,
+                "feedback": "The response is technically accurate but lacks the detail necessary to be considered complete acceptance criteria. It describes a single step in the process but does not specify success or failure conditions, or other necessary details."
               },
               {
                 "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response covers only a small portion of the expected behavior, specifically mentioning the sending of an email. However, it omits critical details such as verifying the link or confirming successful password reset."
+                "value": 2,
+                "feedback": "The response covers only a small portion of the expected functionality. It does not address success or failure scenarios, security considerations, or other important aspects of the password reset process."
               },
               {
                 "rubric": "relevance",
-                "value": 2,
-                "feedback": "The generated text is relevant to part of the requirement but does not cover all requested functionality. It focuses on a single aspect without addressing the broader context and other steps involved in resetting a password."
+                "value": 3,
+                "feedback": "The response is relevant to the input requirement but does not fully address all aspects of the password reset functionality."
               },
               {
                 "rubric": "understandability",
-                "value": 3,
-                "feedback": "The response is straightforward, but it lacks detail that would make acceptance criteria clear for developers or testers to follow. More information and clarity are needed to ensure understanding."
+                "value": 5,
+                "feedback": "The response is clear and straightforward, making it easy to understand."
               }
             ],
-            "overall_score": 1.75
+            "overall_score": 3.25
           },
           {
             "ai": "Llama",
-            "model": "llama3.1:8b",
+            "model": "ollama/llama3.1:8b",
             "feedback": [
               {
                 "rubric": "correctness",
                 "value": 3,
-                "feedback": "The response is partially correct. It addresses the core functionality of sending a link to the user's registered email address, but it does not specify what happens after the user clicks on the link or how the password reset process works."
+                "feedback": "The acceptance criteria are mostly correct but contain some inaccuracies, ambiguities, or questionable assumptions. For example, the criteria do not explicitly state that the password reset should be sent to the user's registered email address. Additionally, the criteria do not consider the case where the user's email address is not registered or is invalid."
               },
               {
                 "rubric": "coverage",
                 "value": 3,
-                "feedback": "The response covers some expected behaviour, but it misses important requirements such as validating the user's input and resetting the password correctly. It also does not address edge cases like what happens when the user's email is invalid or their account is locked."
-              },
-              {
-                "rubric": "relevance",
-                "value": 4,
-                "feedback": "The response addresses the main functionality of resetting a user's password using their registered email address, but it includes some minor irrelevant details about sending a link. The focus on the requested functionality is mostly maintained."
-              },
-              {
-                "rubric": "understandability",
-                "value": 4,
-                "feedback": "The response is generally clear and easy to understand, but it could be improved by adding more detail about what happens after the user clicks on the link or how the password reset process works. The language used is concise and unambiguous."
-              }
-            ],
-            "overall_score": 3.5
-          }
-        ],
-        "rubric_averages": [
-          {
-            "rubric": "correctness",
-            "value": 2.25
-          },
-          {
-            "rubric": "coverage",
-            "value": 1.5
-          },
-          {
-            "rubric": "relevance",
-            "value": 2.25
-          },
-          {
-            "rubric": "understandability",
-            "value": 2.75
-          }
-        ],
-        "overall_score": 2.1875
-      },
-      {
-        "output": "A password reset request can be started from the login page.",
-        "feedback": [
-          {
-            "ai": "Gemini",
-            "model": "gemini-3.5-flash-lite",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 3,
-                "feedback": "The response is technically accurate in stating that a password reset request can be started from the login page, but it is not formatted as a list of acceptance criteria."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response completely fails to provide acceptance criteria and only mentions a single starting point, omitting the rest of the workflow, constraints, and edge cases."
-              },
-              {
-                "rubric": "relevance",
-                "value": 2,
-                "feedback": "While it touches upon the password reset feature, it fails to provide the requested list of acceptance criteria, rendering it largely ineffective for the task."
-              },
-              {
-                "rubric": "understandability",
-                "value": 3,
-                "feedback": "The sentence is clear and easy to read, but it is presented as a standalone statement rather than structured, testable acceptance criteria."
-              }
-            ],
-            "overall_score": 2.25
-          },
-          {
-            "ai": "Prometheus",
-            "model": "ggozad/prometheus2:latest",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response provided does not meet the requirements of the score rubric. It fails to generate a list of clear, testable acceptance criteria as requested in the instruction. The response is too vague and lacks specificity that would allow for testing or validation of the software requirement. There are no logical connections between the statement and the criteria it should have generated. Furthermore, there are no technical details provided that would help in understanding how to implement the password reset feature. Therefore, based on the score rubric, this response is not logically correct, internally consistent, or technically accurate. It contains major errors and invalid assumptions that make it unusable for the purpose of evaluating software requirements. So the overall score is 1."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response provided a very basic acceptance criterion that only touches on the primary functionality of resetting passwords using registered email addresses. It does not address any constraints, edge cases, or expected outcomes beyond the initial request from the login page. The criteria lack detail and do not provide a comprehensive understanding of the requirement's full scope. Therefore, it falls short in capturing the expected behaviour described in the input. This response would receive a score of 1 according to the rubric as it covers very little of the expected behaviour and omits most important requirements."
-              },
-              {
-                "rubric": "relevance",
-                "value": 1,
-                "feedback": "The response provided does not meet the requirement of generating a list of clear, testable acceptance criteria. It only states that a password reset request can be started from the login page, which is a very basic and vague statement. This response fails to address the specific functionality requested in the instruction, namely the ability for users to reset their password using their registered email address. The lack of detail and absence of any testable criteria make this response largely unrelated to the input and does not fulfill the task requirements. Therefore, it is clear that the acceptance criteria generated by this response do not meet the expectations set out in the score rubric. So the overall score is 1."
-              },
-              {
-                "rubric": "understandability",
-                "value": 1,
-                "feedback": "The response provided is not a list of clear, testable acceptance criteria as requested in the instruction. It merely states that a password reset request can be started from the login page. This statement lacks specificity and does not provide actionable steps or conditions for developers, testers, and stakeholders to follow. The absence of any detailed criteria makes it difficult for these groups to understand how to implement this requirement in software development. Therefore, based on the score rubric which emphasizes clarity, testability, and ease of understanding, the response does not meet the requirements set forth in the instruction."
-              }
-            ],
-            "overall_score": 1.0
-          },
-          {
-            "ai": "Qwen",
-            "model": "qwen2.5:7b",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response is not a list of acceptance criteria but rather a statement that partially addresses one aspect of the requirement. It does not cover all necessary details for implementing a password reset functionality."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response only mentions starting a password reset request from the login page, which is incomplete and omits other crucial steps such as sending an email with a reset link and verifying the identity of the user."
-              },
-              {
-                "rubric": "relevance",
-                "value": 2,
-                "feedback": "The response directly relates to part of the requirement but does not cover all relevant aspects. It should include more detailed acceptance criteria that fully address the password reset process."
-              },
-              {
-                "rubric": "understandability",
-                "value": 4,
-                "feedback": "The statement is straightforward and easy to understand, but it lacks detail which makes it insufficient as a complete set of acceptance criteria."
-              }
-            ],
-            "overall_score": 2.0
-          },
-          {
-            "ai": "Llama",
-            "model": "llama3.1:8b",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 2,
-                "feedback": "The response does not address the instruction correctly."
-              },
-              {
-                "rubric": "coverage",
-                "value": 3,
-                "feedback": "This response only partially covers the expected behaviour described in the input. It is missing important requirements such as error handling, success messaging and the process for confirming a new password."
+                "feedback": "The acceptance criteria cover the primary functionality but omit several important requirements, constraints, or edge cases. For example, the criteria do not consider the case where the user's email address is not registered or is invalid. Additionally, the criteria do not explicitly state that the password reset should be sent to the user's registered email address."
               },
               {
                 "rubric": "relevance",
                 "value": 3,
-                "feedback": "The acceptance criteria are somewhat relevant to the requirement but omit several key details necessary to complete the task of resetting a user's password."
+                "feedback": "The acceptance criteria address the main functionality but omit some important requirements or include minor irrelevant details. For example, the criteria do not consider the case where the user's email address is not registered or is invalid. Additionally, the criteria do not explicitly state that the password reset should be sent to the user's registered email address."
               },
               {
                 "rubric": "understandability",
-                "value": 4,
-                "feedback": "The response is clear and easy to understand."
+                "value": 3,
+                "feedback": "The acceptance criteria are generally understandable but include some ambiguous or unnecessarily complex statements. For example, the criteria do not explicitly state that the password reset should be sent to the user's registered email address. Additionally, the criteria do not consider the case where the user's email address is not registered or is invalid."
               }
             ],
             "overall_score": 3.0
@@ -251,11 +92,335 @@
         "rubric_averages": [
           {
             "rubric": "correctness",
-            "value": 1.75
+            "value": 2.3333333333333335
           },
           {
             "rubric": "coverage",
-            "value": 1.5
+            "value": 2.0
+          },
+          {
+            "rubric": "relevance",
+            "value": 3.0
+          },
+          {
+            "rubric": "understandability",
+            "value": 4.333333333333333
+          }
+        ],
+        "overall_score": 2.9166666666666665
+      },
+      {
+        "output": "The system provides a 'Forgot Password' option on the login page.",
+        "feedback": [
+          {
+            "ai": "Prometheus",
+            "model": "ollama/ggozad/prometheus2:latest",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 1,
+                "feedback": "The response provided does not meet the requirements of the score rubric. It fails to generate a list of clear, testable acceptance criteria. Instead, it offers a single statement about the existence of a 'Forgot Password' option. This statement does not provide any actionable or testable criteria for acceptance. It lacks the necessary detail and specificity that would allow for the evaluation of the system's ability to reset passwords using registered email addresses. The response does not make any valid assumptions or provide any guidance on how to implement the system's password reset feature. Therefore, it does not meet the criteria for logical correctness, internal consistency, or technical accuracy. The response is not useful for the purpose of evaluating the system's compliance with the software requirement. So the overall score is 1."
+              },
+              {
+                "rubric": "coverage",
+                "value": 3,
+                "feedback": "The response provided a single acceptance criterion, which is the existence of a 'Forgot Password' option on the login page. This criterion does capture the primary functionality of the software requirement, which is the ability for users to reset their password using their registered email address. However, it fails to address several important requirements, constraints, or edge cases. For instance, it does not specify that the password reset should be possible using the registered email address, nor does it mention any potential constraints or edge cases that might arise during the password reset process. The response also does not explicitly state the expected outcome of the password reset feature. Therefore, while the response does cover the primary functionality, it omits several important requirements and does not provide a comprehensive set of acceptance criteria. So the overall score is 3."
+              },
+              {
+                "rubric": "relevance",
+                "value": 3,
+                "feedback": "The response provided a single acceptance criterion, which is the presence of a 'Forgot Password' option on the login page. This criterion does address the main functionality of the software requirement, which is the ability for users to reset their password using their registered email address. However, it does not explicitly mention the use of the registered email address, which is a critical part of the requirement. Additionally, the response does not provide any further details or additional criteria that could be used to test the functionality. Therefore, while the response does touch upon the main functionality, it omits some important requirements and lacks the depth and detail that would be expected for a comprehensive set of acceptance criteria. So the overall score is 3."
+              },
+              {
+                "rubric": "understandability",
+                "value": 1,
+                "feedback": "The response provided is a single sentence that does not meet the requirement of generating a list of clear, testable acceptance criteria. It merely states a feature of the system without providing any criteria for acceptance. This lack of detail and structure makes it difficult for developers, testers, and stakeholders to understand how to implement or test the feature. The response does not offer any actionable steps or specifications that would help in verifying the system's ability to reset passwords using registered email addresses. Therefore, the response does not meet the criteria set out in the score rubric, which emphasizes clarity, testability, and the absence of ambiguity in the acceptance criteria. So the overall score is 1."
+              }
+            ],
+            "overall_score": 2.0
+          },
+          {
+            "ai": "Qwen3 14B",
+            "model": "ollama/qwen3:14b",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": -1,
+                "feedback": "The response does not provide any acceptance criteria. The instruction asked for a list of clear, testable acceptance criteria, but the response only mentions a 'Forgot Password' option on the login page. This does not meet the requirement of generating acceptance criteria."
+              },
+              {
+                "rubric": "coverage",
+                "value": -1,
+                "feedback": "The response does not provide any acceptance criteria. Therefore, it covers none of the expected behaviour described in the input. The instruction required a list of acceptance criteria, but the response only mentions a 'Forgot Password' option on the login page, which is not an acceptance criterion."
+              },
+              {
+                "rubric": "relevance",
+                "value": -1,
+                "feedback": "The response does not provide any acceptance criteria. The instruction asked for a list of clear, testable acceptance criteria related to the password reset functionality. The response only mentions a 'Forgot Password' option on the login page, which is not an acceptance criterion and is not directly related to the requirement of generating acceptance criteria."
+              },
+              {
+                "rubric": "understandability",
+                "value": -1,
+                "feedback": "The response does not provide any acceptance criteria. The response is a single statement about the presence of a 'Forgot Password' option on the login page. While this statement is clear and unambiguous, it does not address the instruction, which required the generation of acceptance criteria."
+              }
+            ],
+            "overall_score": -1.0
+          },
+          {
+            "ai": "Llama",
+            "model": "ollama/llama3.1:8b",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 1,
+                "feedback": "The response does not address the requirement of generating a list of clear, testable acceptance criteria. It only mentions providing a 'Forgot Password' option on the login page, which is not relevant to the requirement."
+              },
+              {
+                "rubric": "coverage",
+                "value": 1,
+                "feedback": "The response covers very little of the expected behaviour and omits most important requirements. It does not address the need for clear and testable acceptance criteria."
+              },
+              {
+                "rubric": "relevance",
+                "value": 1,
+                "feedback": "The response is largely unrelated to the input or fails to address the requested functionality. It does not focus on generating acceptance criteria but rather on providing a specific feature."
+              },
+              {
+                "rubric": "understandability",
+                "value": 1,
+                "feedback": "The response is confusing and ambiguous. It does not provide clear and concise language, making it difficult to understand what it is trying to accomplish."
+              }
+            ],
+            "overall_score": 1.0
+          }
+        ],
+        "rubric_averages": [
+          {
+            "rubric": "correctness",
+            "value": 1.0
+          },
+          {
+            "rubric": "coverage",
+            "value": 2.0
+          },
+          {
+            "rubric": "relevance",
+            "value": 2.0
+          },
+          {
+            "rubric": "understandability",
+            "value": 1.0
+          }
+        ],
+        "overall_score": 1.5
+      }
+    ],
+    "overall_score": 2.208333333333333,
+    "rank": 1
+  },
+  {
+    "ai": "Gemini",
+    "model": "gemini-2.5-pro",
+    "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
+    "output": [
+      {
+        "output": "The reset process sends a link to the user's registered email address.",
+        "feedback": [
+          {
+            "ai": "Prometheus",
+            "model": "ollama/ggozad/prometheus2:latest",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 2,
+                "feedback": "The response provided is a simplified version of the software requirement. It does not fully capture the complexity of the password reset process. The response does not mention the need for the user to confirm their email address, which is a critical step in the password reset process. Additionally, it does not address the potential for the user to receive an email from an unknown sender, which could lead to confusion or security concerns. The response also lacks detail on how the link is sent and what happens if the user does not receive the email. These omissions result in a lack of clarity and completeness in the acceptance criteria. Therefore, the response does not meet the criteria for logical correctness, internal consistency, and technical accuracy. It contains multiple inaccuracies and inconsistencies that would require significant correction. So the overall score is 2."
+              },
+              {
+                "rubric": "coverage",
+                "value": 1,
+                "feedback": "The response provided a very basic acceptance criterion, which only touches upon the primary functionality of the password reset feature. It does not address any constraints, edge cases, or expected outcomes that might be associated with this feature. The criterion is limited to the fact that a link is sent to the user's registered email address, which is a necessary step but not sufficient to ensure the feature's functionality and reliability. The response fails to capture the full scope of the software requirement, which includes the user's ability to successfully reset their password using their registered email address. Therefore, the response does not meet the criteria for a higher score as it omits many important requirements and scenarios. So the overall score is 1."
+              },
+              {
+                "rubric": "relevance",
+                "value": 1,
+                "feedback": "The response provided a very basic and incomplete acceptance criterion. It only mentions the process of sending a link to the user's registered email address, which is a part of the functionality but does not cover the entirety of the requirement. The response fails to address the user's ability to reset their password using their registered email address. It does not include any testable criteria or consider the user's interaction with the system after receiving the link. The response also lacks any mention of the user's experience or the system's response to the user's actions. Therefore, the response does not meet the criteria set out in the score rubric, as it does not fully address the requested functionality and includes no relevant details. So the overall score is 1."
+              },
+              {
+                "rubric": "understandability",
+                "value": 1,
+                "feedback": "The response provided is a single sentence that does not fully capture the complexity of the password reset process. It lacks detail and does not specify the actions that should be taken by the user or the system. The response does not mention the user's interaction with the system, nor does it address the potential for errors or the need for user confirmation. It also fails to provide a clear and concise set of acceptance criteria that would be easy for developers, testers, and stakeholders to understand and implement. The response is too vague and does not provide the necessary clarity and structure. Therefore, it does not meet the criteria for a score of 5, as it is not exceptionally clear, concise, unambiguous, and easy to understand and implement. So the overall score is 1."
+              }
+            ],
+            "overall_score": 1.25
+          },
+          {
+            "ai": "Qwen3 14B",
+            "model": "ollama/qwen3:14b",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 3,
+                "feedback": "The response is technically accurate but does not provide a list of acceptance criteria as requested. It only describes a single step in the process."
+              },
+              {
+                "rubric": "coverage",
+                "value": 2,
+                "feedback": "The response covers only a small part of the expected functionality. It does not address other important aspects such as user interaction, validation, or the outcome of clicking the link."
+              },
+              {
+                "rubric": "relevance",
+                "value": 3,
+                "feedback": "The response is relevant to the input requirement but fails to provide a complete set of criteria for the password reset functionality."
+              },
+              {
+                "rubric": "understandability",
+                "value": 5,
+                "feedback": "The response is clear and straightforward, making it easy to understand."
+              }
+            ],
+            "overall_score": 3.25
+          },
+          {
+            "ai": "Llama",
+            "model": "ollama/llama3.1:8b",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 3,
+                "feedback": "The acceptance criteria are mostly correct but contain some inaccuracies, ambiguities, or questionable assumptions. For example, the criteria do not explicitly state that the link sent to the user's email address should be a reset link. Additionally, the criteria do not consider the case where the user's email address is not registered with the system."
+              },
+              {
+                "rubric": "coverage",
+                "value": 3,
+                "feedback": "The acceptance criteria cover the primary functionality but omit several important requirements, constraints, or edge cases. For example, the criteria do not consider the case where the user's email address is not registered with the system, or the case where the user has already reset their password and tries to reset it again."
+              },
+              {
+                "rubric": "relevance",
+                "value": 3,
+                "feedback": "The acceptance criteria address the main functionality but omit some important requirements or include minor irrelevant details. For example, the criteria do not explicitly state that the link sent to the user's email address should be a reset link, which is a minor but relevant detail."
+              },
+              {
+                "rubric": "understandability",
+                "value": 3,
+                "feedback": "The acceptance criteria are generally understandable but include some ambiguous or unnecessarily complex statements. For example, the criteria do not clearly state what should happen if the user's email address is not registered with the system."
+              }
+            ],
+            "overall_score": 3.0
+          }
+        ],
+        "rubric_averages": [
+          {
+            "rubric": "correctness",
+            "value": 2.6666666666666665
+          },
+          {
+            "rubric": "coverage",
+            "value": 2.0
+          },
+          {
+            "rubric": "relevance",
+            "value": 2.3333333333333335
+          },
+          {
+            "rubric": "understandability",
+            "value": 3.0
+          }
+        ],
+        "overall_score": 2.5
+      },
+      {
+        "output": "A password reset request can be started from the login page.",
+        "feedback": [
+          {
+            "ai": "Prometheus",
+            "model": "ollama/ggozad/prometheus2:latest",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 1,
+                "feedback": "The response provided does not meet the requirements of the task. It fails to generate a list of clear, testable acceptance criteria. Instead, it offers a single statement that does not fulfill the criteria of being logically correct, internally consistent, or technically accurate. The statement is too vague and does not provide any actionable or testable criteria. It lacks the necessary detail and specificity that would allow for the implementation of the software requirement. The response does not make valid assumptions or provide a clear path for testing the software's password reset feature. Therefore, it does not meet the standards set by the score rubric. So the overall score is 1."
+              },
+              {
+                "rubric": "coverage",
+                "value": 1,
+                "feedback": "The response provided a very basic acceptance criterion, which only touches upon the starting point of the password reset process. It fails to address the critical aspect of the requirement, which is the use of the registered email address to initiate the password reset. This omission is significant as it is a fundamental requirement for the password reset feature. The response does not mention any constraints, edge cases, or expected outcomes related to the password reset process. Therefore, it does not meet the criteria for a comprehensive set of acceptance criteria. The response is too narrow and does not capture the full scope of the expected behaviour described in the input. So the overall score is 1."
+              },
+              {
+                "rubric": "relevance",
+                "value": 1,
+                "feedback": "The response provided does not fully address the software requirement. It only mentions that a password reset request can be started from the login page, which is a part of the functionality but does not cover the entirety of the requirement. The response fails to mention the use of the registered email address, which is a critical aspect of the requirement. It also does not provide any testable acceptance criteria, which is a key part of the task. The response is therefore lacking in both completeness and specificity, which are essential for acceptance criteria. It does not focus on the requested functionality and introduces an unrelated requirement of starting the password reset request from the login page. Therefore, the response does not meet the criteria set out in the score rubric. So the overall score is 1."
+              },
+              {
+                "rubric": "understandability",
+                "value": 1,
+                "feedback": "The response provided is not a list of clear, testable acceptance criteria. It is a single statement that does not meet the requirement of being a list. The statement is also vague and lacks specificity, which could lead to ambiguity in its interpretation and implementation. It does not provide any actionable steps or criteria for testing, which is essential for acceptance. The response does not fulfill the instruction to generate a list of clear, testable acceptance criteria. Therefore, it does not meet the criteria set out in the score rubric. So the overall score is 1."
+              }
+            ],
+            "overall_score": 1.0
+          },
+          {
+            "ai": "Qwen3 14B",
+            "model": "ollama/qwen3:14b",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": -1,
+                "feedback": "The response does not provide any acceptance criteria. The instruction asked for a list of clear, testable acceptance criteria, but the response only mentions that a password reset can be initiated from the login page. This is not sufficient to meet the requirement."
+              },
+              {
+                "rubric": "coverage",
+                "value": -1,
+                "feedback": "The response does not provide any acceptance criteria. Therefore, it covers none of the expected behaviour related to generating a list of acceptance criteria for the given requirement."
+              },
+              {
+                "rubric": "relevance",
+                "value": -1,
+                "feedback": "The response is not relevant to the instruction. The instruction required generating acceptance criteria, but the response only mentions a single point about initiating a password reset from the login page, which is not a complete set of acceptance criteria."
+              },
+              {
+                "rubric": "understandability",
+                "value": 5,
+                "feedback": "The response is clear and straightforward. The single statement provided is easy to understand and unambiguous."
+              }
+            ],
+            "overall_score": 0.5
+          },
+          {
+            "ai": "Llama",
+            "model": "ollama/llama3.1:8b",
+            "feedback": [
+              {
+                "rubric": "correctness",
+                "value": 3,
+                "feedback": "The acceptance criteria are mostly correct but contain some inaccuracies, ambiguities, or questionable assumptions. For example, the criteria do not explicitly mention the process of verifying the user's email address after a password reset request is initiated. This could lead to confusion about the expected behavior."
+              },
+              {
+                "rubric": "coverage",
+                "value": 3,
+                "feedback": "The acceptance criteria cover the primary functionality but omit several important requirements, constraints, or edge cases. For instance, the criteria do not address the scenario where the user's email address is invalid or the password reset request times out. These omissions could lead to incomplete testing."
+              },
+              {
+                "rubric": "relevance",
+                "value": 3,
+                "feedback": "The acceptance criteria address the main functionality but omit some important requirements or include minor irrelevant details. For example, the criteria do not explicitly mention the need to verify the user's identity before resetting their password. This could lead to unnecessary complexity in the implementation."
+              },
+              {
+                "rubric": "understandability",
+                "value": 3,
+                "feedback": "The acceptance criteria are generally understandable but include some ambiguous or unnecessarily complex statements. For instance, the criteria could be clearer about the expected behavior when the user's email address is invalid or the password reset request times out."
+              }
+            ],
+            "overall_score": 3.0
+          }
+        ],
+        "rubric_averages": [
+          {
+            "rubric": "correctness",
+            "value": 2.0
+          },
+          {
+            "rubric": "coverage",
+            "value": 2.0
           },
           {
             "rubric": "relevance",
@@ -266,283 +431,10 @@
             "value": 3.0
           }
         ],
-        "overall_score": 2.0625
-      }
-    ],
-    "overall_score": 2.125,
-    "rank": 1
-  },
-  {
-    "ai": "ChatGPT",
-    "model": "gpt-5.5",
-    "prompt": "Read the following software requirement and generate a list of clear, testable acceptance criteria.\n\nRequirement:\nUsers should be able to reset their password using their registered email address.",
-    "output": [
-      {
-        "output": "Users can request a password reset by entering their registered email address.",
-        "feedback": [
-          {
-            "ai": "Gemini",
-            "model": "gemini-3.5-flash-lite",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 3,
-                "feedback": "The statement is logically correct regarding the primary feature, but it lacks the structured format typical of acceptance criteria and does not define technical verification steps."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response only provides a single sentence describing the initial user action and completely omits the actual reset process, email dispatch, token validation, success outcomes, and edge cases."
-              },
-              {
-                "rubric": "relevance",
-                "value": 3,
-                "feedback": "The response directly relates to the requested password reset functionality via email, but it fails to form actual acceptance criteria, addressing only a small part of what is needed."
-              },
-              {
-                "rubric": "understandability",
-                "value": 3,
-                "feedback": "The sentence is clear and easy to read, but it is structured as a general requirement description rather than distinct, actionable acceptance criteria."
-              }
-            ],
-            "overall_score": 2.5
-          },
-          {
-            "ai": "Prometheus",
-            "model": "ggozad/prometheus2:latest",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 3,
-                "feedback": "The response provided is a simplified version of the software requirement. It does not fully capture the complexity of the task at hand. While it correctly states that users can request a password reset by entering their registered email address, it lacks specificity and detail in terms of what happens after this action is taken. For example, it doesn't mention any follow-up steps or potential errors that might occur during the password reset process. Additionally, there are no clear instructions on how to implement this feature, which could lead to ambiguities when developing the software. Therefore, while the response is mostly correct, it contains some inaccuracies and questionable assumptions that would require significant correction to make it a fully accurate and logically consistent set of acceptance criteria."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response provided a very basic acceptance criterion that only touches on the primary functionality of resetting passwords using registered email addresses. It lacks any mention of important functional requirements, constraints, edge cases, or expected outcomes beyond this basic requirement. The criteria do not address potential issues such as user error, system errors, or security concerns related to password resets. Furthermore, it does not consider the need for a confirmation step or the possibility of multiple attempts at password reset. These omissions result in a score of 1, as the acceptance criteria cover very little of the expected behaviour and omit most important requirements."
-              },
-              {
-                "rubric": "relevance",
-                "value": 3,
-                "feedback": "The response provided a single sentence that addresses the main functionality of the software requirement, which is to allow users to reset their password using their registered email address. However, it lacks specificity and detail in its acceptance criteria. It does not mention any potential errors or edge cases that might occur during the password reset process. Additionally, it omits the need for user confirmation after entering their email address, which is an important requirement to ensure security. The response also fails to include any testable scenarios or examples of how the software should function in this regard. Therefore, while the response does touch upon the main functionality, it falls short in providing a comprehensive set of acceptance criteria that fully addresses all aspects of the requested functionality. So the overall score is 3."
-              },
-              {
-                "rubric": "understandability",
-                "value": 3,
-                "feedback": "The response provided is a single sentence that does not fully capture the essence of the software requirement. It lacks specificity in terms of what actions the user should take to reset their password. The statement 'Users can request a password reset by entering their registered email address' is somewhat ambiguous, as it doesn't explicitly state that this action will lead to a password reset. Additionally, there is no mention of how the system will handle the request or any potential errors or issues that might arise during the process. This lack of detail could lead to confusion among developers, testers, and stakeholders when trying to implement the requirement. Therefore, while the response is generally understandable, it includes some ambiguous statements that could be improved for clarity."
-              }
-            ],
-            "overall_score": 2.5
-          },
-          {
-            "ai": "Qwen",
-            "model": "qwen2.5:7b",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response does not provide a detailed list of acceptance criteria. It merely states that users can request a password reset by entering their registered email address, which is too vague. This response omits important details such as whether the system will send a verification link, how long it remains valid, and what happens if the entered email is incorrect."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response only captures part of the expected behavior by stating that users can request a password reset via their registered email. However, it does not cover critical aspects such as verifying the user's identity through an email link or handling invalid emails."
-              },
-              {
-                "rubric": "relevance",
-                "value": 3,
-                "feedback": "The response is relevant to the core functionality of allowing users to request a password reset using their registered email address. However, it does not provide enough detail to fully satisfy the requirement without additional context and criteria."
-              },
-              {
-                "rubric": "understandability",
-                "value": 2,
-                "feedback": "The statement provided in the response is somewhat understandable but lacks clarity regarding the full process of requesting a password reset. It requires more detailed steps for developers, testers, and stakeholders to fully grasp the requirement."
-              }
-            ],
-            "overall_score": 1.75
-          },
-          {
-            "ai": "Llama",
-            "model": "llama3.1:8b",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 2,
-                "feedback": "The acceptance criteria contain multiple inaccuracies or inconsistencies that would require significant correction. Specifically, the requirement is for users to be able to reset their password using their registered email address, but the response only mentions requesting a password reset by entering an email address."
-              },
-              {
-                "rubric": "coverage",
-                "value": 2,
-                "feedback": "The acceptance criteria cover some expected behaviour but miss many important requirements or scenarios. The primary functionality of resetting a password is covered, but there is no mention of confirming the user's identity via email before granting access to their account."
-              },
-              {
-                "rubric": "relevance",
-                "value": 2,
-                "feedback": "The acceptance criteria address only a small portion of the requested functionality or include substantial irrelevant content. The response fails to address the requirement for users to be able to reset their password, and instead only mentions requesting a password reset."
-              },
-              {
-                "rubric": "understandability",
-                "value": 2,
-                "feedback": "The acceptance criteria are partially understandable but contain significant ambiguity or unclear wording. The phrase 'requesting a password reset by entering their registered email address' could be interpreted in multiple ways, and it's not clear what the expected outcome of this action is."
-              }
-            ],
-            "overall_score": 2.0
-          }
-        ],
-        "rubric_averages": [
-          {
-            "rubric": "correctness",
-            "value": 2.25
-          },
-          {
-            "rubric": "coverage",
-            "value": 1.25
-          },
-          {
-            "rubric": "relevance",
-            "value": 2.75
-          },
-          {
-            "rubric": "understandability",
-            "value": 2.5
-          }
-        ],
-        "overall_score": 2.1875
-      },
-      {
-        "output": "The system provides a 'Forgot Password' option on the login page.",
-        "feedback": [
-          {
-            "ai": "Gemini",
-            "model": "gemini-3.5-flash-lite",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response fails to provide acceptance criteria entirely, offering instead a single descriptive statement about the UI."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response misses all acceptance criteria, omitting the core functionality of password reset via email, edge cases, and expected outcomes."
-              },
-              {
-                "rubric": "relevance",
-                "value": 2,
-                "feedback": "While it mentions the login page feature related to the requirement, it fails to provide any acceptance criteria addressing the requested password reset functionality."
-              },
-              {
-                "rubric": "understandability",
-                "value": 2,
-                "feedback": "The single sentence is easy to read, but it completely fails to take the form of acceptance criteria, making it unhelpful for testing and implementation."
-              }
-            ],
-            "overall_score": 1.5
-          },
-          {
-            "ai": "Prometheus",
-            "model": "ggozad/prometheus2:latest",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response provided does not meet the requirements of generating a list of clear, testable acceptance criteria. It merely states that there is a 'Forgot Password' option on the login page without providing any specific criteria for testing or acceptance. This lack of detail and clarity makes it difficult to determine whether the system meets the requirement of allowing users to reset their password using their registered email address. The response does not make valid assumptions nor could it reasonably be implemented as an acceptance criterion. Therefore, based on the score rubric, this response contains major errors and invalid assumptions that make it unusable for evaluating the software requirement. So the overall score is 1."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "The response provided a single statement that does not fully capture the expected behavior as outlined in the instruction. It mentions the existence of a 'Forgot Password' option but fails to address how users can reset their password using their registered email address, which is a critical part of the requirement. The response also lacks any mention of testable acceptance criteria or any other important functional requirements, constraints, or edge cases that might be associated with this feature. Therefore, it does not meet the criteria for a higher score as per the rubric."
-              },
-              {
-                "rubric": "relevance",
-                "value": 1,
-                "feedback": "The response provided a single statement that does not constitute a list of clear, testable acceptance criteria as required by the instruction. It merely states the existence of a 'Forgot Password' option on the login page without providing any specific criteria for testing or acceptance. This lack of detail and structure fails to address the main functionality requested in the input, which is the ability for users to reset their password using their registered email address. The response does not include any testable criteria that would allow for the verification of this functionality. Therefore, it does not meet the requirements set out in the score rubric. So the overall score is 1."
-              },
-              {
-                "rubric": "understandability",
-                "value": 1,
-                "feedback": "The response provided is a single sentence that does not meet the requirement of generating a list of clear, testable acceptance criteria. It merely states a feature without providing any specific criteria for testing or acceptance. This lack of detail and structure makes it difficult for developers, testers, and stakeholders to understand how this feature should be implemented or tested. The response fails to address the need for clarity and conciseness in the acceptance criteria, which is essential according to the score rubric. Therefore, based on the evaluation criterion, the response does not meet the requirements of the task and would receive a score of 1."
-              }
-            ],
-            "overall_score": 1.0
-          },
-          {
-            "ai": "Qwen",
-            "model": "qwen2.5:7b",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 1,
-                "feedback": "The response does not provide any specific acceptance criteria. It merely states a general feature of the system ('Forgot Password' option on the login page) without defining testable conditions or scenarios."
-              },
-              {
-                "rubric": "coverage",
-                "value": 1,
-                "feedback": "No detailed acceptance criteria are provided, so it's impossible to evaluate how well they cover the expected behavior. The response only hints at a single feature rather than outlining multiple steps and outcomes."
-              },
-              {
-                "rubric": "relevance",
-                "value": 1,
-                "feedback": "The response is not specific enough to be relevant to the requirement. It merely mentions one aspect of password reset functionality without detailing any acceptance criteria related to that function."
-              },
-              {
-                "rubric": "understandability",
-                "value": 1,
-                "feedback": "The response is too vague and does not provide any clear, testable statements or conditions. Therefore, it cannot be considered understandable in the context of generating acceptance criteria."
-              }
-            ],
-            "overall_score": 1.0
-          },
-          {
-            "ai": "Llama",
-            "model": "llama3.1:8b",
-            "feedback": [
-              {
-                "rubric": "correctness",
-                "value": 2,
-                "feedback": "The generated acceptance criteria do not directly address the requirement. They seem to focus on a single feature ('Forgot Password') rather than considering all aspects of password reset functionality."
-              },
-              {
-                "rubric": "coverage",
-                "value": 3,
-                "feedback": "This response only covers one aspect of the requirement, but does not provide any testable criteria for actually resetting the password. Edge cases like what happens if the email is no longer valid are also missing."
-              },
-              {
-                "rubric": "relevance",
-                "value": 1,
-                "feedback": "The generated acceptance criteria seem unrelated to the actual task at hand (resetting a password using an email address). This response only mentions providing a 'Forgot Password' option on the login page, which is not directly relevant."
-              },
-              {
-                "rubric": "understandability",
-                "value": 4,
-                "feedback": "The response is clear and concise. However, it does not provide any specific criteria for testing the password reset functionality. The mention of a 'Forgot Password' option on the login page could be clarified further to make it more testable."
-              }
-            ],
-            "overall_score": 2.5
-          }
-        ],
-        "rubric_averages": [
-          {
-            "rubric": "correctness",
-            "value": 1.25
-          },
-          {
-            "rubric": "coverage",
-            "value": 1.5
-          },
-          {
-            "rubric": "relevance",
-            "value": 1.25
-          },
-          {
-            "rubric": "understandability",
-            "value": 2.0
-          }
-        ],
         "overall_score": 1.5
       }
     ],
-    "overall_score": 1.84375,
+    "overall_score": 2.0,
     "rank": 2
   }
 ]

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import httpx
 from functools import lru_cache
+
+import litellm
 
 from app.config import Settings, settings
 
@@ -11,7 +12,7 @@ class EmbeddingProvider(ABC):
 	"""
 	Turns text into fixed-length vectors for similarity search.
 
-	Extended by concrete embedding providers that may use a local model, API, 
+	Extended by concrete embedding providers that may use a local model, API,
 	etc.
 	"""
 
@@ -46,21 +47,12 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 		return [vector.tolist() for vector in self._model.embed(texts)]
 
 
-class OllamaEmbeddingProvider(EmbeddingProvider):
-	"""
-	Calls a local or self-hosted Ollama server's batch embeddings endpoint.
-	"""
+class LiteLLMEmbeddingProvider(EmbeddingProvider):
+	"""Calls any LiteLLM-supported embedding endpoint."""
 
-	TIMEOUT_SECONDS = 30.0
-
-	def __init__(
-			self, 
-			model: str, 
-			base_url: str = "http://localhost:11434", 
-			timeout: float = TIMEOUT_SECONDS
-		):
+	def __init__(self, model: str, api_key: str | None = None):
 		self._model = model
-		self._client = httpx.Client(base_url=base_url, timeout=timeout)
+		self._api_key = api_key
 		self._dimension = len(self.embed_texts(["_"])[0])
 
 	@property
@@ -68,47 +60,11 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 		return self._dimension
 
 	def embed_texts(self, texts: list[str]) -> list[list[float]]:
-		response = self._client.post(
-			"/api/embed", json={"model": self._model, "input": texts}
-		)
-
-		response.raise_for_status()
-
-		return response.json()["embeddings"]
-
-
-class APIEmbeddingProvider(EmbeddingProvider):
-	"""Calls an OpenAI-compatible /v1/embeddings endpoint."""
-
-	TIMEOUT_SECONDS = 30.0
-
-	def __init__(
-			self, 
-			model: str, 
-			api_key: str, 
-			base_url: str | None = None, 
-			timeout: float = TIMEOUT_SECONDS
-		):
-		from openai import OpenAI
-
-		self._model = model
-		self._client = OpenAI(
-			api_key=api_key, 
-			base_url=base_url, 
-			timeout=timeout
-		)
-		self._dimension = len(self.embed_texts(["_"])[0])
-
-	@property
-	def dimension(self) -> int:
-		return self._dimension
-
-	def embed_texts(self, texts: list[str]) -> list[list[float]]:
-		response = self._client.embeddings.create(
-			model=self._model, input=texts
-		)
-		
-		return [item.embedding for item in response.data]
+		kwargs: dict = {"model": self._model, "input": texts}
+		if self._api_key:
+			kwargs["api_key"] = self._api_key
+		response = litellm.embedding(**kwargs)
+		return [item["embedding"] for item in response.data]
 
 
 @lru_cache(maxsize=1)
@@ -129,12 +85,6 @@ def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
 
 	provider = _construct_provider(settings)
 
-	# Check that the dimension of the embedding provider (model) matches the 
-	# settings.
-	# Basically, this is an unsolved problem at the moment because pgvector
-	# needs a fixed vector dimension, but this can change if the model changes.
-	# For now, just drop document chunk and make sure your dimension setting
-	# matches the model - then the table will be created to match.
 	if provider.dimension != settings.embedding_dim:
 		raise ValueError(
 			f"Embedding provider {settings.embedding_provider!r} with model "
@@ -150,22 +100,10 @@ def _construct_provider(settings: Settings) -> EmbeddingProvider:
 	if settings.embedding_provider == "local":
 		return LocalEmbeddingProvider(model_name=settings.embedding_model)
 
-	if settings.embedding_provider == "ollama":
-		return OllamaEmbeddingProvider(
-			model=settings.embedding_model,
-			base_url=settings.ollama_base_url
-		)
-
-	if settings.embedding_provider == "api":
-		if not settings.embedding_api_key:
-			raise ValueError(
-				"EMBEDDING_API_KEY is required when EMBEDDING_PROVIDER=api"
-			)
-
-		return APIEmbeddingProvider(
+	if settings.embedding_provider == "litellm":
+		return LiteLLMEmbeddingProvider(
 			model=settings.embedding_model,
 			api_key=settings.embedding_api_key,
-			base_url=settings.embedding_api_base_url,
 		)
 
 	raise ValueError(f"Unknown provider: {settings.embedding_provider!r}")

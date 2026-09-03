@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import base64
 import logging
-import time
 from io import BytesIO
 from pathlib import Path
 
-import httpx
+import litellm
 
 from app.config import Settings
 
@@ -17,6 +16,14 @@ PDF_EXTENSIONS = {".pdf"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 JPEG_EXTENSIONS = {".jpg", ".jpeg"}
 
+MIME_TYPES = {
+	".png": "image/png",
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".webp": "image/webp",
+	".gif": "image/gif",
+}
+
 IMAGE_PROMPT = (
 	"Transcribe every piece of text visible in this image exactly as written. "
 	"Then, if the image contains a diagram, chart, screenshot or table, "
@@ -24,17 +31,9 @@ IMAGE_PROMPT = (
 	"be searched later. Do not add commentary about the image quality."
 )
 
-# Vision models tile images into blocks, so anything much larger than this
-# costs time and tokens without making the text easier to read.
 MAX_IMAGE_DIMENSION = 1568
 JPEG_QUALITY = 90
 RESIZE_MARGIN = 1.2
-
-# A local model loads its weights on the first call and decodes far more
-# slowly than a hosted API, so it needs a generous leash.
-OLLAMA_TIMEOUT_SECONDS = 300.0
-OLLAMA_MAX_ATTEMPTS = 3
-OLLAMA_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 
 class UnsupportedFileError(ValueError):
@@ -81,36 +80,41 @@ def _extract_pdf(data: bytes) -> str:
 
 
 def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
-	"""
-	Transcribes and describes an image with a local Ollama vision model.
+	"""Transcribes and describes an image via a vision-capable model."""
+	image_bytes = _prepare_image(data, extension)
+	b64 = base64.b64encode(image_bytes).decode("ascii")
+	mime = MIME_TYPES.get(extension, "image/png")
 
-	Ollama takes the raw base64 payload on the message itself and infers the
-	image format, so no MIME type is sent.
-	"""
-	payload = {
-		"model": settings.ollama_vision_model,
-		"stream": False,
-		"messages": [
-			{
-				"role": "user",
-				"content": IMAGE_PROMPT,
-				"images": [
-					base64.b64encode(
-						_prepare_image(data, extension)
-					).decode("ascii")
-				],
-			}
-		],
-	}
+	messages = [
+		{
+			"role": "user",
+			"content": [
+				{"type": "text", "text": IMAGE_PROMPT},
+				{
+					"type": "image_url",
+					"image_url": {"url": f"data:{mime};base64,{b64}"},
+				},
+			],
+		}
+	]
 
-	response = _post_with_retries(
-		f"{settings.ollama_base_url.rstrip('/')}/api/chat", payload
-	)
-	content = response.json().get("message", {}).get("content")
+	try:
+		response = litellm.completion(
+			model=settings.vision_model,
+			messages=messages,
+			timeout=300.0,
+			num_retries=2,
+		)
+	except Exception as error:
+		raise ImageExtractionError(
+			f"Vision model {settings.vision_model} failed: {error}"
+		) from error
+
+	content = response.choices[0].message.content
 
 	if not isinstance(content, str) or not content.strip():
 		raise ImageExtractionError(
-			f"{settings.ollama_vision_model} returned no text for the image"
+			f"{settings.vision_model} returned no text for the image"
 		)
 
 	return content.strip()
@@ -163,53 +167,3 @@ def _prepare_image(data: bytes, extension: str) -> bytes:
 	return resized
 
 
-def _post_with_retries(url: str, payload: dict) -> httpx.Response:
-	"""
-	Posts to Ollama, retrying the overload and busy statuses.
-
-	Ollama answers 429/503 while a model is loading or the queue is full,
-	which says nothing about the request itself, so those are worth a second
-	and third try.
-	"""
-	last_error: Exception | None = None
-
-	for attempt in range(OLLAMA_MAX_ATTEMPTS):
-		if attempt:
-			delay = 2 ** attempt
-			logger.warning(
-				"Retrying in %ss (attempt %s of %s) after: %s",
-				delay,
-				attempt + 1,
-				OLLAMA_MAX_ATTEMPTS,
-				last_error,
-			)
-			time.sleep(delay)
-
-		try:
-			response = httpx.post(
-				url, json=payload, timeout=OLLAMA_TIMEOUT_SECONDS
-			)
-		except httpx.RequestError as error:
-			last_error = error
-			continue
-
-		if response.status_code in OLLAMA_RETRY_STATUSES:
-			last_error = httpx.HTTPStatusError(
-				f"Ollama returned {response.status_code}",
-				request=response.request,
-				response=response,
-			)
-			continue
-
-		if response.is_error:
-			raise ImageExtractionError(
-				f"Ollama rejected the request with "
-				f"{response.status_code}: {response.text[:300]}"
-			)
-
-		return response
-
-	raise ImageExtractionError(
-		f"Ollama was unavailable after {OLLAMA_MAX_ATTEMPTS} attempts: "
-		f"{last_error}"
-	)

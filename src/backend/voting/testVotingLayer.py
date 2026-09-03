@@ -27,15 +27,7 @@ async def main() -> None:
     input_path = Path(__file__).with_name("exampleBatchInput.json")
     payload = json.loads(input_path.read_text(encoding="utf-8"))
 
-    providers = ["gemini", "prometheus", "qwen", "llama"]
-
-    if isinstance(payload, list):
-        for item in payload:
-            item["providers"] = providers
-    else:
-        payload["providers"] = providers
-
-    results = await run_voting_layer(payload, providers=providers)
+    results = await run_voting_layer(payload)
 
     for result in results:
         print(f"AI: {result['ai']} | Model: {result['model']}")
