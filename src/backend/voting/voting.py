@@ -15,6 +15,8 @@ from voting.models import (
 	RubricFeedback,
 	VotingResult,
 )
+from voting.claude import evaluate_with_claude
+from voting.gemini import evaluate_with_gemini
 from voting.llama import evaluate_with_llama
 from voting.prometheus import evaluate_with_prometheus
 from voting.qwen import evaluate_with_qwen
@@ -74,11 +76,14 @@ def _merge_provider_outputs(evaluation_input: EvaluationInput, provider_outputs:
 				overall_score=overall_score,
 			)
 		)
+	evaluated_outputs.sort(key=lambda item: item.overall_score, reverse=True)
+	result_overall_score = sum(item.overall_score for item in evaluated_outputs) / len(evaluated_outputs) if evaluated_outputs else -1.0
 	return VotingResult(
 		ai=evaluation_input.ai,
 		model=evaluation_input.model,
 		prompt=evaluation_input.prompt,
 		output=evaluated_outputs,
+		overall_score=result_overall_score,
 	)
 
 
@@ -87,6 +92,8 @@ async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
 		"prometheus": ("Prometheus", "ggozad/prometheus2:latest", evaluate_with_prometheus),
 		"qwen": ("Qwen", "qwen2.5:7b", evaluate_with_qwen),
 		"llama": ("Llama", "llama3.1:8b", evaluate_with_llama),
+		"gemini": ("Gemini", "gemini-flash-latest", evaluate_with_gemini),
+		"claude": ("Claude", "claude-3-5-sonnet-20241022", evaluate_with_claude),
 	}
 	selected = [provider_details[name] for name in evaluation_input.providers]
 	provider_results = await asyncio.gather(
@@ -107,8 +114,12 @@ async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
 
 
 async def evaluate_inputs(evaluation_inputs: list[EvaluationInput]) -> list[VotingResult]:
-	"""Evaluate every input independently and preserve input order."""
-	return await asyncio.gather(*(evaluate_input(item) for item in evaluation_inputs))
+	"""Evaluate every input independently and return them ranked by AI overall score."""
+	results = await asyncio.gather(*(evaluate_input(item) for item in evaluation_inputs))
+	results.sort(key=lambda item: item.overall_score, reverse=True)
+	for rank, result in enumerate(results, start=1):
+		result.rank = rank
+	return results
 
 
 mcp = FastMCP("requirements-voting")
