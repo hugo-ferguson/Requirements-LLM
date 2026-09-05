@@ -1,6 +1,6 @@
-from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -14,13 +14,19 @@ from app.vector_store.vector_store import VectorStore
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-class DocumentRead(BaseModel):
-    id: int
+class UploadRead(BaseModel):
+    """The outcome of an upload: always text, sometimes a stored document."""
+
+    # None when the file was read but not stored — images, which go straight
+    # into the conversation instead of the search index.
+    document_id: int | None
     title: str
     filename: str | None
     extension: str | None
-    created_at: datetime
     chunk_count: int
+    # The extracted text, so the caller can attach it to a conversation
+    # without a second round trip through /documents/search.
+    text: str
 
 
 class ChunkRead(BaseModel):
@@ -34,17 +40,17 @@ def get_ingest_service(session: Session = Depends(get_session)) -> IngestService
     return IngestService(VectorStore(session), get_embedding_provider(), settings)
 
 
-@router.post("/upload", response_model=DocumentRead, status_code=201)
+@router.post("/upload", response_model=UploadRead, status_code=201)
 def upload_document(
     file: UploadFile = File(...),
     title: str | None = Form(None),
     tags: str | None = Form(None, description="Comma-separated tag names"),
     service: IngestService = Depends(get_ingest_service),
-) -> DocumentRead:
+) -> UploadRead:
     tag_names = [name.strip() for name in (tags or "").split(",") if name.strip()]
 
     try:
-        document, chunk_count = service.ingest_file(
+        result = service.ingest_file(
             file.file.read(),
             file.filename or "upload",
             title=title,
@@ -56,14 +62,26 @@ def upload_document(
         # The upload itself was fine; the upstream model was not.
         raise HTTPException(status_code=502, detail=str(error)) from error
 
-    return DocumentRead(
-        id=document.id,  # type: ignore[arg-type]
-        title=document.title,
-        filename=document.filename,
-        extension=document.extension,
-        created_at=document.created_at,
-        chunk_count=chunk_count,
+    document = result.document
+    filename = file.filename or "upload"
+    return UploadRead(
+        document_id=document.id if document else None,
+        title=document.title if document else (title or filename),
+        filename=document.filename if document else filename,
+        extension=document.extension if document else Path(filename).suffix.lower() or None,
+        chunk_count=result.chunk_count,
+        text=result.text,
     )
+
+
+@router.delete("/{document_id}", status_code=204)
+def delete_document(
+    document_id: int,
+    service: IngestService = Depends(get_ingest_service),
+) -> Response:
+    if not service.delete_document(document_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    return Response(status_code=204)
 
 
 @router.get("/search", response_model=list[ChunkRead])

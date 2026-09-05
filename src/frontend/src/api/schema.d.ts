@@ -314,6 +314,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Document */
+        delete: operations["delete_document_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/search": {
         parameters: {
             query?: never;
@@ -438,6 +455,8 @@ export interface components {
             filename: string;
             /** Content */
             content: string;
+            /** Document Id */
+            document_id?: number | null;
         };
         /** ConversationMessage */
         ConversationMessage: {
@@ -450,24 +469,6 @@ export interface components {
             text: string;
             /** Attachments */
             attachments?: components["schemas"]["ConversationAttachment"][];
-        };
-        /** DocumentRead */
-        DocumentRead: {
-            /** Id */
-            id: number;
-            /** Title */
-            title: string;
-            /** Filename */
-            filename: string | null;
-            /** Extension */
-            extension: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Chunk Count */
-            chunk_count: number;
         };
         /** GenerateResult */
         GenerateResult: {
@@ -651,6 +652,24 @@ export interface components {
             reply: components["schemas"]["ConversationMessage"];
             /** Candidates */
             candidates: components["schemas"]["UatCase"][];
+        };
+        /**
+         * UploadRead
+         * @description The outcome of an upload: always text, sometimes a stored document.
+         */
+        UploadRead: {
+            /** Document Id */
+            document_id: number | null;
+            /** Title */
+            title: string;
+            /** Filename */
+            filename: string | null;
+            /** Extension */
+            extension: string | null;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Text */
+            text: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1372,8 +1391,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocumentRead"];
+                    "application/json": components["schemas"]["UploadRead"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

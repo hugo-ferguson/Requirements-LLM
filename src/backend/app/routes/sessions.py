@@ -15,7 +15,11 @@ from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
-from app.services.conversation import ConversationService
+from app.services.conversation import (
+    ConversationService,
+    EmptyConversationError,
+    GenerationError,
+)
 from app.services.sessions import SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -91,7 +95,13 @@ def post_message(
 def generate(
     session_id: int, service: SessionService = Depends(get_session_service)
 ) -> GenerateResult:
-    result = service.generate(session_id)
+    try:
+        result = service.generate(session_id)
+    except EmptyConversationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except GenerationError as error:
+        # The request was fine; the upstream model was not.
+        raise HTTPException(status_code=502, detail=str(error)) from error
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return result
