@@ -22,10 +22,10 @@ class ConversationRequest(SQLModel):
 
 
 class AcceptanceCriterionScores(SQLModel):
-    relevance: float = Field(ge=0, le=10)
-    correctness: float = Field(ge=0, le=10)
-    understandability: float = Field(ge=0, le=10)
-    coverage: float = Field(ge=0, le=10)
+    relevance: float = Field(ge=0, le=5)
+    correctness: float = Field(ge=0, le=5)
+    understandability: float = Field(ge=0, le=5)
+    coverage: float = Field(ge=0, le=5)
 
 
 class AcceptanceCriterion(SQLModel):
@@ -35,7 +35,7 @@ class AcceptanceCriterion(SQLModel):
     when: str
     then: str
     scores: AcceptanceCriterionScores
-    overall_score: float = Field(ge=0, le=10)
+    overall_score: float = Field(ge=0, le=5)
     status: Literal["pending", "accepted", "rejected"] = "pending"
 
 

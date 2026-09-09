@@ -18,6 +18,8 @@ dependencies = [
     "pypdf>=6.16.1",
     "python-multipart>=0.0.32",
     "pydantic-ai>=2.37.0",
+    "anthropic>=1.3",
+    "python-dotenv>=1.2",
 ]
 
 [dependency-groups]

@@ -16,6 +16,7 @@ from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
 from app.services.acceptance_criteria import AcceptanceCriteriaService
+from app.services.agents import GenerationError
 
 router = APIRouter(
     prefix="/sessions/{session_id}/acceptance-criteria", tags=["acceptance-criteria"]
@@ -76,7 +77,11 @@ def regenerate_selected(
     data: RegenerateSelectedRequest,
     service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
 ) -> RegenerateSelectedResponse:
-    result = service.regenerate_selected(session_id, ac_id, data)
+    try:
+        result = service.regenerate_selected(session_id, ac_id, data)
+    except GenerationError as error:
+        # The request was fine; the upstream model was not.
+        raise HTTPException(status_code=502, detail=str(error)) from error
     if result is None:
         raise HTTPException(status_code=404, detail="Acceptance criterion not found")
     return result

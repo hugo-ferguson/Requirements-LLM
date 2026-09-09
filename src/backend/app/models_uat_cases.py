@@ -36,10 +36,10 @@ class UatCaseRecord(SQLModel, table=True):
 
 
 class UatCaseScores(SQLModel):
-    relevance: float = Field(ge=0, le=10)
-    correctness: float = Field(ge=0, le=10)
-    understandability: float = Field(ge=0, le=10)
-    coverage: float = Field(ge=0, le=10)
+    relevance: float = Field(ge=0, le=5)
+    correctness: float = Field(ge=0, le=5)
+    understandability: float = Field(ge=0, le=5)
+    coverage: float = Field(ge=0, le=5)
 
 
 class UatCase(SQLModel):
@@ -48,7 +48,7 @@ class UatCase(SQLModel):
     title: str
     description: str
     scores: UatCaseScores
-    overall_score: float = Field(ge=0, le=10)
+    overall_score: float = Field(ge=0, le=5)
     status: Literal["pending", "accepted", "rejected"] = "pending"
 
 

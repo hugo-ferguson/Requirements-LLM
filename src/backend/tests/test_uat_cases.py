@@ -8,6 +8,12 @@ def _create_session(client: TestClient) -> dict:
 
 
 def _generate_ac(client: TestClient, session_id: int) -> list[dict]:
+    # Generation now calls a real model and refuses an empty conversation
+    # (see EmptyConversationError), so every test needs real content first.
+    client.post(
+        f"/sessions/{session_id}/messages",
+        json={"text": "As a user, I want to log in with my email and password.", "attachments": []},
+    )
     response = client.post(f"/sessions/{session_id}/generate")
     assert response.status_code == 200
     return response.json()["acceptance_criteria"]
@@ -38,7 +44,7 @@ def test_generate_persists_cases_grouped_by_accepted_ac_only(client: TestClient)
     assert len(groups) == len(accepted_ids)
     for group in groups:
         assert group["ac"]["id"] in accepted_ids
-        assert len(group["uat_cases"]) >= 1
+        assert 2 <= len(group["uat_cases"]) <= 4
         assert all(c["status"] == "pending" for c in group["uat_cases"])
 
 
@@ -194,7 +200,9 @@ def test_regenerate_selected_returns_candidates_without_mutating_persisted_data(
     assert response.status_code == 200
     body = response.json()
     assert body["reply"]["role"] == "assistant"
-    assert 1 <= len(body["candidates"]) <= 2
+    # Regeneration is a select-one-candidate-add-context-regenerate flow: it
+    # always returns exactly one refined candidate, not several alternatives.
+    assert len(body["candidates"]) == 1
 
     after = client.get(f"/sessions/{session['id']}/uat-cases").json()
     assert after == before
