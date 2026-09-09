@@ -41,6 +41,21 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 150
 
+
+    # --- Ensemble generation layer ---
+    # Roster of generation agents (backlog R8). Relative paths resolve
+    # against the backend working directory.
+    generation_roster_path: str = "config/generation_agents.json"
+    # Per-agent wall-clock limit. Keeps one slow model from eating the whole
+    # 60s budget in R6.
+    generation_timeout_seconds: float = 45.0
+    # Upper bound on criteria requested from each agent.
+    generation_max_criteria: int = 8
+    # Number of RAG chunks injected into each agent's prompt (R11).
+    rag_top_k: int = 5
+    # Set false to skip the voting layer and return unscored candidates -
+    # useful when iterating on prompts without paying for the voters.
+    generation_enable_voting: bool = True
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 
 

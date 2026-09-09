@@ -2,14 +2,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
-from sqlmodel import Session
 
-from app.config import settings
-from app.db import get_session
 from app.ingest.extract import ImageExtractionError, UnsupportedFileError
+from app.dependencies import get_ingest_service
 from app.services.ingest import EmptyDocumentError, IngestService
-from app.vector_store.embeddings import get_embedding_provider
-from app.vector_store.vector_store import VectorStore
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -34,10 +30,6 @@ class ChunkRead(BaseModel):
     document_id: int
     chunk_index: int | None
     content: str
-
-
-def get_ingest_service(session: Session = Depends(get_session)) -> IngestService:
-    return IngestService(VectorStore(session), get_embedding_provider(), settings)
 
 
 @router.post("/upload", response_model=UploadRead, status_code=201)
