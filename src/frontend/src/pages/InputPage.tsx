@@ -12,9 +12,13 @@ export function InputPage() {
     pendingAttachments,
     isSending,
     isGenerating,
+    isUploading,
+    uploadCount,
+    uploadError,
     sendError,
     generateError,
     attachFiles,
+    dismissUploadError,
     removeAttachment,
     sendMessage,
     generate,
@@ -34,6 +38,19 @@ export function InputPage() {
     <div className="flex h-full flex-col">
       <ChatThread messages={messages} pending={isSending} />
       <footer className="border-t border-gray-200 p-4">
+        {uploadError && (
+          <p className="mb-2 flex items-start gap-2 text-sm text-red-600">
+            <span>{uploadError}</span>
+            <button
+              type="button"
+              onClick={dismissUploadError}
+              aria-label="Dismiss upload error"
+              className="text-red-400 hover:text-red-600"
+            >
+              ×
+            </button>
+          </p>
+        )}
         {sendError && <p className="mb-2 text-sm text-red-600">{sendError}</p>}
         {generateError && <p className="mb-2 text-sm text-red-600">{generateError}</p>}
         <ChatInputBar
@@ -42,6 +59,8 @@ export function InputPage() {
           onRemoveAttachment={removeAttachment}
           onSend={sendMessage}
           disabled={busy}
+          isUploading={isUploading}
+          uploadCount={uploadCount}
           trailingAction={
             <button
               type="button"

@@ -10,10 +10,14 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
+  // The browser has to set its own multipart Content-Type (it carries the
+  // boundary), so only JSON bodies get the header.
+  const isFormData = init?.body instanceof FormData;
+  const headers = isFormData
+    ? init?.headers
+    : { "Content-Type": "application/json", ...init?.headers };
+
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
 
   if (!res.ok) {
     throw new ApiError(res.status, await res.text());

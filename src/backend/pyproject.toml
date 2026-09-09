@@ -17,6 +17,7 @@ dependencies = [
     "pillow>=10.0",
     "pypdf>=6.16.1",
     "python-multipart>=0.0.32",
+    "pydantic-ai>=2.37.0",
 ]
 
 [dependency-groups]

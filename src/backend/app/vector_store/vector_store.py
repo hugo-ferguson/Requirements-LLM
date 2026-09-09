@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from app.vector_store.models import Document, DocumentChunk, Tag
@@ -70,6 +71,33 @@ class VectorStore:
 			self.session.refresh(chunk)
 
 		return chunks
+
+	def delete_document(self, document_id: int) -> bool:
+		"""
+		Removes a document, its chunks and its tag links.
+
+		Returns False if no such document exists. The Tag rows themselves are
+		left alone — they're shared between documents, so deleting one
+		document shouldn't take a tag away from the others.
+		"""
+		document = self.session.get(Document, document_id)
+
+		if document is None:
+			return False
+
+		# The chunks carry the embeddings, so delete them in one statement
+		# rather than loading every vector into memory just to discard it.
+		self.session.execute(
+			delete(DocumentChunk).where(
+				DocumentChunk.document_id == document_id  # type: ignore[arg-type]
+			)
+		)
+		# Clearing the relationship removes the document_tag rows for us.
+		document.tags = []
+		self.session.delete(document)
+		self.session.commit()
+
+		return True
 
 	def similarity_search(
 			self, query_embedding: list[float], k: int = 5

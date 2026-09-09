@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { readFilesAsAttachments } from "../lib/attachments";
 import type { Attachment, ChatMessage } from "../types/conversation";
+import { useAttachmentUploads } from "./useAttachmentUploads";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -36,28 +36,22 @@ export function useRegenerateSelected<T>(
   fetchCandidates: FetchCandidates<T>,
 ) {
   const [miniChatMessages, setMiniChatMessages] = useState<ChatMessage[]>([]);
-  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [candidates, setCandidates] = useState<T[]>([]);
   const [approvedIndexes, setApprovedIndexes] = useState<Set<number>>(new Set());
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const uploads = useAttachmentUploads();
+  const { pendingAttachments, clearAttachments, discardAttachments } = uploads;
 
   const reset = useCallback(() => {
     setMiniChatMessages([]);
-    setPendingAttachments([]);
+    // Cancelling the sub-flow throws its attachments away, so the documents
+    // they ingested go too.
+    discardAttachments();
     setCandidates([]);
     setApprovedIndexes(new Set());
     setSendError(null);
-  }, []);
-
-  const attachFiles = useCallback(async (files: FileList) => {
-    const read = await readFilesAsAttachments(files);
-    setPendingAttachments((prev) => [...prev, ...read]);
-  }, []);
-
-  const removeAttachment = useCallback((index: number) => {
-    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  }, [discardAttachments]);
 
   const sendMiniChatMessage = useCallback(
     async (text: string) => {
@@ -69,7 +63,7 @@ export function useRegenerateSelected<T>(
         { id: newId(), role: "user" as const, text: trimmed, attachments: pendingAttachments },
       ];
       setMiniChatMessages(nextHistory);
-      setPendingAttachments([]);
+      clearAttachments();
       setSendError(null);
       setIsSending(true);
       try {
@@ -90,7 +84,7 @@ export function useRegenerateSelected<T>(
         setIsSending(false);
       }
     },
-    [targetId, fetchCandidates, miniChatMessages, pendingAttachments],
+    [targetId, fetchCandidates, miniChatMessages, pendingAttachments, clearAttachments],
   );
 
   const setApproved = useCallback((index: number, approved: boolean) => {
@@ -105,15 +99,13 @@ export function useRegenerateSelected<T>(
   const approvedCandidates = candidates.filter((_, index) => approvedIndexes.has(index));
 
   return {
+    ...uploads,
     miniChatMessages,
-    pendingAttachments,
     candidates,
     approvedIndexes,
     approvedCandidates,
     isSending,
     sendError,
-    attachFiles,
-    removeAttachment,
     sendMiniChatMessage,
     setApproved,
     reset,

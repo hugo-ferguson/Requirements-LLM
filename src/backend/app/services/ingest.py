@@ -1,8 +1,9 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.config import Settings
 from app.ingest.chunk import chunk_text
-from app.ingest.extract import extract_text
+from app.ingest.extract import IMAGE_EXTENSIONS, extract_text
 from app.vector_store.embeddings import EmbeddingProvider
 from app.vector_store.models import Document, DocumentChunk
 from app.vector_store.vector_store import VectorStore
@@ -10,6 +11,20 @@ from app.vector_store.vector_store import VectorStore
 
 class EmptyDocumentError(ValueError):
     """Raised when a file yields no text to embed."""
+
+
+@dataclass
+class IngestResult:
+    """
+    The text extracted from an upload, and the Document it was stored as.
+
+    `document` is None for files that are read but deliberately not stored —
+    see IngestService.ingest_file.
+    """
+
+    document: Document | None
+    chunk_count: int
+    text: str
 
 
 class IngestService:
@@ -32,13 +47,31 @@ class IngestService:
         *,
         title: str | None = None,
         tags: list[str] | None = None,
-    ) -> tuple[Document, int]:
+    ) -> IngestResult:
         """
         Extracts, chunks and embeds a file, then stores it as one Document.
 
-        Returns the stored document and its chunk count.
+        Images are the exception: their text goes straight back to the caller
+        and is never stored. A screenshot transcribes to a few hundred tokens
+        — measured across a real screenshot set, five images came to 789
+        tokens, one chunk each — so it fits in a prompt many times over and
+        embedding it only adds a retrieval hop and rows nothing queries.
+        Documents that can actually outgrow a prompt (PDFs, long text) are
+        still chunked and embedded.
+
+        Returns the extracted text, plus the stored document and its chunk
+        count when the file was stored.
         """
         text = extract_text(data, filename, self.settings)
+        extension = Path(filename).suffix.lower()
+
+        if extension in IMAGE_EXTENSIONS:
+            if not text.strip():
+                raise EmptyDocumentError(
+                    f"No text could be extracted from {filename!r}"
+                )
+            return IngestResult(document=None, chunk_count=0, text=text)
+
         chunks = chunk_text(
             text, self.settings.chunk_size, self.settings.chunk_overlap
         )
@@ -74,7 +107,16 @@ class IngestService:
             ]
         )
 
-        return document, len(chunks)
+        return IngestResult(document=document, chunk_count=len(chunks), text=text)
+
+    def delete_document(self, document_id: int) -> bool:
+        """
+        Removes an ingested document. Returns False if it doesn't exist.
+
+        Used when an attachment is discarded before it's sent, so abandoned
+        uploads don't linger in the search index.
+        """
+        return self.vector_store.delete_document(document_id)
 
     def search(self, query: str, k: int = 5) -> list[DocumentChunk]:
         """Finds the k chunks most similar to a natural-language query."""
