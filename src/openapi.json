@@ -1195,7 +1195,7 @@
           },
           "overall_score": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Overall Score"
           },
@@ -1226,25 +1226,25 @@
         "properties": {
           "relevance": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Relevance"
           },
           "correctness": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Correctness"
           },
           "understandability": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Understandability"
           },
           "coverage": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Coverage"
           }
@@ -1750,7 +1750,7 @@
           },
           "overall_score": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Overall Score"
           },
@@ -1816,25 +1816,25 @@
         "properties": {
           "relevance": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Relevance"
           },
           "correctness": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Correctness"
           },
           "understandability": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Understandability"
           },
           "coverage": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Coverage"
           }
