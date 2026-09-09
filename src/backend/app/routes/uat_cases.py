@@ -15,6 +15,7 @@ from app.models_uat_cases import (
 from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
+from app.services.agents import GenerationError
 from app.services.uat_cases import UatCaseService
 
 router = APIRouter(prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
@@ -42,7 +43,10 @@ def list_uat_cases(
 def generate_uat_cases(
     session_id: int, service: UatCaseService = Depends(get_uat_case_service)
 ) -> UatCaseGroupsResult:
-    result = service.generate(session_id)
+    try:
+        result = service.generate(session_id)
+    except GenerationError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return result
@@ -81,7 +85,10 @@ def regenerate_selected(
     data: UatRegenerateSelectedRequest,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatRegenerateSelectedResponse:
-    result = service.regenerate_selected(session_id, uat_id, data)
+    try:
+        result = service.regenerate_selected(session_id, uat_id, data)
+    except GenerationError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     if result is None:
         raise HTTPException(status_code=404, detail="UAT case not found")
     return result

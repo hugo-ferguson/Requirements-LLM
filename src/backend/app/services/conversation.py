@@ -4,8 +4,6 @@ import logging
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.google import GoogleProvider
 
 from app.config import Settings, settings as default_settings
 from app.models_conversation import (
@@ -15,9 +13,24 @@ from app.models_conversation import (
     ConversationRequest,
     GenerateResult,
 )
+from app.services.agents import GenerationError, build_agent as _build_shared_agent
+from app.services.scoring import Scorer, render_ac_candidate, score_candidates
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "ConversationService",
+    "EmptyConversationError",
+    "GenerationError",
+    "GeneratedCriteria",
+    "GeneratedCriterion",
+    "build_agent",
+    "build_chat_agent",
+    "render_conversation",
+]
+
+# Fallback only — used when the real chat agent call fails, so chat never
+# hard-crashes the conversation.
 _CANNED_ASSISTANT_REPLY = (
     "From viewing the user stories there seems to be enough context, "
     "feel free to generate the acceptance criteria."
@@ -38,9 +51,18 @@ field names in them as evidence of what the interface actually offers, and say
 so plainly rather than speculating about anything the transcript does not show.
 """
 
+CHAT_SYSTEM_PROMPT = """\
+You are a friendly, sharp business-analyst assistant helping a teammate flesh
+out user stories before acceptance criteria get generated from them.
 
-class GenerationError(RuntimeError):
-    """Raised when the model could not be reached or returned nothing usable."""
+Read the conversation so far — user messages, your own previous replies, and
+any attached file transcripts — and reply with ONE short, conversational
+message. Ask a clarifying question if something material is missing or
+ambiguous (a specific field, error state, permission rule, edge case).
+Otherwise tell them plainly there's enough context and they're welcome to
+generate acceptance criteria now. Never write acceptance criteria yourself
+here — that only happens through the dedicated Generate step.
+"""
 
 
 class EmptyConversationError(ValueError):
@@ -72,26 +94,13 @@ class GeneratedCriteria(BaseModel):
 
 
 def build_agent(settings: Settings) -> Agent[None, GeneratedCriteria]:
-    """
-    Returns the acceptance-criteria agent for the configured model.
+    """Returns the acceptance-criteria agent for the configured model."""
+    return _build_shared_agent(settings, GeneratedCriteria, SYSTEM_PROMPT)
 
-    The API key is passed explicitly rather than left to the ambient
-    environment, so the app has one place that decides where credentials come
-    from.
-    """
-    provider, _, model_name = settings.llm_model.partition(":")
 
-    if provider == "google":
-        model = GoogleModel(
-            model_name,  # type: ignore[arg-type]
-            provider=GoogleProvider(api_key=settings.gemini_api_key),
-        )
-    else:
-        # Any other PydanticAI model string still works, but it has to find
-        # its own credentials in the environment.
-        model = settings.llm_model  # type: ignore[assignment]
-
-    return Agent(model, output_type=GeneratedCriteria, system_prompt=SYSTEM_PROMPT)
+def build_chat_agent(settings: Settings) -> Agent[None, str]:
+    """Returns the conversational chat-reply agent for the configured model."""
+    return _build_shared_agent(settings, str, CHAT_SYSTEM_PROMPT)
 
 
 def render_conversation(request: ConversationRequest) -> str:
@@ -131,19 +140,23 @@ class ConversationService:
     """
     Conversation logic, independent of HTTP concerns.
 
-    `generate` is wired to a real model; `send_message` is still a stub that
-    returns a fixed reply.
+    Both `generate` and `send_message` are wired to real models; `generate`
+    also scores its output via the voting layer (through `scorer`).
     """
 
     def __init__(
         self,
         settings: Settings | None = None,
         agent: Agent[None, GeneratedCriteria] | None = None,
+        chat_agent: Agent[None, str] | None = None,
+        scorer: Scorer = score_candidates,
     ):
         self.settings = settings or default_settings
         # Built on first use so that a missing API key breaks generation
         # rather than every request that happens to construct this service.
         self._agent = agent
+        self._chat_agent = chat_agent
+        self.scorer = scorer
 
     @property
     def agent(self) -> Agent[None, GeneratedCriteria]:
@@ -151,8 +164,24 @@ class ConversationService:
             self._agent = build_agent(self.settings)
         return self._agent
 
+    @property
+    def chat_agent(self) -> Agent[None, str]:
+        if self._chat_agent is None:
+            self._chat_agent = build_chat_agent(self.settings)
+        return self._chat_agent
+
     def send_message(self, data: ConversationRequest) -> ConversationMessage:
-        return ConversationMessage(role="assistant", text=_CANNED_ASSISTANT_REPLY)
+        prompt = render_conversation(data)
+        try:
+            result = self.chat_agent.run_sync(prompt)
+            text = result.output
+        except Exception:
+            # Chat is conversational, not the pipeline's critical path — a
+            # failed call falls back to a generic reply rather than
+            # breaking the conversation.
+            logger.warning("Chat agent call failed; falling back to canned reply", exc_info=True)
+            text = _CANNED_ASSISTANT_REPLY
+        return ConversationMessage(role="assistant", text=text)
 
     def generate(self, data: ConversationRequest) -> GenerateResult:
         if not _has_content(data):
@@ -176,6 +205,12 @@ class ConversationService:
                 f"criteria: {error}"
             ) from error
 
+        criteria = result.output.criteria
+        candidate_texts = [
+            render_ac_candidate(c.title, c.given, c.when, c.then) for c in criteria
+        ]
+        scores = self.scorer(prompt=prompt, candidates=candidate_texts, settings=self.settings)
+
         return GenerateResult(
             acceptance_criteria=[
                 AcceptanceCriterion(
@@ -186,13 +221,16 @@ class ConversationService:
                     given=criterion.given,
                     when=criterion.when,
                     then=criterion.then,
-                    # Scoring belongs to the voting layer, which isn't wired
-                    # in yet. Left at zero rather than invented here.
                     scores=AcceptanceCriterionScores(
-                        relevance=0, correctness=0, understandability=0, coverage=0
+                        relevance=score.relevance,
+                        correctness=score.correctness,
+                        understandability=score.understandability,
+                        coverage=score.coverage,
                     ),
-                    overall_score=0,
+                    overall_score=score.overall,
                 )
-                for index, criterion in enumerate(result.output.criteria, start=1)
+                for index, (criterion, score) in enumerate(
+                    zip(criteria, scores, strict=True), start=1
+                )
             ]
         )

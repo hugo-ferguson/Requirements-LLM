@@ -124,25 +124,10 @@ def test_generate_returns_example_acceptance_criteria(client: TestClient) -> Non
     assert first["status"] == "pending"
 
 
-def _without_ids(acceptance_criteria: list[dict]) -> list[dict]:
-    return [{k: v for k, v in item.items() if k != "id"} for item in acceptance_criteria]
-
-
-def test_generate_ignores_conversation_content(client: TestClient) -> None:
+def test_generate_422_for_an_empty_conversation(client: TestClient) -> None:
     empty_session = _create_session(client)
-    populated_session = _create_session(client)
-    client.post(
-        f"/sessions/{populated_session['id']}/messages",
-        json={"text": "completely different content", "attachments": []},
-    )
-
-    response_a = client.post(f"/sessions/{empty_session['id']}/generate")
-    response_b = client.post(f"/sessions/{populated_session['id']}/generate")
-    # Content is identical regardless of input, but ids are real per-session
-    # auto-increment values now, so they legitimately differ between sessions.
-    assert _without_ids(response_a.json()["acceptance_criteria"]) == _without_ids(
-        response_b.json()["acceptance_criteria"]
-    )
+    response = client.post(f"/sessions/{empty_session['id']}/generate")
+    assert response.status_code == 422
 
 
 def test_generate_404_for_missing_session(client: TestClient) -> None:

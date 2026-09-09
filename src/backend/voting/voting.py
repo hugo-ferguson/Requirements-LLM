@@ -93,7 +93,7 @@ async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
 		"qwen": ("Qwen", "qwen2.5:7b", evaluate_with_qwen),
 		"llama": ("Llama", "llama3.1:8b", evaluate_with_llama),
 		"gemini": ("Gemini", "gemini-flash-latest", evaluate_with_gemini),
-		"claude": ("Claude", "claude-3-5-sonnet-20241022", evaluate_with_claude),
+		"claude": ("Claude", "claude-haiku-4-5", evaluate_with_claude),
 	}
 	selected = [provider_details[name] for name in evaluation_input.providers]
 	provider_results = await asyncio.gather(

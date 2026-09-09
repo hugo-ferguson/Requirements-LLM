@@ -8,6 +8,12 @@ def _create_session(client: TestClient) -> dict:
 
 
 def _generate(client: TestClient, session_id: int) -> list[dict]:
+    # Generation now calls a real model and refuses an empty conversation
+    # (see EmptyConversationError), so every test needs real content first.
+    client.post(
+        f"/sessions/{session_id}/messages",
+        json={"text": "As a user, I want to log in with my email and password.", "attachments": []},
+    )
     response = client.post(f"/sessions/{session_id}/generate")
     assert response.status_code == 200
     return response.json()["acceptance_criteria"]
@@ -126,7 +132,9 @@ def test_regenerate_selected_returns_candidates_without_mutating_persisted_list(
     body = response.json()
     assert body["reply"]["role"] == "assistant"
     assert isinstance(body["reply"]["text"], str) and body["reply"]["text"]
-    assert 1 <= len(body["candidates"]) <= 2
+    # Regeneration is a select-one-candidate-add-context-regenerate flow: it
+    # always returns exactly one refined candidate, not several alternatives.
+    assert len(body["candidates"]) == 1
 
     after = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
     assert after == before
@@ -239,9 +247,13 @@ def test_regenerate_all_kickoff_message_references_rejected_titles(client: TestC
     assert body["role"] == "assistant"
     assert rejected["title"] in body["text"]
 
+    # _generate already seeds a user message (and its real assistant reply)
+    # to satisfy the empty-conversation guard, so history isn't empty going
+    # in — check the kickoff message landed as the newest entry, not that
+    # it's the only one.
     detail = client.get(f"/sessions/{session['id']}").json()
-    assert len(detail["messages"]) == 1
-    assert detail["messages"][0]["role"] == "assistant"
+    assert detail["messages"][-1]["role"] == "assistant"
+    assert detail["messages"][-1]["text"] == body["text"]
     assert detail["updated_at"] >= session["updated_at"]
 
 
