@@ -13,12 +13,15 @@ dependencies = [
     "fastembed>=0.3",
     "litellm>=1.40,<2.0",
     "pgvector>=0.3",
-    "mcp>=1.26",
+    "mcp>=1.26,<2",
     "pillow>=10.0",
     "pypdf>=6.16.1",
     "python-multipart>=0.0.32",
     "pydantic-ai>=2.37.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*", "voting*", "ai_prompts*"]
 
 [dependency-groups]
 dev = [

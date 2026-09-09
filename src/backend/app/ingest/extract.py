@@ -31,7 +31,7 @@ IMAGE_PROMPT = (
     "be searched later. Do not add commentary about the image quality."
 )
 
-MAX_IMAGE_DIMENSION = 1568
+MAX_IMAGE_DIMENSION = 1024
 JPEG_QUALITY = 90
 
 
@@ -40,16 +40,11 @@ class UnsupportedFileError(ValueError):
 
 
 class ImageExtractionError(RuntimeError):
-    """
-    Raised when the vision model could not be reached or returned no usable
-    text.
-    """
+    """Raised when the vision model could not be reached or returned no usable text."""
 
 
 def extract_text(data: bytes, filename: str, settings: Settings) -> str:
-    """
-    Returns the searchable text of an uploaded file, chosen by its extension.
-    """
+    """Returns the searchable text of an uploaded file, chosen by its extension."""
     extension = Path(filename).suffix.lower()
 
     if extension in TEXT_EXTENSIONS:
@@ -136,8 +131,6 @@ def _prepare_image(data: bytes, extension: str) -> bytes:
         logger.warning("Could not open image for resizing: %s", error)
         return data
 
-    # Resizing costs ~40ms and saves seconds of vision-model time, so there's
-    # no tolerance band worth keeping here — anything over the cap gets shrunk.
     if max(image.size) <= MAX_IMAGE_DIMENSION:
         return data
 
@@ -150,8 +143,6 @@ def _prepare_image(data: bytes, extension: str) -> bytes:
     if extension in JPEG_EXTENSIONS:
         image.convert("RGB").save(buffer, "JPEG", quality=JPEG_QUALITY)
     else:
-        # PNG keeps text edges crisp, which matters more than file size when
-        # the point of the upload is reading the text back out.
         image.convert("RGBA").save(buffer, "PNG")
 
     resized = buffer.getvalue()
