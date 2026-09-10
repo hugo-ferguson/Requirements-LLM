@@ -11,9 +11,9 @@ dependencies = [
     "pydantic-settings>=2.5",
     "httpx>=0.27",
     "fastembed>=0.3",
-    "openai>=1.40",
+    "litellm>=1.40,<2.0",
     "pgvector>=0.3",
-    "mcp>=1.26",
+    "mcp>=1.26,<2",
     "pillow>=10.0",
     "pypdf>=6.16.1",
     "python-multipart>=0.0.32",
@@ -21,6 +21,9 @@ dependencies = [
     "anthropic>=1.3",
     "python-dotenv>=1.2",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*", "voting*", "ai_prompts*"]
 
 [dependency-groups]
 dev = [

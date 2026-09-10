@@ -24,6 +24,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/app}
       CORS_ORIGINS: '["http://localhost:5173"]'
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://localhost:11434}
+      VOTING_PROVIDERS: ${VOTING_PROVIDERS:-qwen:ollama/qwen2.5:7b,llama:ollama/llama3.1:8b}
     ports:
       - "8000:8000"
     volumes:

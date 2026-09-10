@@ -24,15 +24,12 @@ class Settings(BaseSettings):
     sql_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    embedding_provider: Literal["local", "ollama", "api"] = "local"
+    embedding_provider: Literal["local", "litellm"] = "local"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384
-    ollama_base_url: str = "http://localhost:11434"
     embedding_api_key: str | None = None
-    embedding_api_base_url: str | None = None
 
-    # Local Ollama vision model that reads text out of images during ingest.
-    ollama_vision_model: str = "qwen2.5vl:7b"
+    vision_model: str = "ollama/qwen2.5vl:7b"
 
     # The model that writes acceptance criteria. Any model string PydanticAI
     # knows works here, so changing provider is a config change, not a code

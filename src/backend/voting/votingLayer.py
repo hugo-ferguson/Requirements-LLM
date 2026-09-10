@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from voting.models import EvaluationInput
-from voting.voting import evaluate_inputs
+from voting.voting import COMBINED_PROVIDERS, evaluate_inputs
 
-DEFAULT_PROVIDERS = ["prometheus", "qwen", "llama", "gemini", "claude"]
+DEFAULT_PROVIDERS = ["prometheus"] + list(COMBINED_PROVIDERS)
 DEFAULT_OUTPUT_FILENAME = "votingLayerOutput.json"
 
 
@@ -71,9 +71,4 @@ def run_voting_layer_sync(
 if __name__ == "__main__":
     input_path = Path(__file__).with_name("exampleBatchInput.json")
     payload = json.loads(input_path.read_text(encoding="utf-8"))
-    asyncio.run(
-        run_voting_layer(
-            payload,
-            providers=["gemini", "prometheus", "qwen", "llama"],
-        )
-    )
+    asyncio.run(run_voting_layer(payload))
