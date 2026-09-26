@@ -133,7 +133,21 @@ def score_candidates(
             providers=["claude"],
         )
         result = asyncio.run(_evaluate_input(evaluation_input))
-        return _match_to_candidates(candidates, result.output)
+        scores = _match_to_candidates(candidates, result.output)
+        if scores and all(score == _ZERO_SCORE for score in scores):
+            # The voting layer never raises for a provider failure — it swaps in
+            # the -1 sentinel, which clamps to 0.0 and looks exactly like a real
+            # (terrible) score. A whole batch at zero is not a plausible
+            # verdict, so flag it as configuration rather than quality.
+            logger.warning(
+                "every one of %d candidate(s) scored 0.0 — this is almost always a "
+                "misconfigured voter rather than genuinely worthless criteria. "
+                "Check that VOTING_PROVIDERS defines %r and that its model is "
+                "reachable; see the provider warning logged above for the cause.",
+                len(scores),
+                evaluation_input.providers[0] if evaluation_input.providers else "claude",
+            )
+        return scores
     except Exception:
         logger.exception(
             "voting layer scoring failed for %d candidate(s); falling back to all-zero scores",
