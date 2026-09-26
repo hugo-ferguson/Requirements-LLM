@@ -803,3 +803,55 @@ def test_group_by_title_with_no_followers_still_produces_groups():
     assert len(groups) == 2
     assert all(len(group.candidates) == 1 for group in groups)
     assert groups[0].alternatives == []
+
+
+def test_unrated_candidate_ranks_below_a_genuinely_bad_one():
+    """A scoring failure is an absence of a verdict, not a verdict of zero.
+
+    Both sit at 0.0 once the -1 sentinel is clamped, so without the explicit
+    flag an outage would be indistinguishable from a model rating something
+    worthless — and could hand the win to an unrated candidate.
+    """
+    group = CandidateGroup(
+        title="Log in",
+        candidates=[
+            Candidate(
+                agent_id="aaa-unrated",
+                criterion=_criterion(1),
+                overall_score=0.0,
+                scoring_failed=True,
+            ),
+            Candidate(
+                agent_id="zzz-rated-badly",
+                criterion=_criterion(2),
+                overall_score=0.0,
+                scoring_failed=False,
+            ),
+        ],
+    )
+
+    group.rank()
+
+    # Alphabetically "aaa" would win the tie-break; being unrated outranks it.
+    assert group.winner.agent_id == "zzz-rated-badly"
+    assert [c.agent_id for c in group.unrated] == ["aaa-unrated"]
+
+
+def test_unrated_candidate_never_beats_a_rated_one():
+    group = CandidateGroup(
+        title="Log in",
+        candidates=[
+            Candidate(
+                agent_id="a", criterion=_criterion(1),
+                overall_score=5.0, scoring_failed=True,
+            ),
+            Candidate(
+                agent_id="b", criterion=_criterion(2),
+                overall_score=1.0, scoring_failed=False,
+            ),
+        ],
+    )
+
+    group.rank()
+
+    assert group.winner.agent_id == "b"

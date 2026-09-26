@@ -51,9 +51,15 @@ class CandidateScore:
     understandability: float
     coverage: float
     overall: float
+    # True when the voting layer never actually rated this candidate — the
+    # rubric values are the -1 error sentinel clamped to 0.0, not a verdict.
+    # Callers that rank candidates against each other need to tell the two
+    # apart, because an unrated candidate scores 0.0 and therefore always
+    # loses, which lets a scoring outage silently pick the winner.
+    failed: bool = False
 
 
-_ZERO_SCORE = CandidateScore(0.0, 0.0, 0.0, 0.0, 0.0)
+_ZERO_SCORE = CandidateScore(0.0, 0.0, 0.0, 0.0, 0.0, failed=True)
 
 
 class Scorer(Protocol):
@@ -134,7 +140,21 @@ def score_candidates(
         )
         result = asyncio.run(_evaluate_input(evaluation_input))
         scores = _match_to_candidates(candidates, result.output)
-        if scores and all(score == _ZERO_SCORE for score in scores):
+
+        unrated = sum(1 for score in scores if score.failed)
+        if unrated and unrated != len(scores):
+            # A partial failure is the dangerous case: the batch looks fine,
+            # but every unrated candidate sits at 0.0 and loses to any rated
+            # one regardless of how good it actually was.
+            logger.warning(
+                "%d of %d candidate(s) were not rated by the voting layer and "
+                "scored 0.0 by default; they will lose to any rated candidate "
+                "regardless of quality",
+                unrated,
+                len(scores),
+            )
+
+        if scores and all(score.failed for score in scores):
             # The voting layer never raises for a provider failure — it swaps in
             # the -1 sentinel, which clamps to 0.0 and looks exactly like a real
             # (terrible) score. A whole batch at zero is not a plausible
@@ -180,12 +200,23 @@ def _match_to_candidates(
 
 def _to_candidate_score(output: "EvaluatedOutput") -> CandidateScore:
     by_rubric = {avg.rubric: avg.value for avg in output.rubric_averages}
+    raw = [
+        by_rubric.get("relevance", -1.0),
+        by_rubric.get("correctness", -1.0),
+        by_rubric.get("understandability", -1.0),
+        by_rubric.get("coverage", -1.0),
+    ]
+    # Detected BEFORE _scale, which clamps the -1 sentinel to 0.0 and makes a
+    # scoring failure indistinguishable from a genuine zero.
+    failed = output.overall_score < 0 or any(value < 0 for value in raw)
+    relevance, correctness, understandability, coverage = (_scale(v) for v in raw)
     return CandidateScore(
-        relevance=_scale(by_rubric.get("relevance", -1.0)),
-        correctness=_scale(by_rubric.get("correctness", -1.0)),
-        understandability=_scale(by_rubric.get("understandability", -1.0)),
-        coverage=_scale(by_rubric.get("coverage", -1.0)),
+        relevance=relevance,
+        correctness=correctness,
+        understandability=understandability,
+        coverage=coverage,
         overall=_scale(output.overall_score),
+        failed=failed,
     )
 
 

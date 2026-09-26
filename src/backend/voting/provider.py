@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -9,6 +10,8 @@ import litellm
 
 from voting.models import CombinedVote, EvaluationInput, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
 
+
+logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
 COMBINED_PROMPT = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer" / "combined.txt"
@@ -133,8 +136,22 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 		return_exceptions=True,
 	)
 	evaluated_outputs: list[EvaluatedOutput] = []
+	failures = 0
 	for output, result in zip(evaluation_input.output, results, strict=True):
 		if isinstance(result, Exception):
+			failures += 1
+			# The -1 sentinel below reads as 0.0 once clamped, which is
+			# indistinguishable from a candidate the model genuinely rated
+			# worthless — and a 0.0 always loses its group. Say so, or a
+			# scoring outage quietly decides which candidate wins.
+			logger.warning(
+				"%s (model=%s) failed to score a candidate; it degrades to the "
+				"-1 sentinel and will rank last: %s: %s",
+				client.provider_name,
+				client.model,
+				result.__class__.__name__,
+				result,
+			)
 			evaluated_outputs.append(
 				_error_output(
 					output,
@@ -145,6 +162,15 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 			)
 		else:
 			evaluated_outputs.append(result)
+
+	if failures:
+		logger.warning(
+			"%s scored %d of %d candidate(s); %d failed and will rank last",
+			client.provider_name,
+			len(evaluated_outputs) - failures,
+			len(evaluated_outputs),
+			failures,
+		)
 	return VotingResult(
 		ai=evaluation_input.ai,
 		model=evaluation_input.model,

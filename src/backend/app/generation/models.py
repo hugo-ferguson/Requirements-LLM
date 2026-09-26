@@ -101,6 +101,9 @@ class Candidate(BaseModel):
     understandability: float = 0.0
     coverage: float = 0.0
     overall_score: float = 0.0
+    # The voting layer never rated this one; its 0.0 is an absence of a
+    # verdict, not a bad verdict. Kept separate so ranking can say so.
+    scoring_failed: bool = False
 
 
 class CandidateGroup(BaseModel):
@@ -117,12 +120,24 @@ class CandidateGroup(BaseModel):
     def rank(self) -> None:
         """Sort best-first, breaking ties deterministically.
 
-        Without the secondary key, equally-scored candidates resolve by
-        whatever order the agents happened to finish in, so the "winner" shown
-        to a reviewer could change between identical runs. Falling back to
-        agent_id is arbitrary but stable, which is the property that matters.
+        Unrated candidates sort last regardless of their nominal 0.0. That is
+        already where a 0.0 lands, but making it explicit means a group whose
+        scoring failed entirely still ranks by agent_id rather than appearing
+        to have been judged.
+
+        Without the final key, equally-scored candidates resolve by whatever
+        order the agents happened to finish in, so the "winner" shown to a
+        reviewer could change between identical runs. Falling back to agent_id
+        is arbitrary but stable, which is the property that matters.
         """
-        self.candidates.sort(key=lambda c: (-c.overall_score, c.agent_id))
+        self.candidates.sort(
+            key=lambda c: (c.scoring_failed, -c.overall_score, c.agent_id)
+        )
+
+    @property
+    def unrated(self) -> list[Candidate]:
+        """Candidates the voting layer never actually scored."""
+        return [c for c in self.candidates if c.scoring_failed]
 
     @property
     def winner(self) -> Candidate:

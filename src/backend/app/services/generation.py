@@ -235,9 +235,28 @@ class GenerationService:
                 candidate.understandability = score.understandability
                 candidate.coverage = score.coverage
                 candidate.overall_score = score.overall
+                candidate.scoring_failed = score.failed
 
         for group in groups:
             group.rank()
+
+        contested = [g for g in groups if len(g.candidates) > 1]
+        logger.info(
+            "grouped %d criteria from %d candidates; %d contested, %d unrated",
+            len(groups),
+            len(flat),
+            len(contested),
+            sum(len(g.unrated) for g in groups),
+        )
+        for group in contested:
+            if group.winner.scoring_failed:
+                # Every candidate here was unrated, so "winner" means
+                # alphabetically first, not best. Worth saying out loud.
+                logger.warning(
+                    "no candidate for %r was rated; the winner was chosen by "
+                    "tie-break, not by score",
+                    group.title,
+                )
 
         # Groups keep the anchor agent's order; within a group the best
         # candidate wins. Sorting groups by score would let a low-scoring
