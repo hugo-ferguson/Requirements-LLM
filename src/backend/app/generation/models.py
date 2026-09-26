@@ -75,6 +75,64 @@ class GeneratedCriteriaSet(BaseModel):
     )
 
 
+def title_key(title: str) -> str:
+    """Join key for title-anchored grouping.
+
+    Pass-2 agents are told to copy titles verbatim, but models still drift on
+    case, punctuation and trailing full stops. Normalising the same way
+    `dedupe_key` does means "Rate a finished book" and "Rate a finished book."
+    land in the same group instead of forming a group of one each.
+    """
+    return re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+
+
+class Candidate(BaseModel):
+    """One agent's attempt at a single criterion, with its score once voted.
+
+    Distinct from `GeneratedCriterion` because it carries the two things the
+    criterion itself has no business knowing: which agent produced it, and how
+    the voting layer rated it.
+    """
+
+    agent_id: str
+    criterion: GeneratedCriterion
+    relevance: float = 0.0
+    correctness: float = 0.0
+    understandability: float = 0.0
+    coverage: float = 0.0
+    overall_score: float = 0.0
+
+
+class CandidateGroup(BaseModel):
+    """Every agent's take on one title, best first.
+
+    The winner is `candidates[0]` after `rank()`; the rest are the alternatives
+    the UI can offer behind it. A group with a single candidate is normal — it
+    just means only one agent answered that title.
+    """
+
+    title: str
+    candidates: list[Candidate] = Field(default_factory=list)
+
+    def rank(self) -> None:
+        """Sort best-first, breaking ties deterministically.
+
+        Without the secondary key, equally-scored candidates resolve by
+        whatever order the agents happened to finish in, so the "winner" shown
+        to a reviewer could change between identical runs. Falling back to
+        agent_id is arbitrary but stable, which is the property that matters.
+        """
+        self.candidates.sort(key=lambda c: (-c.overall_score, c.agent_id))
+
+    @property
+    def winner(self) -> Candidate:
+        return self.candidates[0]
+
+    @property
+    def alternatives(self) -> list[Candidate]:
+        return self.candidates[1:]
+
+
 class AgentResult(BaseModel):
     """One agent's outcome, including the failure case.
 

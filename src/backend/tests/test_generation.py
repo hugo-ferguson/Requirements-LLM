@@ -26,12 +26,20 @@ from app.generation.config import (
     RosterConfigError,
     load_roster,
 )
-from app.generation.models import AgentResult, EnsembleResult, GeneratedCriteriaSet, GeneratedCriterion
+from app.generation.models import (
+    AgentResult,
+    Candidate,
+    CandidateGroup,
+    EnsembleResult,
+    GeneratedCriteriaSet,
+    GeneratedCriterion,
+)
 from app.generation.orchestrator import pool_criteria, run_ensemble
 from app.generation.prompts import GenerationDeps, build_user_prompt
 from app.services.scoring import CandidateScore
 from app.models_conversation import ConversationAttachment, ConversationMessage
 from app.services.generation import (
+    _groups_to_wire_models,
     _to_wire_models,
     GenerationService,
     NoUserStoryError,
@@ -639,3 +647,159 @@ def test_scores_stay_within_the_apps_zero_to_five_scale() -> None:
 
     assert ranked[0].overall_score == 5.0
     assert ranked[0].scores.correctness == 5.0
+
+
+# --- Title-anchored generation -------------------------------------------
+#
+# The review finding these cover: pooling independent per-agent criteria left
+# nothing to group equivalent candidates by, so near-duplicates survived and
+# the voting layer compared unrelated items. Anchoring on one agent's titles
+# gives every candidate a join key.
+
+
+def _agent_result(agent_id: str, titles: list[str]) -> AgentResult:
+    return AgentResult(
+        agent_id=agent_id,
+        provider="test",
+        model="test",
+        criteria=[
+            GeneratedCriterion(
+                title=title,
+                given=f"{agent_id} precondition",
+                when=f"{agent_id} action",
+                then=f"{agent_id} outcome",
+            )
+            for title in titles
+        ],
+    )
+
+
+def test_group_by_title_collects_one_candidate_per_agent():
+    anchor = _agent_result("anchor", ["Log in", "Reject bad password"])
+    follower = _agent_result("follower", ["Log in", "Reject bad password"])
+
+    groups = orchestrator.group_by_title(anchor, [follower])
+
+    assert [group.title for group in groups] == ["Log in", "Reject bad password"]
+    assert all(len(group.candidates) == 2 for group in groups)
+    assert [c.agent_id for c in groups[0].candidates] == ["anchor", "follower"]
+
+
+def test_group_by_title_matches_despite_case_and_punctuation_drift():
+    """Models reword titles slightly; the join must survive that."""
+    anchor = _agent_result("anchor", ["Rate a finished book"])
+    follower = _agent_result("follower", ["  rate a finished BOOK.  "])
+
+    groups = orchestrator.group_by_title(anchor, [follower])
+
+    assert len(groups) == 1
+    assert len(groups[0].candidates) == 2
+    # The anchor's spelling is the one shown, not the follower's.
+    assert groups[0].title == "Rate a finished book"
+
+
+def test_group_by_title_drops_follower_titles_that_match_nothing():
+    """An invented title would reintroduce the ungrouped duplicates."""
+    anchor = _agent_result("anchor", ["Log in"])
+    follower = _agent_result("follower", ["Log in", "Something else entirely"])
+
+    groups = orchestrator.group_by_title(anchor, [follower])
+
+    assert len(groups) == 1
+    assert len(groups[0].candidates) == 2
+
+
+def test_group_by_title_ignores_a_followers_duplicate_answer():
+    anchor = _agent_result("anchor", ["Log in"])
+    follower = _agent_result("follower", ["Log in", "Log in"])
+
+    groups = orchestrator.group_by_title(anchor, [follower])
+
+    assert len(groups[0].candidates) == 2
+
+
+def test_candidate_group_ranks_best_first():
+    group = CandidateGroup(
+        title="Log in",
+        candidates=[
+            Candidate(agent_id="a", criterion=_criterion(1), overall_score=2.0),
+            Candidate(agent_id="b", criterion=_criterion(2), overall_score=4.5),
+        ],
+    )
+
+    group.rank()
+
+    assert group.winner.agent_id == "b"
+    assert [c.agent_id for c in group.alternatives] == ["a"]
+
+
+def test_candidate_group_tie_break_is_deterministic():
+    """Equal scores must not resolve by whichever agent finished first."""
+    def build(order: list[str]) -> CandidateGroup:
+        group = CandidateGroup(
+            title="Log in",
+            candidates=[
+                Candidate(agent_id=agent, criterion=_criterion(1), overall_score=3.0)
+                for agent in order
+            ],
+        )
+        group.rank()
+        return group
+
+    assert build(["zeta", "alpha"]).winner.agent_id == "alpha"
+    assert build(["alpha", "zeta"]).winner.agent_id == "alpha"
+
+
+def test_grouped_wire_models_expose_winner_with_alternatives_behind_it():
+    group = CandidateGroup(
+        title="Log in",
+        candidates=[
+            Candidate(agent_id="weak", criterion=_criterion(1), overall_score=1.0),
+            Candidate(agent_id="strong", criterion=_criterion(2), overall_score=4.0),
+        ],
+    )
+    group.rank()
+
+    wire = _groups_to_wire_models([group])
+
+    assert len(wire) == 1
+    assert wire[0].title == "Log in"
+    assert wire[0].source_agent == "strong"
+    assert wire[0].overall_score == 4.0
+    assert len(wire[0].alternatives) == 1
+    assert wire[0].alternatives[0].source_agent == "weak"
+    assert wire[0].alternatives[0].overall_score == 1.0
+
+
+def test_grouped_wire_models_stay_backwards_compatible():
+    """A client ignoring the new fields must see exactly one row per behaviour."""
+    groups = [
+        CandidateGroup(
+            title=f"Title {n}",
+            candidates=[
+                Candidate(agent_id="a", criterion=_criterion(n), overall_score=3.0),
+                Candidate(agent_id="b", criterion=_criterion(n), overall_score=1.0),
+            ],
+        )
+        for n in (1, 2)
+    ]
+    for group in groups:
+        group.rank()
+
+    wire = _groups_to_wire_models(groups)
+
+    assert len(wire) == 2
+    assert [item.id for item in wire] == [1, 2]
+    dumped = wire[0].model_dump()
+    assert dumped["title"] and dumped["given"] and dumped["scores"]
+
+
+def test_group_by_title_with_no_followers_still_produces_groups():
+    """A single-agent roster must not be a special case."""
+    anchor = _agent_result("anchor", ["Log in", "Log out"])
+
+    groups = orchestrator.group_by_title(anchor, [])
+
+    assert len(groups) == 2
+    assert all(len(group.candidates) == 1 for group in groups)
+    assert groups[0].alternatives == []

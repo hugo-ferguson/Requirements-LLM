@@ -83,3 +83,45 @@ def build_user_prompt(deps: GenerationDeps, max_criteria: int) -> str:
         f"Write up to {max_criteria} acceptance criteria for the following "
         f"user story.\n\nUser story:\n{deps.user_story.strip()}"
     )
+
+
+def build_titles_prompt(deps: GenerationDeps, max_criteria: int) -> str:
+    """Pass 1 of title-anchored generation: one agent fixes the title set.
+
+    The titles become the grouping key every other agent writes against, which
+    is what makes candidates from different models comparable. Descriptions are
+    requested here too — this agent's own criteria are a full candidate in
+    their own right, so asking for titles alone would waste the call.
+    """
+    return (
+        f"Write up to {max_criteria} acceptance criteria for the following "
+        f"user story. Each title must name a distinct behaviour — two titles "
+        f"covering the same behaviour is the one thing to avoid here, because "
+        f"these titles are the definitive list every reviewer will work "
+        f"from.\n\nUser story:\n{deps.user_story.strip()}"
+    )
+
+
+def build_descriptions_prompt(
+    deps: GenerationDeps, titles: list[str]
+) -> str:
+    """Pass 2: write given/when/then for an already-fixed set of titles.
+
+    Every agent answers the same titles, so their outputs line up one-to-one
+    and the voting layer compares like against like instead of scoring an
+    arbitrary union. Titles must come back verbatim — they are the join key,
+    so a reworded title silently drops that agent's candidate from its group.
+    """
+    numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    return (
+        "Below is a fixed list of acceptance criteria titles for a user story. "
+        "Write your own given / when / then for EVERY title in the list.\n\n"
+        "Rules for this task:\n"
+        "- Return exactly one criterion per title, in the same order.\n"
+        "- Copy each title back EXACTLY as written. Do not reword, renumber, "
+        "reorder, merge or add titles.\n"
+        "- Write the strongest given / when / then you can for the behaviour "
+        "the title names.\n\n"
+        f"Titles:\n{numbered}\n\n"
+        f"User story:\n{deps.user_story.strip()}"
+    )

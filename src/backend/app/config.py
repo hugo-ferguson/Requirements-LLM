@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # Set false to skip the voting layer and return unscored candidates -
     # useful when iterating on prompts without paying for the voters.
     generation_enable_voting: bool = True
+    # Two-pass generation: one agent fixes the titles, the rest write their own
+    # given/when/then against them, so candidates for the same behaviour can be
+    # compared directly instead of pooled into an ungrouped union. Costs one
+    # extra sequential pass; set false to restore the single-pass ensemble.
+    generation_title_anchored: bool = True
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 
 

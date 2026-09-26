@@ -20,11 +20,16 @@ import logging
 from typing import Protocol, runtime_checkable
 
 from app.config import Settings
-from app.generation.models import EnsembleResult
-from app.generation.orchestrator import pool_criteria, run_ensemble
+from app.generation.models import CandidateGroup, EnsembleResult
+from app.generation.orchestrator import (
+    pool_criteria,
+    run_ensemble,
+    run_title_anchored_ensemble,
+)
 from app.generation.prompts import GenerationDeps
 from app.models_conversation import (
     AcceptanceCriterion,
+    AcceptanceCriterionAlternative,
     AcceptanceCriterionScores,
     ConversationMessage,
 )
@@ -155,11 +160,28 @@ class GenerationService:
             feedback=feedback,
         )
 
-        ensemble = await run_ensemble(
-            deps,
-            max_criteria=self.settings.generation_max_criteria,
-            timeout_seconds=self.settings.generation_timeout_seconds,
-        )
+        groups: list[CandidateGroup] = []
+        if self.settings.generation_title_anchored:
+            ensemble, groups = await run_title_anchored_ensemble(
+                deps,
+                max_criteria=self.settings.generation_max_criteria,
+                timeout_seconds=self.settings.generation_timeout_seconds,
+            )
+            if not groups and ensemble.successful:
+                # The anchor agent succeeded but produced nothing groupable.
+                # Fall through to the flat path rather than returning an empty
+                # result — a degraded answer beats no answer.
+                logger.warning(
+                    "title-anchored generation produced no groups; "
+                    "falling back to the flat ensemble"
+                )
+        if not groups:
+            ensemble = await run_ensemble(
+                deps,
+                max_criteria=self.settings.generation_max_criteria,
+                timeout_seconds=self.settings.generation_timeout_seconds,
+            )
+
         self._log_ensemble(ensemble)
 
         if not ensemble.successful:
@@ -167,6 +189,9 @@ class GenerationService:
                 f"{result.agent_id}: {result.error}" for result in ensemble.failed
             )
             raise GenerationError(f"Every generation agent failed. {reasons}")
+
+        if groups:
+            return await self._generate_grouped(ensemble, groups)
 
         pooled = pool_criteria(ensemble)
         criteria = [criterion for _, criterion in pooled]
@@ -179,6 +204,46 @@ class GenerationService:
         ]
         scores = await self.score(ensemble.prompt, candidate_texts)
         return _to_wire_models(criteria, scores=scores)
+
+    async def _generate_grouped(
+        self, ensemble: EnsembleResult, groups: list[CandidateGroup]
+    ) -> list[AcceptanceCriterion]:
+        """Score every candidate in every group, then rank within each group.
+
+        All candidates go to the voting layer in one call — it is far cheaper
+        than one call per group, and `score_candidates` guarantees results come
+        back in submission order, so a flat list can be unpacked back into the
+        groups it came from.
+        """
+        flat = [
+            (group, candidate)
+            for group in groups
+            for candidate in group.candidates
+        ]
+
+        if self.settings.generation_enable_voting:
+            texts = [
+                render_ac_candidate(
+                    c.criterion.title, c.criterion.given, c.criterion.when, c.criterion.then
+                )
+                for _, c in flat
+            ]
+            scores = await self.score(ensemble.prompt, texts)
+            for (_, candidate), score in zip(flat, scores, strict=True):
+                candidate.relevance = score.relevance
+                candidate.correctness = score.correctness
+                candidate.understandability = score.understandability
+                candidate.coverage = score.coverage
+                candidate.overall_score = score.overall
+
+        for group in groups:
+            group.rank()
+
+        # Groups keep the anchor agent's order; within a group the best
+        # candidate wins. Sorting groups by score would let a low-scoring
+        # behaviour vanish to the bottom of the list even though the reviewer
+        # still has to decide on it.
+        return _groups_to_wire_models(groups)
 
     @staticmethod
     def _log_ensemble(ensemble: EnsembleResult) -> None:
@@ -205,6 +270,63 @@ def _unscored() -> AcceptanceCriterionScores:
     return AcceptanceCriterionScores(
         relevance=0.0, correctness=0.0, understandability=0.0, coverage=0.0
     )
+
+
+def _groups_to_wire_models(groups: list[CandidateGroup]) -> list[AcceptanceCriterion]:
+    """Flatten ranked groups into the schema the frontend consumes.
+
+    Each group contributes exactly one `AcceptanceCriterion` — its winner —
+    with the beaten candidates attached as `alternatives`. A client that
+    ignores `alternatives` therefore sees precisely what it saw before this
+    change: one row per behaviour, best version shown.
+    """
+    wire: list[AcceptanceCriterion] = []
+
+    for index, group in enumerate(groups):
+        if not group.candidates:
+            continue
+        winner = group.winner
+        wire.append(
+            AcceptanceCriterion(
+                id=index + 1,
+                # The group's title, not the winner's own. Pass-2 agents are
+                # asked to copy titles verbatim but drift on case and
+                # punctuation, and `group_by_title` normalises that away by
+                # keeping the anchor's spelling. Taking the winner's title here
+                # would leak whichever variant happened to score highest.
+                title=group.title,
+                given=winner.criterion.given,
+                when=winner.criterion.when,
+                then=winner.criterion.then,
+                scores=AcceptanceCriterionScores(
+                    relevance=winner.relevance,
+                    correctness=winner.correctness,
+                    understandability=winner.understandability,
+                    coverage=winner.coverage,
+                ),
+                overall_score=winner.overall_score,
+                status="pending",
+                source_agent=winner.agent_id,
+                alternatives=[
+                    AcceptanceCriterionAlternative(
+                        given=alt.criterion.given,
+                        when=alt.criterion.when,
+                        then=alt.criterion.then,
+                        scores=AcceptanceCriterionScores(
+                            relevance=alt.relevance,
+                            correctness=alt.correctness,
+                            understandability=alt.understandability,
+                            coverage=alt.coverage,
+                        ),
+                        overall_score=alt.overall_score,
+                        source_agent=alt.agent_id,
+                    )
+                    for alt in group.alternatives
+                ],
+            )
+        )
+
+    return wire
 
 
 def _to_wire_models(criteria: list, scores: list | None) -> list[AcceptanceCriterion]:

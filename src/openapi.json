@@ -1208,6 +1208,24 @@
             ],
             "title": "Status",
             "default": "pending"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterionAlternative"
+            },
+            "type": "array",
+            "title": "Alternatives"
           }
         },
         "type": "object",
@@ -1221,6 +1239,52 @@
           "overall_score"
         ],
         "title": "AcceptanceCriterion"
+      },
+      "AcceptanceCriterionAlternative": {
+        "properties": {
+          "given": {
+            "type": "string",
+            "title": "Given"
+          },
+          "when": {
+            "type": "string",
+            "title": "When"
+          },
+          "then": {
+            "type": "string",
+            "title": "Then"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/AcceptanceCriterionScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "given",
+          "when",
+          "then",
+          "scores",
+          "overall_score"
+        ],
+        "title": "AcceptanceCriterionAlternative",
+        "description": "A losing candidate for the same title as its parent criterion.\n\nCarries no `status` or `id`: an alternative is not a reviewable item in\nits own right, it is the answer to \"what did the other model say?\"."
       },
       "AcceptanceCriterionScores": {
         "properties": {
