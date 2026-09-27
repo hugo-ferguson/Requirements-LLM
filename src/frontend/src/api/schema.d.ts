@@ -178,6 +178,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/alternatives/{candidate_id}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select Alternative */
+        post: operations["select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff": {
         parameters: {
             query?: never;
@@ -390,6 +407,33 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "accepted" | "rejected";
+            /** Source Agent */
+            source_agent?: string | null;
+            /** Alternatives */
+            alternatives?: components["schemas"]["AcceptanceCriterionAlternative"][];
+        };
+        /**
+         * AcceptanceCriterionAlternative
+         * @description A losing candidate for the same title as its parent criterion.
+         *
+         *     Carries no `status`: an alternative is not a reviewable item in its own
+         *     right, it is the answer to "what did the other model say?". It does carry
+         *     `candidate_id` once persisted, so the reviewer can swap it in.
+         */
+        AcceptanceCriterionAlternative: {
+            /** Candidate Id */
+            candidate_id?: number | null;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
         };
         /** AcceptanceCriterionScores */
         AcceptanceCriterionScores: {
@@ -533,6 +577,12 @@ export interface components {
             reply: components["schemas"]["ConversationMessage"];
             /** Candidates */
             candidates: components["schemas"]["AcceptanceCriterion"][];
+        };
+        /** SelectAlternativeResponse */
+        SelectAlternativeResponse: {
+            acceptance_criterion: components["schemas"]["AcceptanceCriterion"];
+            /** Uat Cases Affected */
+            uat_cases_affected: number;
         };
         /** SessionCreate */
         SessionCreate: {
@@ -1122,6 +1172,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+                candidate_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelectAlternativeResponse"];
                 };
             };
             /** @description Validation Error */

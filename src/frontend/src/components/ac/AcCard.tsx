@@ -3,6 +3,7 @@ import type { AcceptanceCriterion } from "../../api/acceptanceCriteria";
 import { ScorePill } from "./ScorePill";
 import { OverallScoreBadge } from "./OverallScoreBadge";
 import { AcceptRejectButtons } from "./AcceptRejectButtons";
+import { AlternativeList } from "./AlternativeList";
 
 interface EditFields {
   title: string;
@@ -22,6 +23,8 @@ interface AcCardProps {
   onEditSave?: (fields: EditFields) => void;
   onAccept: () => void;
   onReject: () => void;
+  /** Enables the other-versions dropdown; resolves once the swap is saved. */
+  onSelectAlternative?: (candidateId: number) => Promise<void>;
 }
 
 export function AcCard({
@@ -35,8 +38,22 @@ export function AcCard({
   onEditSave,
   onAccept,
   onReject,
+  onSelectAlternative,
 }: AcCardProps) {
   const [draft, setDraft] = useState<EditFields>(criterion);
+  const [showAlternatives, setShowAlternatives] = useState(false);
+  const [swappingId, setSwappingId] = useState<number | null>(null);
+  const alternatives = criterion.alternatives ?? [];
+
+  async function handleUseAlternative(candidateId: number) {
+    if (!onSelectAlternative) return;
+    setSwappingId(candidateId);
+    try {
+      await onSelectAlternative(candidateId);
+    } finally {
+      setSwappingId(null);
+    }
+  }
 
   // Re-seed the draft from the current values each time edit mode is entered,
   // so a previous (cancelled) edit never leaks into a later edit session.
@@ -111,6 +128,9 @@ export function AcCard({
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-400">#{index + 1}</span>
             <span className="font-bold text-gray-900">{criterion.title}</span>
+            {criterion.source_agent && (
+              <span className="text-xs font-medium text-gray-400">by {criterion.source_agent}</span>
+            )}
             {onEditStart && (
               <button
                 type="button"
@@ -134,12 +154,33 @@ export function AcCard({
             <ScorePill label="Understandability" value={criterion.scores.understandability} />
             <ScorePill label="Coverage" value={criterion.scores.coverage} />
           </div>
+          {onSelectAlternative && alternatives.length > 0 && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowAlternatives((prev) => !prev);
+              }}
+              aria-expanded={showAlternatives}
+              className="mt-2 text-sm font-medium text-primary hover:underline"
+            >
+              {showAlternatives ? "▴" : "▾"} {alternatives.length} other version
+              {alternatives.length === 1 ? "" : "s"}
+            </button>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <OverallScoreBadge value={criterion.overall_score} />
           <AcceptRejectButtons status={criterion.status} onAccept={onAccept} onReject={onReject} />
         </div>
       </div>
+      {onSelectAlternative && showAlternatives && alternatives.length > 0 && (
+        <AlternativeList
+          alternatives={alternatives}
+          swappingId={swappingId}
+          onUse={handleUseAlternative}
+        />
+      )}
     </div>
   );
 }

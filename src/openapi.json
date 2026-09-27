@@ -638,6 +638,66 @@
         }
       }
     },
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/alternatives/{candidate_id}/select": {
+      "post": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Select Alternative",
+        "operationId": "select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ac_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Ac Id"
+            }
+          },
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectAlternativeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff": {
       "post": {
         "tags": [
@@ -1242,6 +1302,17 @@
       },
       "AcceptanceCriterionAlternative": {
         "properties": {
+          "candidate_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
           "given": {
             "type": "string",
             "title": "Given"
@@ -1284,7 +1355,7 @@
           "overall_score"
         ],
         "title": "AcceptanceCriterionAlternative",
-        "description": "A losing candidate for the same title as its parent criterion.\n\nCarries no `status` or `id`: an alternative is not a reviewable item in\nits own right, it is the answer to \"what did the other model say?\"."
+        "description": "A losing candidate for the same title as its parent criterion.\n\nCarries no `status`: an alternative is not a reviewable item in its own\nright, it is the answer to \"what did the other model say?\". It does carry\n`candidate_id` once persisted, so the reviewer can swap it in."
       },
       "AcceptanceCriterionScores": {
         "properties": {
@@ -1676,6 +1747,23 @@
           "candidates"
         ],
         "title": "RegenerateSelectedResponse"
+      },
+      "SelectAlternativeResponse": {
+        "properties": {
+          "acceptance_criterion": {
+            "$ref": "#/components/schemas/AcceptanceCriterion"
+          },
+          "uat_cases_affected": {
+            "type": "integer",
+            "title": "Uat Cases Affected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "acceptance_criterion",
+          "uat_cases_affected"
+        ],
+        "title": "SelectAlternativeResponse"
       },
       "SessionCreate": {
         "properties": {

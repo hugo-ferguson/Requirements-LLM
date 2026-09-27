@@ -100,3 +100,11 @@ class RegenerateSelectedResponse(SQLModel):
 
 class ApplyApprovedRequest(SQLModel):
     candidates: list[AcceptanceCriterion]
+
+
+class SelectAlternativeResponse(SQLModel):
+    acceptance_criterion: AcceptanceCriterion
+    # UAT cases already generated from this AC. They were written against the
+    # previous wording, so the frontend warns rather than silently leaving
+    # them stale.
+    uat_cases_affected: int

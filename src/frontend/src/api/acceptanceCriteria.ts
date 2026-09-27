@@ -18,6 +18,9 @@ type ApplyApprovedRequest =
   paths["/sessions/{session_id}/acceptance-criteria/{ac_id}/apply-approved"]["post"]["requestBody"]["content"]["application/json"];
 export type RegenerateAllKickoffMessage =
   paths["/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff"]["post"]["responses"]["201"]["content"]["application/json"];
+export type AcceptanceCriterionAlternative = NonNullable<AcceptanceCriterion["alternatives"]>[number];
+export type SelectAlternativeResponse =
+  paths["/sessions/{session_id}/acceptance-criteria/{ac_id}/alternatives/{candidate_id}/select"]["post"]["responses"]["200"]["content"]["application/json"];
 
 export const acceptanceCriteriaApi = {
   list: (sessionId: string): Promise<AcceptanceCriteriaList> =>
@@ -61,6 +64,16 @@ export const acceptanceCriteriaApi = {
     request<AcceptanceCriteriaList>(
       `/sessions/${sessionId}/acceptance-criteria/${acId}/apply-approved`,
       { method: "POST", body: JSON.stringify({ candidates } satisfies ApplyApprovedRequest) },
+    ),
+
+  selectAlternative: (
+    sessionId: string,
+    acId: number,
+    candidateId: number,
+  ): Promise<SelectAlternativeResponse> =>
+    request<SelectAlternativeResponse>(
+      `/sessions/${sessionId}/acceptance-criteria/${acId}/alternatives/${candidateId}/select`,
+      { method: "POST" },
     ),
 
   regenerateAllKickoff: (sessionId: string): Promise<RegenerateAllKickoffMessage> =>
