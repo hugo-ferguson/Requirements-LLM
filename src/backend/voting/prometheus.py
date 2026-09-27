@@ -8,6 +8,7 @@ from pathlib import Path
 
 import litellm
 
+from voting.provider import max_parallel_requests
 from voting.models import (
     EvaluationInput,
     EvaluatedOutput,
@@ -85,17 +86,23 @@ class LiteLLMPrometheusClient:
 
 async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingResult:
     evaluator = LiteLLMPrometheusClient()
+    # Same queue-timeout trap as the combined path, and worse here: this fans
+    # out four rubric calls per candidate, so an unbounded gather over N
+    # candidates puts 4N requests in front of a server that runs one at a
+    # time. See `max_parallel_requests` for why serialising costs nothing.
+    gate = asyncio.Semaphore(max_parallel_requests(evaluator.model))
 
     async def evaluate_output(output: str) -> EvaluatedOutput:
-        results = await asyncio.gather(
-            *(
-                evaluator.evaluate(
+        async def scored(rubric_name: str) -> PrometheusVote:
+            async with gate:
+                return await evaluator.evaluate(
                     instruction=evaluation_input.prompt,
                     response=output,
                     rubric_name=rubric_name,
                 )
-                for rubric_name in RUBRIC_NAMES
-            ),
+
+        results = await asyncio.gather(
+            *(scored(rubric_name) for rubric_name in RUBRIC_NAMES),
             return_exceptions=True,
         )
 
