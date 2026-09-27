@@ -3,7 +3,11 @@ import type { AcceptanceCriterion } from "../../api/acceptanceCriteria";
 import { ScorePill } from "./ScorePill";
 import { OverallScoreBadge } from "./OverallScoreBadge";
 import { AcceptRejectButtons } from "./AcceptRejectButtons";
-import { AlternativeList } from "./AlternativeList";
+import {
+  AlternativeList,
+  AlternativesToggle,
+  useAlternativeSwap,
+} from "../shared/AlternativeList";
 
 interface EditFields {
   title: string;
@@ -41,19 +45,8 @@ export function AcCard({
   onSelectAlternative,
 }: AcCardProps) {
   const [draft, setDraft] = useState<EditFields>(criterion);
-  const [showAlternatives, setShowAlternatives] = useState(false);
-  const [swappingId, setSwappingId] = useState<number | null>(null);
   const alternatives = criterion.alternatives ?? [];
-
-  async function handleUseAlternative(candidateId: number) {
-    if (!onSelectAlternative) return;
-    setSwappingId(candidateId);
-    try {
-      await onSelectAlternative(candidateId);
-    } finally {
-      setSwappingId(null);
-    }
-  }
+  const swap = useAlternativeSwap(onSelectAlternative);
 
   // Re-seed the draft from the current values each time edit mode is entered,
   // so a previous (cancelled) edit never leaks into a later edit session.
@@ -155,18 +148,11 @@ export function AcCard({
             <ScorePill label="Coverage" value={criterion.scores.coverage} />
           </div>
           {onSelectAlternative && alternatives.length > 0 && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowAlternatives((prev) => !prev);
-              }}
-              aria-expanded={showAlternatives}
-              className="mt-2 text-sm font-medium text-primary hover:underline"
-            >
-              {showAlternatives ? "▴" : "▾"} {alternatives.length} other version
-              {alternatives.length === 1 ? "" : "s"}
-            </button>
+            <AlternativesToggle
+              count={alternatives.length}
+              expanded={swap.expanded}
+              onToggle={swap.toggle}
+            />
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -174,11 +160,12 @@ export function AcCard({
           <AcceptRejectButtons status={criterion.status} onAccept={onAccept} onReject={onReject} />
         </div>
       </div>
-      {onSelectAlternative && showAlternatives && alternatives.length > 0 && (
+      {onSelectAlternative && swap.expanded && alternatives.length > 0 && (
         <AlternativeList
           alternatives={alternatives}
-          swappingId={swappingId}
-          onUse={handleUseAlternative}
+          swappingId={swap.swappingId}
+          onUse={swap.use}
+          renderBody={(alt) => `GIVEN ${alt.given}, WHEN ${alt.when}, THEN ${alt.then}`}
         />
       )}
     </div>

@@ -20,8 +20,6 @@ COMBINED_PROMPT = Path(__file__).resolve().parent.parent / "ai_prompts" / "votin
 
 # Two attempts: one retry of a reply that came back without a usable vote.
 EMPTY_REPLY_ATTEMPTS = 2
-# Four short rubric verdicts fit comfortably; caps a runaway reply's cost.
-MAX_VOTE_TOKENS = 2000
 
 COMBINED_VOTE_SCHEMA = {
 	"type": "json_schema",
@@ -56,6 +54,20 @@ def _merge_json_objects(texts: list[str]) -> dict:
 		if isinstance(value, dict):
 			merged.update(value)
 	return merged
+
+
+def _accepts_temperature(model: str) -> bool:
+	"""False for OpenAI reasoning models, which only accept the default temperature.
+
+	LiteLLM lists `temperature` as supported for them, so `drop_params` does
+	not strip it and the request would be rejected. An unknown model keeps it.
+	"""
+	if not model.startswith("openai/"):
+		return True
+	try:
+		return not litellm.supports_reasoning(model=model)
+	except Exception:
+		return True
 
 
 def default_timeout() -> float:
@@ -119,6 +131,11 @@ class LiteLLMCombinedClient:
 
 		schema_hint = json.dumps(CombinedVote.model_json_schema(), indent=2)
 
+		# No max_tokens: OpenAI reasoning models reject it (LiteLLM doesn't
+		# translate it to max_completion_tokens for them), and a small cap would
+		# eat into their reasoning tokens and truncate the vote.
+		sampling = {"temperature": self.temperature} if _accepts_temperature(self.model) else {}
+
 		# A successful reply can still carry no usable vote, and LiteLLM's own
 		# num_retries only covers HTTP/network errors — so retry that case here.
 		last_error: Exception | None = None
@@ -137,8 +154,10 @@ class LiteLLMCombinedClient:
 					{"role": "user", "content": prompt},
 				],
 				response_format=COMBINED_VOTE_SCHEMA,
-				temperature=self.temperature,
-				max_tokens=MAX_VOTE_TOKENS,
+				**sampling,
+				# Drop whatever else a given judge doesn't support instead of
+				# failing the vote.
+				drop_params=True,
 				timeout=self.timeout,
 				num_retries=self.num_retries,
 			)

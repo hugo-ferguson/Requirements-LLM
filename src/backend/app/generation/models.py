@@ -217,3 +217,102 @@ class EnsembleResult(BaseModel):
     @property
     def failed(self) -> list[AgentResult]:
         return [result for result in self.results if not result.ok]
+
+
+# --- UAT test cases ---------------------------------------------------------
+#
+# Same two-pass shape as acceptance criteria, one level down: per accepted AC,
+# the anchor writes the test cases (title + description) and every other agent
+# writes its own description for each, answering by case number.
+
+
+class GeneratedUatCase(BaseModel):
+    """One UAT test case, as written by a model."""
+
+    title: str = Field(description="Short label for the scenario under test", min_length=3)
+    description: str = Field(
+        description="Concrete steps/data a tester follows and the expected result",
+        min_length=3,
+    )
+
+
+class GeneratedUatCaseSet(BaseModel):
+    """Pass-1 (anchor) output for one acceptance criterion."""
+
+    cases: list[GeneratedUatCase] = Field(
+        description="2-4 concrete UAT test cases grounded in the acceptance criterion",
+        min_length=2,
+        max_length=4,
+    )
+
+
+class NumberedUatCase(BaseModel):
+    """Pass-2 answer: a description for one of the anchor's numbered case titles."""
+
+    title_number: int = Field(
+        description="The number of the test case title this answers, as given in the list", ge=1
+    )
+    description: str = Field(
+        description="Concrete steps/data a tester follows and the expected result",
+        min_length=3,
+    )
+
+
+class NumberedUatCaseSet(BaseModel):
+    """Pass-2 output for one acceptance criterion."""
+
+    cases: list[NumberedUatCase] = Field(
+        description="One entry per numbered test case title, identified by its number",
+        min_length=1,
+        max_length=10,
+    )
+
+
+class UatAgentResult(BaseModel):
+    """One agent's UAT outcome for one AC, including the failure case."""
+
+    agent_id: str
+    provider: str
+    model: str
+    cases: list[GeneratedUatCase] = Field(default_factory=list)
+    duration_ms: int = 0
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+
+class UatCandidate(BaseModel):
+    """One agent's version of one test case, with its score once voted."""
+
+    agent_id: str
+    case: GeneratedUatCase
+    relevance: float = 0.0
+    correctness: float = 0.0
+    understandability: float = 0.0
+    coverage: float = 0.0
+    overall_score: float = 0.0
+    scoring_failed: bool = False
+
+
+class UatCandidateGroup(BaseModel):
+    """Every agent's version of one test case title, best first after `rank()`."""
+
+    title: str
+    candidates: list[UatCandidate] = Field(default_factory=list)
+
+    def rank(self) -> None:
+        # Same rule as CandidateGroup.rank: unrated last, then best score,
+        # then agent id so equal scores resolve the same way every run.
+        self.candidates.sort(
+            key=lambda c: (c.scoring_failed, -c.overall_score, c.agent_id)
+        )
+
+    @property
+    def winner(self) -> UatCandidate:
+        return self.candidates[0]
+
+    @property
+    def alternatives(self) -> list[UatCandidate]:
+        return self.candidates[1:]

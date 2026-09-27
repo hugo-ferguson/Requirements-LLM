@@ -66,5 +66,21 @@ export function useUatCases(sessionId: string) {
     [sessionId],
   );
 
-  return { groups, isLoading, loadError, updateText, updateStatus, applyApproved };
+  const selectAlternative = useCallback(
+    async (uatId: number, candidateId: number) => {
+      const updated = await uatCasesApi.selectAlternative(sessionId, uatId, candidateId);
+      spliceCase(updated);
+    },
+    [sessionId],
+  );
+
+  return {
+    groups,
+    isLoading,
+    loadError,
+    updateText,
+    updateStatus,
+    applyApproved,
+    selectAlternative,
+  };
 }

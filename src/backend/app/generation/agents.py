@@ -16,29 +16,39 @@ from app.generation.config import GenerationAgentConfig
 from app.generation.models import (
     GeneratedCriteriaSet,
     GeneratedCriterion,
+    GeneratedUatCase,
+    GeneratedUatCaseSet,
     NumberedCriteriaSet,
     NumberedCriterion,
+    NumberedUatCase,
+    NumberedUatCaseSet,
 )
 from app.generation.prompts import SYSTEM_PROMPT, GenerationDeps
 
 GenerationAgent = Agent[GenerationDeps, GeneratedCriteriaSet]
-GenerationOutput = type[GeneratedCriteriaSet] | type[NumberedCriteriaSet]
+GenerationOutput = (
+    type[GeneratedCriteriaSet]
+    | type[NumberedCriteriaSet]
+    | type[GeneratedUatCaseSet]
+    | type[NumberedUatCaseSet]
+)
 
 
 class AgentBuildError(RuntimeError):
     """Raised when an agent cannot be constructed (missing key, missing extra)."""
 
 
-def _stub_output(
-    config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet
-) -> GeneratedCriteriaSet | NumberedCriteriaSet:
+def _stub_output(config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet):
     """Deterministic output for the `test` provider.
 
     Two criteria are identical across every test agent and one is seeded with
     the agent id, so a two-agent test roster yields three distinct pooled
     candidates and still exercises the cross-agent dedupe path. As a pass-2
-    follower it answers titles 1-3 with the same text, by number.
+    follower it answers titles 1-3 with the same text, by number. UAT output
+    follows the same pattern with two cases.
     """
+    if output_type in (GeneratedUatCaseSet, NumberedUatCaseSet):
+        return _stub_uat_output(config, output_type)
     full = _stub_criteria(config)
     if output_type is NumberedCriteriaSet:
         return NumberedCriteriaSet(
@@ -48,6 +58,29 @@ def _stub_output(
             ]
         )
     return full
+
+
+def _stub_uat_output(
+    config: GenerationAgentConfig, output_type: GenerationOutput
+) -> GeneratedUatCaseSet | NumberedUatCaseSet:
+    cases = [
+        GeneratedUatCase(
+            title="Log in with valid credentials",
+            description=f"{config.id}: enter a registered email and password; the home page opens",
+        ),
+        GeneratedUatCase(
+            title="Reject a wrong password",
+            description=f"{config.id}: enter a wrong password; an error shows and login fails",
+        ),
+    ]
+    if output_type is NumberedUatCaseSet:
+        return NumberedUatCaseSet(
+            cases=[
+                NumberedUatCase(title_number=n, description=c.description)
+                for n, c in enumerate(cases, start=1)
+            ]
+        )
+    return GeneratedUatCaseSet(cases=cases)
 
 
 def _stub_criteria(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
@@ -160,7 +193,7 @@ def _build_model(
 
 
 def _output_type(config: GenerationAgentConfig, output_type: GenerationOutput):
-    """Choose how the model is asked to return `GeneratedCriteriaSet`.
+    """Choose how the model is asked to return its structured output.
 
     PydanticAI's default is a tool call. Small local models served through
     Ollama are unreliable at that — they emit the tool-call envelope
@@ -178,21 +211,31 @@ def _output_type(config: GenerationAgentConfig, output_type: GenerationOutput):
 
 
 def build_agent(
-    config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet
+    config: GenerationAgentConfig,
+    output_type: GenerationOutput = GeneratedCriteriaSet,
+    *,
+    system_prompt: str = SYSTEM_PROMPT,
+    with_context: bool = True,
 ) -> GenerationAgent:
     """Construct a generation agent for one roster entry.
 
     `output_type` is `NumberedCriteriaSet` for pass-2 followers in
     title-anchored generation, and the full criteria set everywhere else.
+    UAT generation passes its own output types and system prompt, and
+    `with_context=False`: it works from one AC, not the user story and its
+    retrieved documents.
     """
     agent: GenerationAgent = Agent(
         _build_model(config, output_type),
         output_type=_output_type(config, output_type),
         deps_type=GenerationDeps,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         model_settings=ModelSettings(temperature=config.temperature),
         retries=2,
     )
+
+    if not with_context:
+        return agent
 
     @agent.system_prompt
     def inject_project_context(ctx: RunContext[GenerationDeps]) -> str:

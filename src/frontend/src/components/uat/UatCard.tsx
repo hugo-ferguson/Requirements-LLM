@@ -3,6 +3,11 @@ import type { UatCase } from "../../api/uatCases";
 import { ScorePill } from "../ac/ScorePill";
 import { OverallScoreBadge } from "../ac/OverallScoreBadge";
 import { AcceptRejectButtons } from "../ac/AcceptRejectButtons";
+import {
+  AlternativeList,
+  AlternativesToggle,
+  useAlternativeSwap,
+} from "../shared/AlternativeList";
 
 interface EditFields {
   title: string;
@@ -20,6 +25,8 @@ interface UatCardProps {
   onEditSave?: (fields: EditFields) => void;
   onAccept: () => void;
   onReject: () => void;
+  /** Enables the other-versions dropdown; resolves once the swap is saved. */
+  onSelectAlternative?: (candidateId: number) => Promise<void>;
 }
 
 export function UatCard({
@@ -33,8 +40,11 @@ export function UatCard({
   onEditSave,
   onAccept,
   onReject,
+  onSelectAlternative,
 }: UatCardProps) {
   const [draft, setDraft] = useState<EditFields>(uatCase);
+  const alternatives = uatCase.alternatives ?? [];
+  const swap = useAlternativeSwap(onSelectAlternative);
 
   // Re-seed the draft from the current values each time edit mode is entered,
   // so a previous (cancelled) edit never leaks into a later edit session.
@@ -92,6 +102,9 @@ export function UatCard({
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-400">#UAT {index + 1}</span>
             <span className="font-bold text-gray-900">{uatCase.title}</span>
+            {uatCase.source_agent && (
+              <span className="text-xs font-medium text-gray-400">by {uatCase.source_agent}</span>
+            )}
             {onEditStart && (
               <button
                 type="button"
@@ -113,12 +126,27 @@ export function UatCard({
             <ScorePill label="Understandability" value={uatCase.scores.understandability} />
             <ScorePill label="Coverage" value={uatCase.scores.coverage} />
           </div>
+          {onSelectAlternative && alternatives.length > 0 && (
+            <AlternativesToggle
+              count={alternatives.length}
+              expanded={swap.expanded}
+              onToggle={swap.toggle}
+            />
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <OverallScoreBadge value={uatCase.overall_score} />
           <AcceptRejectButtons status={uatCase.status} onAccept={onAccept} onReject={onReject} />
         </div>
       </div>
+      {onSelectAlternative && swap.expanded && alternatives.length > 0 && (
+        <AlternativeList
+          alternatives={alternatives}
+          swappingId={swap.swappingId}
+          onUse={swap.use}
+          renderBody={(alt) => alt.description}
+        />
+      )}
     </div>
   );
 }

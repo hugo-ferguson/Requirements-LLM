@@ -62,7 +62,8 @@ def test_normal_content_is_parsed_in_one_call(fake_completion) -> None:
 
     assert vote.correctness.score == 4
     assert len(calls) == 1
-    assert calls[0]["max_tokens"] == provider.MAX_VOTE_TOKENS
+    assert "max_tokens" not in calls[0]
+    assert calls[0]["temperature"] == 0.1
 
 
 def test_vote_is_recovered_from_tool_calls_when_content_is_empty(fake_completion) -> None:
@@ -142,3 +143,16 @@ def test_an_incomplete_split_vote_is_retried_then_reported(fake_completion) -> N
     with pytest.raises(ValueError, match=r"no complete vote \(finish_reason='tool_use', tool_calls=2\)"):
         _evaluate()
     assert len(calls) == 2
+
+
+def test_an_openai_reasoning_judge_is_not_sent_temperature_or_max_tokens(fake_completion) -> None:
+    # Live failure: gpt-6-luna rejected every vote over `max_tokens`, and
+    # reasoning models only accept the default temperature.
+    replies, calls = fake_completion
+    replies.append(_reply(content=VOTE_JSON))
+    client = LiteLLMCombinedClient("Luna", "openai/gpt-6-luna")
+
+    asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
+
+    assert "temperature" not in calls[0]
+    assert "max_tokens" not in calls[0]

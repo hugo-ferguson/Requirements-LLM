@@ -41,7 +41,7 @@ _APP_MIN, _APP_MAX = 0.0, 5.0
 @dataclass(frozen=True)
 class CandidateScore:
     """
-    One candidate's 0-10 rubric scores — structurally identical to
+    One candidate's 0-5 rubric scores — structurally identical to
     AcceptanceCriterionScores/UatCaseScores so services build either
     directly from these fields.
     """
@@ -98,14 +98,15 @@ def score_candidates(
     settings: Settings | None = None,
 ) -> list[CandidateScore]:
     """
-    Scores each candidate string against `prompt` via the gemini-only voting
-    layer, returning one CandidateScore per candidate in the SAME ORDER
+    Scores each candidate string against `prompt` via the voting layer, using
+    every judge in `Settings.voting_judges` and averaging their rubric scores.
+    Returns one CandidateScore per candidate in the SAME ORDER
     `candidates` was given. (The voting layer itself sorts its `output` list
     by score descending, so results are matched back to candidates by exact
     text content, not position.)
 
     Never raises. Any failure — the voting package failing to import,
-    a missing/invalid GEMINI_API_KEY, a network error, an unexpected
+    a missing/invalid API key, a network error, an unexpected
     response shape, or a mismatch between candidates and returned results —
     is logged and produces an all-zero CandidateScore per candidate, so a
     scoring outage never blocks AC/UAT generation or regeneration.
@@ -132,11 +133,11 @@ def score_candidates(
     try:
         evaluation_input = EvaluationInput(
             ai="requirements-llm",
-            model="claude-only",
+            model="+".join(resolved_settings.voting_judge_names),
             prompt=prompt,
             output=list(candidates),
             reference_answer=reference_answer,
-            providers=["claude"],
+            providers=resolved_settings.voting_judge_names,
         )
         result = asyncio.run(_evaluate_input(evaluation_input))
         scores = _match_to_candidates(candidates, result.output)
@@ -162,10 +163,10 @@ def score_candidates(
             logger.warning(
                 "every one of %d candidate(s) scored 0.0 — this is almost always a "
                 "misconfigured voter rather than genuinely worthless criteria. "
-                "Check that VOTING_PROVIDERS defines %r and that its model is "
+                "Check that VOTING_PROVIDERS defines %s and that their models are "
                 "reachable; see the provider warning logged above for the cause.",
                 len(scores),
-                evaluation_input.providers[0] if evaluation_input.providers else "claude",
+                ", ".join(repr(name) for name in evaluation_input.providers),
             )
         return scores
     except Exception:

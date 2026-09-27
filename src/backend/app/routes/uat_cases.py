@@ -40,11 +40,11 @@ def list_uat_cases(
 
 
 @router.post("/generate", response_model=UatCaseGroupsResult)
-def generate_uat_cases(
+async def generate_uat_cases(
     session_id: int, service: UatCaseService = Depends(get_uat_case_service)
 ) -> UatCaseGroupsResult:
     try:
-        result = service.generate(session_id)
+        result = await service.generate(session_id)
     except GenerationError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     if result is None:
@@ -108,3 +108,16 @@ def apply_approved(
     if group is None:
         raise HTTPException(status_code=404, detail="UAT case not found")
     return group
+
+
+@router.post("/{uat_id}/alternatives/{candidate_id}/select", response_model=UatCase)
+def select_uat_alternative(
+    session_id: int,
+    uat_id: int,
+    candidate_id: int,
+    service: UatCaseService = Depends(get_uat_case_service),
+) -> UatCase:
+    result = service.select_alternative(session_id, uat_id, candidate_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="UAT case or alternative not found")
+    return result

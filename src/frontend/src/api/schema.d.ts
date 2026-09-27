@@ -314,6 +314,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/uat-cases/{uat_id}/alternatives/{candidate_id}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select Uat Alternative */
+        post: operations["select_uat_alternative_sessions__session_id__uat_cases__uat_id__alternatives__candidate_id__select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/upload": {
         parameters: {
             query?: never;
@@ -654,6 +671,25 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "accepted" | "rejected";
+            /** Source Agent */
+            source_agent?: string | null;
+            /** Alternatives */
+            alternatives?: components["schemas"]["UatCaseAlternative"][];
+        };
+        /**
+         * UatCaseAlternative
+         * @description Another model's version of the same test case; swappable via `candidate_id`.
+         */
+        UatCaseAlternative: {
+            /** Candidate Id */
+            candidate_id?: number | null;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
         };
         /** UatCaseGroup */
         UatCaseGroup: {
@@ -1442,6 +1478,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UatCaseGroup"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_uat_alternative_sessions__session_id__uat_cases__uat_id__alternatives__candidate_id__select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+                candidate_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
                 };
             };
             /** @description Validation Error */
