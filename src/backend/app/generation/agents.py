@@ -68,7 +68,7 @@ def _build_model(config: GenerationAgentConfig) -> Model:
 
     if config.provider in ("openai", "ollama"):
         try:
-            from pydantic_ai.models.openai import OpenAIChatModel
+            from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
             from pydantic_ai.providers.openai import OpenAIProvider
         except ImportError as error:  # pragma: no cover - depends on extras
             raise AgentBuildError(
@@ -82,17 +82,23 @@ def _build_model(config: GenerationAgentConfig) -> Model:
                 config.base_url or "http://localhost:11434/v1").rstrip("/")
             if not base_url.endswith("/v1"):
                 base_url = f"{base_url}/v1"
-            provider = OpenAIProvider(base_url=base_url, api_key="ollama")
-        else:
-            api_key = config.api_key()
-            if not api_key:
-                raise AgentBuildError(
-                    f"Agent {config.id!r} needs {config.api_key_env} set in the environment."
-                )
-            provider = OpenAIProvider(
-                api_key=api_key, base_url=config.base_url)
+            return OpenAIChatModel(
+                config.model,
+                provider=OpenAIProvider(base_url=base_url, api_key="ollama"),
+            )
 
-        return OpenAIChatModel(config.model, provider=provider)
+        api_key = config.api_key()
+        if not api_key:
+            raise AgentBuildError(
+                f"Agent {config.id!r} needs {config.api_key_env} set in the environment."
+            )
+        # OpenAI's reasoning models reject function tools on /v1/chat/completions
+        # unless reasoning is switched off, and structured output here is a tool
+        # call. The Responses API accepts both, so real OpenAI goes there.
+        return OpenAIResponsesModel(
+            config.model,
+            provider=OpenAIProvider(api_key=api_key, base_url=config.base_url),
+        )
 
     if config.provider == "anthropic":
         try:

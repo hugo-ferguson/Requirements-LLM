@@ -25,6 +25,14 @@
             "enabled": false
         },
         {
+            "id": "openai-luna",
+            "provider": "openai",
+            "model": "gpt-6-luna",
+            "api_key_env": "OPENAI_API_KEY",
+            "temperature": 1.0,
+            "enabled": true
+        },
+        {
             "id": "claude",
             "provider": "anthropic",
             "model": "claude-sonnet-4-5",
