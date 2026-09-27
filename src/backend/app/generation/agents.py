@@ -1,9 +1,9 @@
 """Builds one PydanticAI agent per roster entry.
 
-Every agent shares the same `output_type`, `deps_type` and system prompt. Only
-the underlying model changes. That shared contract is what makes the ensemble
-outputs comparable, and it is why adding a model is a config edit rather than a
-code change.
+Every agent shares the same `deps_type` and system prompt, and every agent in a
+given pass shares the same `output_type`. Only the underlying model changes.
+That shared contract is what makes the ensemble outputs comparable, and it is
+why adding a model is a config edit rather than a code change.
 """
 
 from __future__ import annotations
@@ -13,23 +13,44 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from app.generation.config import GenerationAgentConfig
-from app.generation.models import GeneratedCriteriaSet, GeneratedCriterion
+from app.generation.models import (
+    GeneratedCriteriaSet,
+    GeneratedCriterion,
+    NumberedCriteriaSet,
+    NumberedCriterion,
+)
 from app.generation.prompts import SYSTEM_PROMPT, GenerationDeps
 
 GenerationAgent = Agent[GenerationDeps, GeneratedCriteriaSet]
+GenerationOutput = type[GeneratedCriteriaSet] | type[NumberedCriteriaSet]
 
 
 class AgentBuildError(RuntimeError):
     """Raised when an agent cannot be constructed (missing key, missing extra)."""
 
 
-def _stub_output(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
+def _stub_output(
+    config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet
+) -> GeneratedCriteriaSet | NumberedCriteriaSet:
     """Deterministic output for the `test` provider.
 
     Two criteria are identical across every test agent and one is seeded with
     the agent id, so a two-agent test roster yields three distinct pooled
-    candidates and still exercises the cross-agent dedupe path.
+    candidates and still exercises the cross-agent dedupe path. As a pass-2
+    follower it answers titles 1-3 with the same text, by number.
     """
+    full = _stub_criteria(config)
+    if output_type is NumberedCriteriaSet:
+        return NumberedCriteriaSet(
+            criteria=[
+                NumberedCriterion(title_number=n, given=c.given, when=c.when, then=c.then)
+                for n, c in enumerate(full.criteria, start=1)
+            ]
+        )
+    return full
+
+
+def _stub_criteria(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
     return GeneratedCriteriaSet(
         user_story_summary="Stubbed summary for offline tests.",
         criteria=[
@@ -55,7 +76,9 @@ def _stub_output(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
     )
 
 
-def _build_model(config: GenerationAgentConfig) -> Model:
+def _build_model(
+    config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet
+) -> Model:
     """Translate a roster entry into a concrete PydanticAI model object.
 
     Provider SDKs are imported inside each branch so that a provider the team
@@ -64,7 +87,7 @@ def _build_model(config: GenerationAgentConfig) -> Model:
     if config.provider == "test":
         from pydantic_ai.models.test import TestModel
 
-        return TestModel(custom_output_args=_stub_output(config))
+        return TestModel(custom_output_args=_stub_output(config, output_type))
 
     if config.provider in ("openai", "ollama"):
         try:
@@ -136,7 +159,7 @@ def _build_model(config: GenerationAgentConfig) -> Model:
         f"Unknown provider {config.provider!r} for agent {config.id!r}.")
 
 
-def _output_type(config: GenerationAgentConfig):
+def _output_type(config: GenerationAgentConfig, output_type: GenerationOutput):
     """Choose how the model is asked to return `GeneratedCriteriaSet`.
 
     PydanticAI's default is a tool call. Small local models served through
@@ -150,15 +173,21 @@ def _output_type(config: GenerationAgentConfig):
     which Anthropic requires (it has no native JSON-schema mode).
     """
     if config.provider == "ollama":
-        return NativeOutput(GeneratedCriteriaSet)
-    return GeneratedCriteriaSet
+        return NativeOutput(output_type)
+    return output_type
 
 
-def build_agent(config: GenerationAgentConfig) -> GenerationAgent:
-    """Construct a generation agent for one roster entry."""
+def build_agent(
+    config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet
+) -> GenerationAgent:
+    """Construct a generation agent for one roster entry.
+
+    `output_type` is `NumberedCriteriaSet` for pass-2 followers in
+    title-anchored generation, and the full criteria set everywhere else.
+    """
     agent: GenerationAgent = Agent(
-        _build_model(config),
-        output_type=_output_type(config),
+        _build_model(config, output_type),
+        output_type=_output_type(config, output_type),
         deps_type=GenerationDeps,
         system_prompt=SYSTEM_PROMPT,
         model_settings=ModelSettings(temperature=config.temperature),

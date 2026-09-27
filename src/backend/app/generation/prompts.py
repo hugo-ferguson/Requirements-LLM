@@ -109,17 +109,18 @@ def build_descriptions_prompt(
 
     Every agent answers the same titles, so their outputs line up one-to-one
     and the voting layer compares like against like instead of scoring an
-    arbitrary union. Titles must come back verbatim — they are the join key,
-    so a reworded title silently drops that agent's candidate from its group.
+    arbitrary union. Answers are identified by title number, not by copying
+    the title back: the number is the join key, and the orchestrator attaches
+    the anchor's exact title itself.
     """
     numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
     return (
-        "Below is a fixed list of acceptance criteria titles for a user story. "
-        "Write your own given / when / then for EVERY title in the list.\n\n"
+        "Below is a fixed, numbered list of acceptance criteria titles for a user "
+        "story. Write your own given / when / then for EVERY title in the list.\n\n"
         "Rules for this task:\n"
-        "- Return exactly one criterion per title, in the same order.\n"
-        "- Copy each title back EXACTLY as written. Do not reword, renumber, "
-        "reorder, merge or add titles.\n"
+        "- Return exactly one entry per title, identified by its title_number "
+        "from the list.\n"
+        "- Do not skip, merge or add titles.\n"
         "- Write the strongest given / when / then you can for the behaviour "
         "the title names.\n\n"
         f"Titles:\n{numbered}\n\n"

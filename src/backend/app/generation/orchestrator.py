@@ -22,6 +22,7 @@ from app.generation.models import (
     CandidateGroup,
     EnsembleResult,
     GeneratedCriterion,
+    NumberedCriteriaSet,
     title_key,
 )
 from app.generation.prompts import (
@@ -41,6 +42,7 @@ async def _run_one(
     max_criteria: int,
     timeout_seconds: float,
     prompt: str | None = None,
+    anchor_titles: list[str] | None = None,
 ) -> AgentResult:
     """Run a single agent, converting every failure mode into a result object.
 
@@ -48,7 +50,9 @@ async def _run_one(
     fail the request — the same convention the voting layer uses.
 
     `prompt` overrides the default user message so the title-anchored passes
-    can reuse this same failure handling instead of duplicating it.
+    can reuse this same failure handling instead of duplicating it. Passing
+    `anchor_titles` makes this a pass-2 run: the agent answers by title
+    number and the anchor's exact titles are attached here.
     """
     started = time.perf_counter()
 
@@ -56,7 +60,10 @@ async def _run_one(
         return int((time.perf_counter() - started) * 1000)
 
     try:
-        agent = build_agent(config)
+        if anchor_titles is None:
+            agent = build_agent(config)
+        else:
+            agent = build_agent(config, output_type=NumberedCriteriaSet)
         prompt = prompt if prompt is not None else build_user_prompt(deps, max_criteria)
         run = await asyncio.wait_for(agent.run(prompt, deps=deps), timeout=timeout_seconds)
     except AgentBuildError as error:
@@ -89,13 +96,50 @@ async def _run_one(
             error=f"{error.__class__.__name__}: {error}",
         )
 
+    if anchor_titles is None:
+        criteria = list(run.output.criteria)
+    else:
+        criteria = _attach_anchor_titles(config.id, run.output, anchor_titles)
+
     return AgentResult(
         agent_id=config.id,
         provider=config.provider,
         model=config.model,
-        criteria=list(run.output.criteria)[:max_criteria],
+        criteria=criteria[:max_criteria],
         duration_ms=elapsed_ms(),
     )
+
+
+def _attach_anchor_titles(
+    agent_id: str, output: NumberedCriteriaSet, titles: list[str]
+) -> list[GeneratedCriterion]:
+    """Turn numbered pass-2 answers into criteria carrying the anchor's titles.
+
+    A number outside the list, or a second answer to the same number, is
+    dropped: there is no title to attach, or the group already has this
+    agent's answer.
+    """
+    criteria: list[GeneratedCriterion] = []
+    answered: set[int] = set()
+    for item in output.criteria:
+        number = item.title_number
+        if not 1 <= number <= len(titles) or number in answered:
+            continue
+        answered.add(number)
+        criteria.append(
+            GeneratedCriterion(
+                title=titles[number - 1], given=item.given, when=item.when, then=item.then
+            )
+        )
+
+    dropped = len(output.criteria) - len(criteria)
+    if dropped:
+        logger.info(
+            "agent=%s gave %d answer(s) with an unknown or repeated title number; dropped",
+            agent_id,
+            dropped,
+        )
+    return criteria
 
 
 async def run_ensemble(
@@ -189,6 +233,7 @@ async def run_title_anchored_ensemble(
                 max_criteria=max_criteria,
                 timeout_seconds=timeout_seconds,
                 prompt=descriptions_prompt,
+                anchor_titles=titles,
             )
             for config in rest
         )
