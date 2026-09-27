@@ -116,7 +116,7 @@ def test_score_candidates_falls_back_to_zero_when_the_provider_call_raises(monke
 
     scores = score_candidates("prompt", ["a", "b"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0), CandidateScore(0, 0, 0, 0, 0)]
+    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_falls_back_to_zero_when_results_dont_cover_all_candidates(monkeypatch):
@@ -131,7 +131,7 @@ def test_score_candidates_falls_back_to_zero_when_results_dont_cover_all_candida
 
     scores = score_candidates("prompt", ["a", "b"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0), CandidateScore(0, 0, 0, 0, 0)]
+    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_falls_back_to_zero_when_voting_failed_to_import(monkeypatch):
@@ -139,7 +139,7 @@ def test_score_candidates_falls_back_to_zero_when_voting_failed_to_import(monkey
 
     scores = score_candidates("prompt", ["a"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0)]
+    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_bridges_gemini_api_key_into_environment(monkeypatch):
@@ -174,3 +174,37 @@ def test_score_candidates_does_not_overwrite_an_already_set_gemini_api_key(monke
     score_candidates("prompt", ["a"], settings=settings)
 
     assert os.environ.get("GEMINI_API_KEY") == "existing-key"
+
+
+def test_score_marks_candidates_the_voting_layer_failed_to_rate(monkeypatch):
+    """The -1 sentinel clamps to 0.0, so `failed` is the only way to tell."""
+    async def fake_evaluate_input(evaluation_input):
+        outputs = [
+            _evaluated_output(
+                "a", overall=-1, relevance=-1, correctness=-1,
+                understandability=-1, coverage=-1,
+            ),
+            _evaluated_output(
+                "b", overall=0, relevance=0, correctness=0,
+                understandability=0, coverage=0,
+            ),
+        ]
+        return _voting_result(evaluation_input.prompt, outputs)
+
+    monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
+
+    scores = scoring.score_candidates("prompt", ["a", "b"])
+
+    assert scores[0].overall == 0.0 and scores[0].failed is True
+    assert scores[1].overall == 0.0 and scores[1].failed is False
+
+
+def test_zero_fallback_scores_are_marked_as_failed(monkeypatch):
+    def boom(_):
+        raise RuntimeError("voter down")
+
+    monkeypatch.setattr(scoring, "_evaluate_input", boom)
+
+    scores = scoring.score_candidates("prompt", ["a"])
+
+    assert scores[0].failed is True

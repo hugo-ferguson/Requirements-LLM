@@ -20,18 +20,24 @@ from app.services.conversation import (
     EmptyConversationError,
     GenerationError,
 )
+from app.dependencies import get_generation_service
+from app.services.generation import GenerationService, NoUserStoryError
 from app.services.sessions import SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-def get_session_service(session: Session = Depends(get_session)) -> SessionService:
+def get_session_service(
+    session: Session = Depends(get_session),
+    generation_service: GenerationService = Depends(get_generation_service),
+) -> SessionService:
     return SessionService(
         SessionRepository(session),
         MessageRepository(session),
         ConversationService(),
         AcceptanceCriteriaRepository(session),
         UatCaseRepository(session),
+        generation_service,
     )
 
 
@@ -92,12 +98,12 @@ def post_message(
 
 
 @router.post("/{session_id}/generate", response_model=GenerateResult)
-def generate(
+async def generate(
     session_id: int, service: SessionService = Depends(get_session_service)
 ) -> GenerateResult:
     try:
-        result = service.generate(session_id)
-    except EmptyConversationError as error:
+        result = await service.generate(session_id)
+    except (EmptyConversationError, NoUserStoryError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except GenerationError as error:
         # The request was fine; the upstream model was not.
