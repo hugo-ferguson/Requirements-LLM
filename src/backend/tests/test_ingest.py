@@ -114,6 +114,18 @@ def test_chunking_terminates_without_whitespace_boundaries():
     assert chunk_text("x" * 2500, chunk_size=500, overlap=80)
 
 
+def test_chunking_terminates_when_a_break_falls_exactly_overlap_past_the_start():
+    # A line break exactly `overlap` characters into the next chunk used to
+    # make that chunk restart where it began, appending it forever — a real
+    # PDF grew the backend until Docker's VM ran out of memory.
+    text = ("x" * 849) + "\n" + ("y" * 149) + "\n" + ("z" * 3000)
+
+    chunks = chunk_text(text, chunk_size=1000, overlap=150)
+
+    assert 1 < len(chunks) < 10
+    assert chunks[-1].endswith("z")
+
+
 def test_blank_text_produces_no_chunks():
     assert chunk_text("   \n  ") == []
 
