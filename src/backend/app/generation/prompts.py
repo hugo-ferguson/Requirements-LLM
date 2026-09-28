@@ -109,19 +109,61 @@ def build_descriptions_prompt(
 
     Every agent answers the same titles, so their outputs line up one-to-one
     and the voting layer compares like against like instead of scoring an
-    arbitrary union. Titles must come back verbatim — they are the join key,
-    so a reworded title silently drops that agent's candidate from its group.
+    arbitrary union. Answers are identified by title number, not by copying
+    the title back: the number is the join key, and the orchestrator attaches
+    the anchor's exact title itself.
     """
     numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
     return (
-        "Below is a fixed list of acceptance criteria titles for a user story. "
-        "Write your own given / when / then for EVERY title in the list.\n\n"
+        "Below is a fixed, numbered list of acceptance criteria titles for a user "
+        "story. Write your own given / when / then for EVERY title in the list.\n\n"
         "Rules for this task:\n"
-        "- Return exactly one criterion per title, in the same order.\n"
-        "- Copy each title back EXACTLY as written. Do not reword, renumber, "
-        "reorder, merge or add titles.\n"
+        "- Return exactly one entry per title, identified by its title_number "
+        "from the list.\n"
+        "- Do not skip, merge or add titles.\n"
         "- Write the strongest given / when / then you can for the behaviour "
         "the title names.\n\n"
         f"Titles:\n{numbered}\n\n"
         f"User story:\n{deps.user_story.strip()}"
+    )
+
+
+UAT_SYSTEM_PROMPT = """\
+You are a QA engineer writing User Acceptance Test cases for one accepted
+Gherkin acceptance criterion (Given/When/Then).
+
+Each test case needs a short title and a description with concrete steps/data
+a human tester could execute and the expected result. Stay grounded in what
+the criterion actually states — do not invent unrelated functionality.
+"""
+
+
+def build_uat_cases_prompt(acceptance_criterion: str) -> str:
+    """Pass 1 for UAT: the anchor agent writes the test cases for one AC."""
+    return (
+        "Write 2-4 concrete UAT test cases for the acceptance criterion below. "
+        "Cover the happy path and at least one edge or negative case. Each "
+        "title must name a distinct scenario — these titles are the list every "
+        "other reviewer will work from.\n\n"
+        f"Acceptance criterion:\n{acceptance_criterion.strip()}"
+    )
+
+
+def build_uat_descriptions_prompt(acceptance_criterion: str, titles: list[str]) -> str:
+    """Pass 2 for UAT: write a description for each fixed, numbered case title.
+
+    Answers are identified by number, like `build_descriptions_prompt`, so a
+    reworded title can't drop an agent's answer.
+    """
+    numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    return (
+        "Below is a fixed, numbered list of UAT test case titles for an "
+        "acceptance criterion. Write your own description for EVERY title.\n\n"
+        "Rules for this task:\n"
+        "- Return exactly one entry per title, identified by its title_number "
+        "from the list.\n"
+        "- Do not skip, merge or add test cases.\n"
+        "- Give concrete steps/data and the expected result.\n\n"
+        f"Test case titles:\n{numbered}\n\n"
+        f"Acceptance criterion:\n{acceptance_criterion.strip()}"
     )

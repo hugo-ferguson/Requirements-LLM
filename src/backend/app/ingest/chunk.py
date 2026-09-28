@@ -25,7 +25,11 @@ def chunk_text(
 		end = min(start + chunk_size, len(text))
 
 		if end < len(text):
-			boundary = _boundary_before(text, start + overlap, end)
+			# Strictly after start + overlap: a break exactly there would make
+			# the next start (end - overlap) equal this one, and the loop would
+			# append the same chunk forever. A real PDF hit this and grew the
+			# backend until Docker's VM ran out of memory.
+			boundary = _boundary_before(text, start + overlap + 1, end)
 			if boundary is not None:
 				end = boundary
 

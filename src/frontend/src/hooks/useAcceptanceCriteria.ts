@@ -51,5 +51,16 @@ export function useAcceptanceCriteria(sessionId: string) {
     [sessionId],
   );
 
-  return { items, isLoading, loadError, updateText, updateStatus, applyApproved };
+  /** Swaps another model's version in; resolves to the number of UAT cases now stale. */
+  const selectAlternative = useCallback(
+    async (acId: number, candidateId: number): Promise<number> => {
+      const result = await acceptanceCriteriaApi.selectAlternative(sessionId, acId, candidateId);
+      const updated = result.acceptance_criterion;
+      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      return result.uat_cases_affected;
+    },
+    [sessionId],
+  );
+
+  return { items, isLoading, loadError, updateText, updateStatus, applyApproved, selectAlternative };
 }

@@ -1,28 +1,12 @@
 {
     "agents": [
         {
-            "id": "qwen-local",
-            "provider": "ollama",
-            "model": "qwen2.5:7b",
-            "base_url": "http://localhost:11434/v1",
+            "id": "claude",
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
+            "api_key_env": "ANTHROPIC_API_KEY",
             "temperature": 0.7,
             "enabled": true
-        },
-        {
-            "id": "llama-local",
-            "provider": "ollama",
-            "model": "llama3.1:8b",
-            "base_url": "http://localhost:11434/v1",
-            "temperature": 0.7,
-            "enabled": true
-        },
-        {
-            "id": "gemini-flash",
-            "provider": "google",
-            "model": "gemini-2.0-flash",
-            "api_key_env": "GEMINI_API_KEY",
-            "temperature": 0.7,
-            "enabled": false
         },
         {
             "id": "openai-luna",
@@ -33,10 +17,26 @@
             "enabled": true
         },
         {
-            "id": "claude",
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-5",
-            "api_key_env": "ANTHROPIC_API_KEY",
+            "id": "gemini-flash",
+            "provider": "google",
+            "model": "gemini-3.6-flash",
+            "api_key_env": "GEMINI_API_KEY",
+            "temperature": 0.7,
+            "enabled": false
+        },
+        {
+            "id": "qwen-local",
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "base_url": "http://host.docker.internal:11434/v1",
+            "temperature": 0.7,
+            "enabled": false
+        },
+        {
+            "id": "llama-local",
+            "provider": "ollama",
+            "model": "llama3.1:8b",
+            "base_url": "http://host.docker.internal:11434/v1",
             "temperature": 0.7,
             "enabled": false
         }

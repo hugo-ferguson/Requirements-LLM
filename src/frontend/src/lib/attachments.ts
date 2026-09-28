@@ -28,6 +28,13 @@ export interface AttachmentUploadResult {
 }
 
 function messageForError(filename: string, error: unknown): string {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return `Reading ${filename} took too long and was stopped. Please try again.`;
+  }
+  if (error instanceof TypeError) {
+    // fetch rejects with a TypeError when the request never reaches a server.
+    return `Couldn't reach the server to upload ${filename} — is the backend running?`;
+  }
   if (error instanceof ApiError) {
     // FastAPI reports the reason (unsupported type, no text found, vision
     // model unreachable) in a JSON detail field.

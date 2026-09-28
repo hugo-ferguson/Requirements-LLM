@@ -33,9 +33,19 @@ from app.generation.models import (
     EnsembleResult,
     GeneratedCriteriaSet,
     GeneratedCriterion,
+    NumberedCriteriaSet,
+    NumberedCriterion,
 )
-from app.generation.orchestrator import pool_criteria, run_ensemble
-from app.generation.prompts import GenerationDeps, build_user_prompt
+from app.generation.orchestrator import (
+    pool_criteria,
+    run_ensemble,
+    run_title_anchored_ensemble,
+)
+from app.generation.prompts import (
+    GenerationDeps,
+    build_descriptions_prompt,
+    build_user_prompt,
+)
 from app.services.scoring import CandidateScore
 from app.models_conversation import ConversationAttachment, ConversationMessage
 from app.services.generation import (
@@ -855,3 +865,69 @@ def test_unrated_candidate_never_beats_a_rated_one():
     group.rank()
 
     assert group.winner.agent_id == "b"
+
+
+# --- Pass 2 answers by title number ----------------------------------------
+#
+# Followers used to copy each title back and were joined on its text. A live
+# run had a follower reword all five titles, so 0 of 5 matched and every one
+# of its candidates was dropped. They now answer by number instead.
+
+
+def _numbered(*numbers: int) -> NumberedCriteriaSet:
+    return NumberedCriteriaSet(
+        criteria=[
+            NumberedCriterion(
+                title_number=n, given=f"given {n}", when=f"when {n}", then=f"then {n}"
+            )
+            for n in numbers
+        ]
+    )
+
+
+def test_numbered_answers_carry_the_anchors_exact_titles():
+    titles = ["Log in", "Reject bad password"]
+
+    criteria = orchestrator._attach_anchor_titles("follower", _numbered(2, 1), titles)
+
+    assert [(c.title, c.given) for c in criteria] == [
+        ("Reject bad password", "given 2"),
+        ("Log in", "given 1"),
+    ]
+
+
+def test_unknown_and_repeated_title_numbers_are_dropped():
+    titles = ["Log in", "Reject bad password"]
+
+    criteria = orchestrator._attach_anchor_titles("follower", _numbered(1, 3, 1, 2), titles)
+
+    assert [c.title for c in criteria] == ["Log in", "Reject bad password"]
+    assert criteria[0].given == "given 1"
+
+
+def test_descriptions_prompt_asks_for_numbers_not_copied_titles():
+    prompt = build_descriptions_prompt(GenerationDeps(user_story="story"), ["Log in", "Log out"])
+
+    assert "1. Log in" in prompt and "2. Log out" in prompt
+    assert "title_number" in prompt
+    assert "Copy each title" not in prompt
+
+
+async def test_title_anchored_ensemble_groups_every_follower_answer():
+    ensemble, groups = await run_title_anchored_ensemble(
+        GenerationDeps(user_story="story"),
+        agents=[_test_agent("anchor"), _test_agent("follower")],
+    )
+
+    assert all(result.ok for result in ensemble.results)
+    # The follower answers all three anchor titles by number, including the
+    # one whose wording is unique to the anchor — text matching would miss it.
+    assert [group.title for group in groups] == [
+        "Successful login redirects home",
+        "Invalid password shows an error",
+        "Unique candidate from anchor",
+    ]
+    for group in groups:
+        assert sorted(c.agent_id for c in group.candidates) == ["anchor", "follower"]
+    third = next(c for c in groups[2].candidates if c.agent_id == "follower")
+    assert third.criterion.given == "the follower agent produced this candidate"
