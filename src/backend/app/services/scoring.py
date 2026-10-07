@@ -3,23 +3,24 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import threading
 from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from app.config import Settings, settings as default_settings
+from app.llm_config import get_models_config
 
 if TYPE_CHECKING:
-    from voting.models import EvaluatedOutput
+    from voting.models import EvaluatedOutput, JudgeConfig
 
 logger = logging.getLogger(__name__)
 
-# Isolated to this module: voting.voting unconditionally imports all 5
-# provider modules at load time (including `from anthropic import Anthropic`
-# in voting.claude), so ANY import failure here — missing optional dep,
-# unrelated packaging issue — must degrade to the all-zero fallback below
-# instead of taking down every route that imports this module.
+# Isolated to this module: voting.voting imports LiteLLM and the MCP server at
+# load time, so ANY import failure here — missing optional dep, unrelated
+# packaging issue — must degrade to the all-zero fallback below instead of
+# taking down every route that imports this module.
 try:
     from voting.models import EvaluationInput
     from voting.voting import evaluate_input as _evaluate_input
@@ -62,6 +63,30 @@ class CandidateScore:
 _ZERO_SCORE = CandidateScore(0.0, 0.0, 0.0, 0.0, 0.0, failed=True)
 
 
+# Every scoring call runs on this one event loop, in a background thread,
+# rather than on a fresh `asyncio.run` loop per call. Two reasons:
+# - A judge's `max_parallel` gate is per loop (voting.provider.judge_gate), so
+#   one shared loop makes it cap requests across concurrent scoring runs. UAT
+#   generation scores every accepted AC at once; with a loop each, the cap was
+#   multiplied by the number of ACs and tripped Anthropic's org-wide
+#   concurrent-request limit.
+# - LiteLLM binds a background logging task to the first loop it sees. Closing
+#   that loop after every call destroyed the task each time ("Task was
+#   destroyed but it is pending!").
+_loop: asyncio.AbstractEventLoop | None = None
+_loop_lock = threading.Lock()
+
+
+def _voting_loop() -> asyncio.AbstractEventLoop:
+    """The shared voting loop, started on first use."""
+    global _loop
+    with _loop_lock:
+        if _loop is None:
+            _loop = asyncio.new_event_loop()
+            threading.Thread(target=_loop.run_forever, name="voting-loop", daemon=True).start()
+        return _loop
+
+
 class Scorer(Protocol):
     def __call__(
         self,
@@ -96,17 +121,19 @@ def score_candidates(
     *,
     reference_answer: str = "",
     settings: Settings | None = None,
+    judges: Sequence["JudgeConfig"] | None = None,
 ) -> list[CandidateScore]:
     """
     Scores each candidate string against `prompt` via the voting layer, using
-    every judge in `Settings.voting_judges` and averaging their rubric scores.
+    every enabled judge in config/models.json (or `judges`, when given) and
+    averaging their rubric scores.
     Returns one CandidateScore per candidate in the SAME ORDER
     `candidates` was given. (The voting layer itself sorts its `output` list
     by score descending, so results are matched back to candidates by exact
     text content, not position.)
 
     Never raises. Any failure — the voting package failing to import,
-    a missing/invalid API key, a network error, an unexpected
+    an unreadable models config, a missing/invalid API key, a network error, an unexpected
     response shape, or a mismatch between candidates and returned results —
     is logged and produces an all-zero CandidateScore per candidate, so a
     scoring outage never blocks AC/UAT generation or regeneration.
@@ -124,22 +151,24 @@ def score_candidates(
 
     resolved_settings = settings or default_settings
     if resolved_settings.gemini_api_key and not os.environ.get("GEMINI_API_KEY"):
-        # voting.gemini resolves its key via os.getenv + its own load_dotenv()
-        # call — a resolution path independent of Settings' explicit
-        # multi-file read. Bridge the two so "reuse Settings.gemini_api_key"
-        # holds even if voting's directory-based .env search would miss it.
+        # A Gemini judge's key is found by LiteLLM in os.environ, a path
+        # independent of Settings' explicit multi-file .env read. Bridge the
+        # two so "reuse Settings.gemini_api_key" holds outside Docker too.
         os.environ["GEMINI_API_KEY"] = resolved_settings.gemini_api_key
 
     try:
+        selected = list(judges) if judges is not None else get_models_config().enabled_judges()
         evaluation_input = EvaluationInput(
             ai="requirements-llm",
-            model="+".join(resolved_settings.voting_judge_names),
+            model="+".join(judge.id for judge in selected),
             prompt=prompt,
             output=list(candidates),
             reference_answer=reference_answer,
-            providers=resolved_settings.voting_judge_names,
+            judges=selected,
         )
-        result = asyncio.run(_evaluate_input(evaluation_input))
+        result = asyncio.run_coroutine_threadsafe(
+            _evaluate_input(evaluation_input), _voting_loop()
+        ).result()
         scores = _match_to_candidates(candidates, result.output)
 
         unrated = sum(1 for score in scores if score.failed)
@@ -163,10 +192,10 @@ def score_candidates(
             logger.warning(
                 "every one of %d candidate(s) scored 0.0 — this is almost always a "
                 "misconfigured voter rather than genuinely worthless criteria. "
-                "Check that VOTING_PROVIDERS defines %s and that their models are "
-                "reachable; see the provider warning logged above for the cause.",
+                "Check the judges in config/models.json (%s) and that their models "
+                "are reachable; see the judge warning logged above for the cause.",
                 len(scores),
-                ", ".join(repr(name) for name in evaluation_input.providers),
+                ", ".join(repr(judge.id) for judge in selected),
             )
         return scores
     except Exception:

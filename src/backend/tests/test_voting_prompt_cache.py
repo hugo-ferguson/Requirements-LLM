@@ -1,9 +1,10 @@
 """Prompt caching on the voting layer.
 
-Every vote shares the same rubric and schema text, so for Anthropic judges it
-is sent as a cache-marked system block. These tests pin the two things that
-silently break caching: per-vote text leaking into the cached prefix, and a
-cold batch fired all at once so that nothing is ever read back.
+Every vote shares the same rubric and schema text, so for judges with
+`cache_prompt` (Anthropic needs it) it is sent as a cache-marked system block.
+These tests pin the two things that silently break caching: per-vote text
+leaking into the cached prefix, and a cold batch fired all at once so that
+nothing is ever read back.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import json
 from types import SimpleNamespace
 
 import voting.provider as provider
-from voting.models import EvaluationInput
+from voting.models import EvaluationInput, JudgeConfig
 from voting.provider import LiteLLMCombinedClient, evaluate_with_combined_model
 
 VOTE_JSON = json.dumps(
@@ -36,15 +37,19 @@ def _capture_calls(monkeypatch) -> list[dict]:
     return calls
 
 
-def _vote(model: str, response: str) -> None:
-    client = LiteLLMCombinedClient("Judge", model)
+CLAUDE = JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5", cache_prompt=True)
+LUNA = JudgeConfig(id="luna", model="openai/gpt-6-luna")
+
+
+def _vote(judge: JudgeConfig, response: str) -> None:
+    client = LiteLLMCombinedClient(judge)
     asyncio.run(client.evaluate(instruction="a user story", response=response))
 
 
-def test_anthropic_judges_get_a_cache_marked_system_prefix(monkeypatch) -> None:
+def test_a_caching_judge_gets_a_cache_marked_system_prefix(monkeypatch) -> None:
     calls = _capture_calls(monkeypatch)
 
-    _vote("anthropic/claude-sonnet-5-5", "a criterion")
+    _vote(CLAUDE, "a criterion")
 
     system, user = calls[0]["messages"]
     [block] = system["content"]
@@ -59,8 +64,8 @@ def test_anthropic_judges_get_a_cache_marked_system_prefix(monkeypatch) -> None:
 def test_the_cached_prefix_is_identical_for_every_candidate(monkeypatch) -> None:
     calls = _capture_calls(monkeypatch)
 
-    _vote("anthropic/claude-sonnet-5-5", "first criterion")
-    _vote("anthropic/claude-sonnet-5-5", "second criterion")
+    _vote(CLAUDE, "first criterion")
+    _vote(CLAUDE, "second criterion")
 
     assert calls[0]["messages"][0] == calls[1]["messages"][0]
 
@@ -68,7 +73,7 @@ def test_the_cached_prefix_is_identical_for_every_candidate(monkeypatch) -> None
 def test_other_judges_get_a_plain_system_message(monkeypatch) -> None:
     calls = _capture_calls(monkeypatch)
 
-    _vote("openai/gpt-6-luna", "a criterion")
+    _vote(LUNA, "a criterion")
 
     system = calls[0]["messages"][0]
     assert isinstance(system["content"], str)
@@ -78,9 +83,10 @@ def test_other_judges_get_a_plain_system_message(monkeypatch) -> None:
 class _RecordingClient:
     """Stands in for LiteLLMCombinedClient, recording which votes overlap."""
 
-    def __init__(self, model: str) -> None:
+    def __init__(self, judge: JudgeConfig) -> None:
+        self.judge = judge
         self.provider_name = "Test"
-        self.model = model
+        self.model = judge.model
         self.in_flight: set[str] = set()
         self.overlaps: dict[str, set[str]] = {}
 
@@ -107,12 +113,12 @@ def _input(candidates: list[str]) -> EvaluationInput:
         prompt="a user story",
         output=candidates,
         reference_answer="",
-        providers=["claude"],
+        judges=[CLAUDE],
     )
 
 
-def test_an_anthropic_batch_scores_one_candidate_before_the_rest() -> None:
-    client = _RecordingClient("anthropic/claude-sonnet-5-5")
+def test_a_caching_judge_scores_one_candidate_before_the_rest() -> None:
+    client = _RecordingClient(CLAUDE)
 
     result = asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c", "d"]), client))
 

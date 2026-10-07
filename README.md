@@ -21,13 +21,13 @@ cd Requirements-LLM/src
 ```bash
 # macOS / Linux
 cp .env.example .env
-cp backend/config/generation_agents.example.json backend/config/generation_agents.json
+cp backend/config/models.example.json backend/config/models.json
 ```
 
 ```powershell
 # Windows PowerShell
 Copy-Item .env.example .env
-Copy-Item backend\config\generation_agents.example.json backend\config\generation_agents.json
+Copy-Item backend\config\models.example.json backend\config\models.json
 ```
 
 **3. Put your two API keys in `src/.env`** — they're the first two lines to fill in.
@@ -81,7 +81,7 @@ Run from `src`:
 | Stop (data is kept) | `docker compose down` |
 | Watch all logs | `docker compose logs -f` (add `backend` for just the backend) |
 | Apply a change to `.env` | `docker compose up -d --force-recreate backend` |
-| Apply a change to `generation_agents.json` | `docker compose restart backend` |
+| Apply a change to `models.json` | `docker compose restart backend` |
 | After pulling new code | `docker compose up --build -d` |
 | **Delete all data** (sessions, criteria, uploads) | `docker compose down -v` |
 
@@ -90,16 +90,27 @@ Other addresses: backend health check <http://localhost:8000/health>, API docs
 
 ## Configuration
 
-All settings live in `src/.env`, explained there. The ones you're most likely to change:
+Settings live in two files:
 
-- **Models that write criteria and test cases:** `backend/config/generation_agents.json`.
-  Every entry with `"enabled": true` writes its own version; the **first** enabled entry
-  decides *which* criteria / test cases exist and the others write their version of each.
-- **Chat model:** `LLM_MODEL`. **Image reading:** `VISION_MODEL`.
-- **Scoring judges:** `VOTING_JUDGES`. By default Claude and OpenAI both score everything and
-  the scores are averaged; `VOTING_JUDGES=claude` uses one judge and roughly halves scoring cost.
-- **Cost:** each generation calls every enabled model, and every candidate is scored by every
-  judge. Fewer enabled models or judges means fewer API calls.
+- **`src/backend/config/models.json`** — every model choice:
+  - `chat_model`: the chat assistant and Regenerate Selected.
+  - `vision_model`: reads text out of uploaded images.
+  - `generation_agents`: the models that write criteria and test cases. Every entry with
+    `"enabled": true` writes its own version; the **first** enabled entry decides *which*
+    criteria / test cases exist and the others write their version of each.
+  - `judges`: the models that score every candidate; their scores are averaged. Disabling one
+    of the two default judges roughly halves scoring cost.
+
+  Each agent and judge can set `temperature` (leave it `null` for newer Claude models and
+  OpenAI reasoning models, which reject any other value). Generation agents and the chat
+  model also set how structured output is requested: `output_mode` / `chat_output_mode`,
+  one of `tool`, `native` or `prompted` — use `native` for Claude, whose newer models reject
+  the forced tool call `tool` sends, and for Ollama. Judges take `structured_output`,
+  `cache_prompt` and `max_parallel`. The example file shows the settings each provider needs.
+- **`src/.env`** — API keys, database and URL settings, and tuning numbers, explained there.
+
+**Cost:** each generation calls every enabled model, and every candidate is scored by every
+judge. Fewer enabled models or judges means fewer API calls.
 
 ## Troubleshooting
 
@@ -123,12 +134,21 @@ memory=6GB
 then run `wsl --shutdown` and restart Docker Desktop. On macOS, set memory under Docker Desktop
 → Settings → Resources.
 
-**Generation fails with "Generation roster file not found"** — the second copy in step 2 was
-skipped. Copy `generation_agents.example.json` to `generation_agents.json`, then
-`docker compose restart backend`.
+**The backend won't start: "Model config not found"** — the second copy in step 2 was
+skipped. Copy `models.example.json` to `models.json`, then `docker compose restart backend`.
+If you set the app up before `models.json` existed, it replaces `generation_agents.json` and
+the `LLM_MODEL`, `VISION_MODEL`, `VOTING_PROVIDERS` and `VOTING_JUDGES` lines in `.env`; move
+any model changes you made there into `models.json`. The backend log warns about each
+retired `.env` line that is still set.
 
 **Every score shows 0.0** — the judges couldn't be reached. Check both API keys in `src/.env`,
 then `docker compose up -d --force-recreate backend`. The backend log names the failing judge.
+A judge that logs a 400 about `tool_choice` or `temperature` needs `"structured_output": false`
+or `"temperature": null` in `models.json`.
+
+**A generation agent or the chat logs a 400: `tool_choice: type "tool" and "any" are not
+supported`** — set that agent's `"output_mode"` (or the top-level `"chat_output_mode"`) to
+`"native"` in `models.json`, then `docker compose restart backend`.
 
 **Only one model's versions appear, or the backend log says "Agent … needs ANTHROPIC_API_KEY /
 OPENAI_API_KEY set in the environment"** — that key is missing, or the backend wasn't recreated
@@ -149,7 +169,7 @@ Postgres). Stop it, or change the left-hand port numbers under `ports:` in
 - **Export** is a placeholder page.
 - Each model writes at most **8 acceptance criteria** per generation (`GENERATION_MAX_CRITERIA`);
   a story covering many features may not get criteria for all of them in one run.
-- **Regenerate Selected** uses a single model (`LLM_MODEL`), so regenerated items have no
+- **Regenerate Selected** uses a single model (`chat_model`), so regenerated items have no
   alternative versions.
 - No user accounts; all data stays on the machine running Docker.
 

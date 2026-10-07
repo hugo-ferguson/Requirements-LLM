@@ -29,13 +29,11 @@ class Settings(BaseSettings):
     embedding_dim: int = 384
     embedding_api_key: str | None = None
 
-    vision_model: str = "ollama/qwen2.5vl:7b"
+    # Which models do what (chat, vision, generation, judging) is set in
+    # config/models.json, not here. See app/llm_config.py. Resolved
+    # absolutely, like the .env files, so the launch directory doesn't matter.
+    models_config_path: str = str(_BACKEND_DIR / "config" / "models.json")
 
-    # The model that writes acceptance criteria. Any model string PydanticAI
-    # knows works here, so changing provider is a config change, not a code
-    # change. Note the "google-gla:" prefix used in the PydanticAI spike was
-    # renamed to "google:" in pydantic-ai 2.x.
-    llm_model: str = "google:gemini-3-flash-preview"
     gemini_api_key: str | None = None
 
     chunk_size: int = 1000
@@ -43,9 +41,6 @@ class Settings(BaseSettings):
 
 
     # --- Ensemble generation layer ---
-    # Roster of generation agents (backlog R8). Relative paths resolve
-    # against the backend working directory.
-    generation_roster_path: str = "config/generation_agents.json"
     # Per-agent wall-clock limit. Keeps one slow model from eating the whole
     # 60s budget in R6.
     generation_timeout_seconds: float = 45.0
@@ -61,16 +56,6 @@ class Settings(BaseSettings):
     # compared directly instead of pooled into an ungrouped union. Costs one
     # extra sequential pass; set false to restore the single-pass ensemble.
     generation_title_anchored: bool = True
-    # Voting judges: comma-separated names from VOTING_PROVIDERS. Every judge
-    # scores every candidate and their rubric scores are averaged, so one
-    # model's taste (or its preference for its own family's wording) does not
-    # pick every winner alone. A judge that fails is averaged out.
-    voting_judges: str = "claude"
-
-    @property
-    def voting_judge_names(self) -> list[str]:
-        names = [name.strip().lower() for name in self.voting_judges.split(",")]
-        return [name for name in names if name] or ["claude"]
 
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 

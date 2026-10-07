@@ -18,9 +18,10 @@ implemented yet.
 
 ## Running it
 
-1. Copy the env template and adjust if needed:
+1. Copy the env template and the model config, and adjust if needed:
    ```
    cp .env.example .env
+   cp backend/config/models.example.json backend/config/models.json
    ```
 2. Start everything:
    ```
@@ -61,6 +62,8 @@ src/
 ├── docker-compose.yml
 ├── .env.example          # copy to .env (gitignored, per-developer)
 ├── backend/
+│   ├── config/
+│   │   └── models.example.json # copy to models.json: chat, vision, generation and judge models
 │   ├── Dockerfile
 │   ├── pyproject.toml    # deps, managed with uv
 │   ├── scripts/
@@ -69,6 +72,7 @@ src/
 │   └── app/
 │       ├── main.py             # FastAPI app, middleware, router registration
 │       ├── config.py           # env-driven settings (pydantic-settings)
+│       ├── llm_config.py       # loads config/models.json (which models do what)
 │       ├── db.py                # engine + session setup
 │       ├── models.py            # SQLModel table + request/response schemas
 │       ├── routes/              # HTTP layer — request/response only, no business logic
@@ -133,8 +137,9 @@ change that caused it.
 ## Environment variables
 
 See `.env.example` for the full list.  Nothing sensitive is committed —
-`.env` is gitignored. Later, the Pydantic AI agent's LLM API key will also
-live in `.env` (a placeholder is already there).
+`.env` is gitignored. Model choices are not environment variables: they live
+in `backend/config/models.json` (also gitignored), which names the variable
+holding each API key but never the key itself.
 
 ## Out of scope for this skeleton
 
@@ -144,8 +149,9 @@ live in `.env` (a placeholder is already there).
 
 ### Local Prometheus voting
 
-Install and start Ollama, then pull the model configured by
-`PROMETHEUS_MODEL` (the default is `ggozad/prometheus2:latest`). Set `OLLAMA_BASE_URL` in
+Install and start Ollama, then enable the `prometheus` judge in
+`backend/config/models.json` and pull its model (`ggozad/prometheus2:latest` in
+the example file). Set `OLLAMA_API_BASE` in
 `.env`: use `http://localhost:11434` when the backend runs on the host, or
 `http://host.docker.internal:11434` when the backend runs in Docker and Ollama
 runs on the host. Change the model name if your Ollama tag differs.

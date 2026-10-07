@@ -1,12 +1,18 @@
 import asyncio
 import json
 
-from voting.models import EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
+from voting.models import EvaluatedOutput, JudgeConfig, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
+
+JUDGES = [
+    JudgeConfig(id="gemini", model="gemini/gemini-3.6-flash"),
+    JudgeConfig(id="prometheus", model="ollama/ggozad/prometheus2:latest", style="per_rubric"),
+    JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5"),
+]
 
 
 def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
     async def fake_evaluate_inputs(items):
-        assert [item.providers for item in items] == [["gemini", "prometheus"], ["gemini", "prometheus"]]
+        assert [[judge.id for judge in item.judges] for item in items] == [["gemini", "prometheus"]] * 2
         return [
             VotingResult(
                 ai="TestAI",
@@ -74,7 +80,8 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
             ),
         ]
 
-    monkeypatch.setattr("voting.votingLayer.evaluate_inputs", fake_evaluate_inputs)
+    monkeypatch.setattr("voting.voting_layer.evaluate_inputs", fake_evaluate_inputs)
+    monkeypatch.setattr("voting.voting_layer.load_judges", lambda: list(JUDGES))
 
     inputs = [
         {
@@ -93,7 +100,7 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
 
     output_path = tmp_path / "votingLayerOutput.json"
     result = asyncio.run(
-        __import__("voting.votingLayer", fromlist=["run_voting_layer"]).run_voting_layer(
+        __import__("voting.voting_layer", fromlist=["run_voting_layer"]).run_voting_layer(
             inputs,
             ["gemini", "prometheus"],
             output_path=output_path,

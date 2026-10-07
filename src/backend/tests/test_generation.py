@@ -17,14 +17,16 @@ import time
 
 import pytest
 from pydantic import ValidationError
+from pydantic_ai import NativeOutput, PromptedOutput
 
 from app.config import Settings
 from app.generation import orchestrator
 from app.generation.agents import AgentBuildError, build_agent
-from app.generation.config import (
+from app.llm_config import (
     GenerationAgentConfig,
-    RosterConfigError,
-    load_roster,
+    ModelsConfigError,
+    load_models_config,
+    with_output_mode,
 )
 from app.generation.models import (
     AgentResult,
@@ -246,100 +248,132 @@ async def test_generated_criteria_survive_a_full_ensemble_run() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_roster(tmp_path, payload: dict):
-    path = tmp_path / "roster.json"
+QWEN = {"id": "qwen", "provider": "ollama", "model": "qwen2.5:7b"}
+JUDGE = {"id": "claude", "model": "anthropic/claude-sonnet-5-5"}
+
+
+def _write_config(tmp_path, generation_agents: list[dict], judges: list[dict] | None = None, **extra):
+    payload = {
+        "chat_model": "anthropic:claude-sonnet-5-5",
+        "vision_model": "anthropic/claude-sonnet-5-5",
+        "generation_agents": generation_agents,
+        "judges": [JUDGE] if judges is None else judges,
+        **extra,
+    }
+    path = tmp_path / "models.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
 
-def test_roster_loads_agents_from_file(tmp_path) -> None:
-    path = _write_roster(
+def test_models_config_loads_every_section_from_one_file(tmp_path) -> None:
+    path = _write_config(
         tmp_path,
-        {
-            "agents": [
-                {"id": "qwen", "provider": "ollama", "model": "qwen2.5:7b"},
-                {"id": "llama", "provider": "ollama", "model": "llama3.1:8b"},
-            ]
-        },
+        [QWEN, {"id": "llama", "provider": "ollama", "model": "llama3.1:8b"}],
     )
 
-    roster = load_roster(path)
+    config = load_models_config(path)
 
-    assert [agent.id for agent in roster.agents] == ["qwen", "llama"]
-    assert roster.agents[0].model == "qwen2.5:7b"
+    assert config.chat_model == "anthropic:claude-sonnet-5-5"
+    assert config.vision_model == "anthropic/claude-sonnet-5-5"
+    assert [agent.id for agent in config.generation_agents] == ["qwen", "llama"]
+    assert config.generation_agents[0].model == "qwen2.5:7b"
+    assert [judge.id for judge in config.judges] == ["claude"]
 
 
-def test_roster_returns_only_enabled_agents(tmp_path) -> None:
+def test_models_config_returns_only_enabled_agents_and_judges(tmp_path) -> None:
     """Adding or retiring a model is a config edit, not a code change."""
-    path = _write_roster(
+    path = _write_config(
         tmp_path,
-        {
-            "agents": [
-                {"id": "qwen", "provider": "ollama", "model": "qwen2.5:7b"},
-                {
-                    "id": "gemini",
-                    "provider": "google",
-                    "model": "gemini-2.0-flash",
-                    "enabled": False,
-                },
-            ]
-        },
+        [QWEN, {"id": "gemini", "provider": "google", "model": "gemini-2.0-flash", "enabled": False}],
+        judges=[JUDGE, {"id": "luna", "model": "openai/gpt-6-luna", "enabled": False}],
     )
 
-    roster = load_roster(path)
+    config = load_models_config(path)
 
-    assert len(roster.agents) == 2
-    assert [agent.id for agent in roster.enabled_agents()] == ["qwen"]
-
-
-def test_roster_missing_file_names_the_path_and_the_fix(tmp_path) -> None:
-    with pytest.raises(RosterConfigError) as error:
-        load_roster(tmp_path / "absent.json")
-
-    assert "generation_agents.example.json" in str(error.value)
+    assert [agent.id for agent in config.enabled_agents()] == ["qwen"]
+    assert [judge.id for judge in config.enabled_judges()] == ["claude"]
 
 
-def test_roster_rejects_malformed_json(tmp_path) -> None:
-    path = tmp_path / "roster.json"
+def test_temperature_is_omitted_unless_set(tmp_path) -> None:
+    """Newer Claude and OpenAI reasoning models reject a non-default value."""
+    config = load_models_config(_write_config(tmp_path, [QWEN]))
+
+    assert config.generation_agents[0].temperature is None
+    assert config.judges[0].temperature is None
+
+
+def test_output_mode_defaults_to_tool_calls_and_is_read_per_agent(tmp_path) -> None:
+    config = load_models_config(
+        _write_config(tmp_path, [QWEN, {**QWEN, "id": "claude", "output_mode": "native"}],
+                      chat_output_mode="native")
+    )
+
+    assert [agent.output_mode for agent in config.generation_agents] == ["tool", "native"]
+    assert config.chat_output_mode == "native"
+
+
+def test_output_mode_wraps_the_output_type() -> None:
+    """Native output is how Sonnet 5.5 gets structured output: it rejects the
+    forced tool call that "tool" mode sends."""
+    assert with_output_mode(GeneratedCriteriaSet, "tool") is GeneratedCriteriaSet
+    assert isinstance(with_output_mode(GeneratedCriteriaSet, "native"), NativeOutput)
+    assert isinstance(with_output_mode(GeneratedCriteriaSet, "prompted"), PromptedOutput)
+    assert with_output_mode(str, "native") is str
+
+
+def test_models_config_missing_file_names_the_path_and_the_fix(tmp_path) -> None:
+    with pytest.raises(ModelsConfigError) as error:
+        load_models_config(tmp_path / "absent.json")
+
+    assert "models.example.json" in str(error.value)
+
+
+def test_a_leftover_generation_agents_file_is_pointed_at(tmp_path) -> None:
+    (tmp_path / "generation_agents.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ModelsConfigError, match="replaces generation_agents.json"):
+        load_models_config(tmp_path / "models.json")
+
+
+def test_models_config_rejects_malformed_json(tmp_path) -> None:
+    path = tmp_path / "models.json"
     path.write_text("{not json", encoding="utf-8")
 
-    with pytest.raises(RosterConfigError, match="not valid JSON"):
-        load_roster(path)
+    with pytest.raises(ModelsConfigError, match="not valid JSON"):
+        load_models_config(path)
 
 
-def test_roster_rejects_duplicate_agent_ids(tmp_path) -> None:
+def test_models_config_rejects_unknown_keys(tmp_path) -> None:
+    """The old roster's `agents` key is a mistake to report, not to ignore."""
+    path = _write_config(tmp_path, [QWEN], agents=[QWEN])
+
+    with pytest.raises(ModelsConfigError, match="invalid"):
+        load_models_config(path)
+
+
+def test_models_config_rejects_duplicate_agent_ids(tmp_path) -> None:
     """Ids attribute votes back to a generator, so they have to be unique."""
-    path = _write_roster(
-        tmp_path,
-        {
-            "agents": [
-                {"id": "qwen", "provider": "ollama", "model": "qwen2.5:7b"},
-                {"id": "qwen", "provider": "ollama", "model": "qwen2.5:14b"},
-            ]
-        },
-    )
+    path = _write_config(tmp_path, [QWEN, {**QWEN, "model": "qwen2.5:14b"}])
 
-    with pytest.raises(RosterConfigError, match="Duplicate agent ids"):
-        load_roster(path)
+    with pytest.raises(ModelsConfigError, match="Duplicate agent ids"):
+        load_models_config(path)
 
 
-def test_roster_rejects_a_roster_with_nothing_enabled(tmp_path) -> None:
-    path = _write_roster(
-        tmp_path,
-        {
-            "agents": [
-                {
-                    "id": "qwen",
-                    "provider": "ollama",
-                    "model": "qwen2.5:7b",
-                    "enabled": False,
-                }
-            ]
-        },
-    )
+def test_models_config_rejects_duplicate_judge_ids(tmp_path) -> None:
+    path = _write_config(tmp_path, [QWEN], judges=[JUDGE, JUDGE])
 
-    with pytest.raises(RosterConfigError, match="No enabled agents"):
-        load_roster(path)
+    with pytest.raises(ModelsConfigError, match="Duplicate judge ids"):
+        load_models_config(path)
+
+
+def test_models_config_rejects_nothing_enabled(tmp_path) -> None:
+    no_agents = _write_config(tmp_path, [{**QWEN, "enabled": False}])
+    with pytest.raises(ModelsConfigError, match="No enabled generation_agents"):
+        load_models_config(no_agents)
+
+    no_judges = _write_config(tmp_path, [QWEN], judges=[{**JUDGE, "enabled": False}])
+    with pytest.raises(ModelsConfigError, match="No enabled judges"):
+        load_models_config(no_judges)
 
 
 def test_api_keys_are_read_from_the_environment_not_the_roster(

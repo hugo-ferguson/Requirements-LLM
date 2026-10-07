@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 import voting.provider as provider
+from voting.models import JudgeConfig
 from voting.provider import LiteLLMCombinedClient
 
 VOTE_JSON = json.dumps(
@@ -50,7 +51,7 @@ def fake_completion(monkeypatch):
 
 
 def _evaluate():
-    client = LiteLLMCombinedClient("Claude", "anthropic/claude-haiku-4-5-20251001")
+    client = LiteLLMCombinedClient(JudgeConfig(id="claude", model="anthropic/claude-haiku-4-5-20251001"))
     return asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
 
 
@@ -65,14 +66,16 @@ def test_normal_content_is_parsed_in_one_call(fake_completion) -> None:
     assert "max_tokens" not in calls[0]
 
 
-def test_a_claude_judge_gets_no_forced_tool_call_or_temperature(fake_completion) -> None:
+def test_a_judge_without_structured_output_or_temperature_sends_neither(fake_completion) -> None:
     # Live failure: Sonnet 5.5 rejected every vote with "tool_choice: type
     # "tool" and "any" are not supported", because LiteLLM implements
     # response_format for Anthropic as a forced tool call. It also rejects a
     # non-default temperature.
     replies, calls = fake_completion
     replies.append(_reply(content=VOTE_JSON))
-    client = LiteLLMCombinedClient("Claude", "anthropic/claude-sonnet-5-5")
+    client = LiteLLMCombinedClient(
+        JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5", structured_output=False)
+    )
 
     asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
 
@@ -80,10 +83,10 @@ def test_a_claude_judge_gets_no_forced_tool_call_or_temperature(fake_completion)
     assert "temperature" not in calls[0]
 
 
-def test_other_judges_keep_structured_output_and_temperature(fake_completion) -> None:
+def test_a_judge_with_structured_output_and_temperature_sends_both(fake_completion) -> None:
     replies, calls = fake_completion
     replies.append(_reply(content=VOTE_JSON))
-    client = LiteLLMCombinedClient("Qwen", "ollama/qwen2.5:7b")
+    client = LiteLLMCombinedClient(JudgeConfig(id="qwen", model="ollama/qwen2.5:7b", temperature=0.1))
 
     asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
 
@@ -175,7 +178,7 @@ def test_an_openai_reasoning_judge_is_not_sent_temperature_or_max_tokens(fake_co
     # reasoning models only accept the default temperature.
     replies, calls = fake_completion
     replies.append(_reply(content=VOTE_JSON))
-    client = LiteLLMCombinedClient("Luna", "openai/gpt-6-luna")
+    client = LiteLLMCombinedClient(JudgeConfig(id="luna", model="openai/gpt-6-luna"))
 
     asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
 

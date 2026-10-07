@@ -8,6 +8,7 @@ from pathlib import Path
 import litellm
 
 from app.config import Settings
+from app.llm_config import get_models_config
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ def _extract_pdf(data: bytes) -> str:
 
 def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
     """Transcribes and describes an image via a vision-capable model."""
+    vision_model = get_models_config().vision_model
     image_bytes = _prepare_image(data, extension)
     b64 = base64.b64encode(image_bytes).decode("ascii")
     mime = MIME_TYPES.get(extension, "image/png")
@@ -94,21 +96,21 @@ def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
 
     try:
         response = litellm.completion(
-            model=settings.vision_model,
+            model=vision_model,
             messages=messages,
             timeout=300.0,
             num_retries=2,
         )
     except Exception as error:
         raise ImageExtractionError(
-            f"Vision model {settings.vision_model} failed: {error}"
+            f"Vision model {vision_model} failed: {error}"
         ) from error
 
     content = response.choices[0].message.content
 
     if not isinstance(content, str) or not content.strip():
         raise ImageExtractionError(
-            f"{settings.vision_model} returned no text for the image"
+            f"{vision_model} returned no text for the image"
         )
 
     return content.strip()

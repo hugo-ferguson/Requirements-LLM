@@ -1,0 +1,25 @@
+{
+  "chat_model": "test",
+  "vision_model": "test/vision",
+  "generation_agents": [
+    {
+      "id": "test-a",
+      "provider": "test",
+      "model": "test",
+      "enabled": true
+    },
+    {
+      "id": "test-b",
+      "provider": "test",
+      "model": "test",
+      "enabled": true
+    }
+  ],
+  "judges": [
+    {
+      "id": "claude",
+      "model": "test/judge",
+      "enabled": true
+    }
+  ]
+}

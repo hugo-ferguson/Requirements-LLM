@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from app.config import Settings, settings as default_settings
+from app.llm_config import get_models_config
 from app.models_conversation import (
     AcceptanceCriterion,
     AcceptanceCriterionScores,
@@ -201,7 +202,7 @@ class ConversationService:
             result = self.agent.run_sync(prompt)
         except Exception as error:
             raise GenerationError(
-                f"{self.settings.llm_model} could not generate acceptance "
+                f"{get_models_config().chat_model} could not generate acceptance "
                 f"criteria: {error}"
             ) from error
 

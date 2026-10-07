@@ -27,9 +27,6 @@ services:
       # Only used if you switch a model to a local Ollama one; from inside a
       # container, the host machine is host.docker.internal, not localhost.
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
-      # Scoring judges (see .env.example). The default needs ANTHROPIC_API_KEY
-      # and OPENAI_API_KEY; `claude` must always be defined.
-      VOTING_PROVIDERS: ${VOTING_PROVIDERS:-claude:anthropic/claude-haiku-4-5-20251001,luna:openai/gpt-6-luna}
     ports:
       - "8000:8000"
     volumes:

@@ -14,7 +14,7 @@ import asyncio
 
 import pytest
 
-from voting.models import EvaluationInput
+from voting.models import EvaluationInput, JudgeConfig
 from voting.provider import (
     default_timeout,
     evaluate_with_combined_model,
@@ -22,12 +22,17 @@ from voting.provider import (
 )
 
 
+OLLAMA = JudgeConfig(id="qwen", model="ollama/qwen2.5:7b", max_parallel=1)
+CLOUD = JudgeConfig(id="luna", model="openai/gpt-6-luna")
+
+
 class _RecordingClient:
     """Stands in for LiteLLMCombinedClient, tracking overlap."""
 
-    def __init__(self, model: str = "ollama/test", delay: float = 0.02) -> None:
+    def __init__(self, judge: JudgeConfig, delay: float = 0.02) -> None:
+        self.judge = judge
         self.provider_name = "Test"
-        self.model = model
+        self.model = judge.model
         self.delay = delay
         self.in_flight = 0
         self.peak_in_flight = 0
@@ -57,12 +62,12 @@ def _input(candidates: list[str]) -> EvaluationInput:
         prompt="a user story",
         output=candidates,
         reference_answer="",
-        providers=["claude"],
+        judges=[JudgeConfig(id="test", model="test/test")],
     )
 
 
-def test_ollama_models_are_scored_one_at_a_time():
-    client = _RecordingClient(model="ollama/qwen2.5:7b")
+def test_a_judge_limited_to_one_request_is_scored_one_at_a_time():
+    client = _RecordingClient(OLLAMA)
 
     result = asyncio.run(
         evaluate_with_combined_model(_input(["a", "b", "c", "d", "e"]), client)
@@ -75,9 +80,9 @@ def test_ollama_models_are_scored_one_at_a_time():
     )
 
 
-def test_cloud_models_still_run_concurrently():
-    """The bound exists for local single-model servers, not as a blanket cap."""
-    client = _RecordingClient(model="claude-sonnet-4-6")
+def test_cloud_judges_still_run_concurrently():
+    """The bound is set per judge for local single-model servers, not as a blanket cap."""
+    client = _RecordingClient(CLOUD)
 
     asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c", "d"]), client))
 
@@ -85,7 +90,7 @@ def test_cloud_models_still_run_concurrently():
 
 
 def test_every_candidate_is_still_scored_when_serialised():
-    client = _RecordingClient(model="ollama/test")
+    client = _RecordingClient(OLLAMA)
 
     result = asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c"]), client))
 
@@ -103,7 +108,7 @@ def test_parallelism_override_is_read_from_the_environment(monkeypatch, raw, exp
     else:
         monkeypatch.delenv("VOTING_MAX_PARALLEL", raising=False)
 
-    assert max_parallel_requests("ollama/qwen2.5:7b") == expected
+    assert max_parallel_requests(OLLAMA) == expected
 
 
 def test_timeout_is_overridable_for_slow_local_hardware(monkeypatch):
@@ -112,3 +117,20 @@ def test_timeout_is_overridable_for_slow_local_hardware(monkeypatch):
 
     monkeypatch.setenv("VOTING_TIMEOUT_SECONDS", "garbage")
     assert default_timeout() == 120.0
+
+
+def test_one_judge_limit_covers_concurrent_scoring_runs():
+    """UAT generation scores every accepted AC at once. The judge's limit has
+    to hold across those runs, not apply separately to each, or the total
+    trips the provider's org-wide concurrency limit."""
+    judge = JudgeConfig(id="claude-limited", model="anthropic/claude-sonnet-5-5", max_parallel=2)
+    client = _RecordingClient(judge)
+
+    async def three_runs_at_once():
+        await asyncio.gather(
+            *(evaluate_with_combined_model(_input([f"{run}{c}" for c in "abc"]), client) for run in "xyz")
+        )
+
+    asyncio.run(three_runs_at_once())
+
+    assert client.peak_in_flight == 2

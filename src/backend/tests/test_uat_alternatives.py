@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.generation import orchestrator
-from app.generation.config import GenerationAgentConfig
+from app.llm_config import GenerationAgentConfig
 from app.generation.models import NumberedUatCase, NumberedUatCaseSet
 from app.generation.orchestrator import run_uat_ensemble
 from app.models_conversation import AcceptanceCriterion, AcceptanceCriterionScores

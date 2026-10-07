@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 from pathlib import Path
 
 import litellm
 
-from voting.provider import max_parallel_requests
+from voting.provider import judge_gate
 from voting.models import (
     EvaluationInput,
     EvaluatedOutput,
+    JudgeConfig,
     PrometheusVote,
     ProviderFeedback,
     RubricAverage,
@@ -45,8 +45,11 @@ def _strip_markdown_fences(text: str) -> str:
 
 
 class LiteLLMPrometheusClient:
-    def __init__(self, model: str | None = None, *, timeout: float = 120.0, num_retries: int = 2) -> None:
-        self.model = model or os.getenv("PROMETHEUS_MODEL", "ollama/ggozad/prometheus2:latest")
+    """Scores one rubric per call, for judges with `style: "per_rubric"`."""
+
+    def __init__(self, judge: JudgeConfig, *, timeout: float = 120.0, num_retries: int = 2) -> None:
+        self.judge = judge
+        self.model = judge.model
         self.timeout = timeout
         self.num_retries = num_retries
 
@@ -56,6 +59,8 @@ class LiteLLMPrometheusClient:
         prompt = prompt.replace("{orig_response}", response)
 
         schema_hint = json.dumps(PrometheusVote.model_json_schema(), indent=2)
+        sampling = {} if self.judge.temperature is None else {"temperature": self.judge.temperature}
+        structured = {"response_format": PROMETHEUS_VOTE_SCHEMA} if self.judge.structured_output else {}
 
         result = await litellm.acompletion(
             model=self.model,
@@ -71,7 +76,9 @@ class LiteLLMPrometheusClient:
                 },
                 {"role": "user", "content": prompt},
             ],
-            response_format=PROMETHEUS_VOTE_SCHEMA,
+            **structured,
+            **sampling,
+            drop_params=True,
             timeout=self.timeout,
             num_retries=self.num_retries,
         )
@@ -84,13 +91,13 @@ class LiteLLMPrometheusClient:
         return PrometheusVote.model_validate_json(cleaned)
 
 
-async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingResult:
-    evaluator = LiteLLMPrometheusClient()
+async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: JudgeConfig) -> VotingResult:
+    evaluator = LiteLLMPrometheusClient(judge)
     # Same queue-timeout trap as the combined path, and worse here: this fans
     # out four rubric calls per candidate, so an unbounded gather over N
     # candidates puts 4N requests in front of a server that runs one at a
     # time. See `max_parallel_requests` for why serialising costs nothing.
-    gate = asyncio.Semaphore(max_parallel_requests(evaluator.model))
+    gate = judge_gate(judge)
 
     async def evaluate_output(output: str) -> EvaluatedOutput:
         async def scored(rubric_name: str) -> PrometheusVote:
@@ -115,7 +122,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                 rubric_feedback.append(RubricFeedback(rubric=rubric_name, value=res.score, feedback=res.feedback))
 
         provider_feedback = ProviderFeedback(
-            ai="Prometheus",
+            ai=judge.display_name,
             model=evaluator.model,
             feedback=rubric_feedback,
             overall_score=sum(item.value for item in rubric_feedback) / len(rubric_feedback),
@@ -145,7 +152,7 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput) -> VotingR
                 for rubric_name in RUBRIC_NAMES
             ]
             provider_feedback = ProviderFeedback(
-                ai="Prometheus",
+                ai=judge.display_name,
                 model=evaluator.model,
                 feedback=error_feedback,
                 overall_score=-1.0,

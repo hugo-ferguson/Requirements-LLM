@@ -8,11 +8,11 @@ why adding a model is a config edit rather than a code change.
 
 from __future__ import annotations
 
-from pydantic_ai import Agent, NativeOutput, RunContext
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
-from app.generation.config import GenerationAgentConfig
+from app.llm_config import GenerationAgentConfig, with_output_mode
 from app.generation.models import (
     GeneratedCriteriaSet,
     GeneratedCriterion,
@@ -192,24 +192,6 @@ def _build_model(
         f"Unknown provider {config.provider!r} for agent {config.id!r}.")
 
 
-def _output_type(config: GenerationAgentConfig, output_type: GenerationOutput):
-    """Choose how the model is asked to return its structured output.
-
-    PydanticAI's default is a tool call. Small local models served through
-    Ollama are unreliable at that — they emit the tool-call envelope
-    (`{"name": "final_result", "arguments": {...}}`) as ordinary text, which
-    then fails validation against the schema and burns all the output retries.
-    Asking Ollama for a native JSON-schema response instead removes the tool
-    round-trip entirely.
-
-    Cloud providers keep the tool-based default, which they handle well and
-    which Anthropic requires (it has no native JSON-schema mode).
-    """
-    if config.provider == "ollama":
-        return NativeOutput(output_type)
-    return output_type
-
-
 def build_agent(
     config: GenerationAgentConfig,
     output_type: GenerationOutput = GeneratedCriteriaSet,
@@ -227,10 +209,13 @@ def build_agent(
     """
     agent: GenerationAgent = Agent(
         _build_model(config, output_type),
-        output_type=_output_type(config, output_type),
+        output_type=with_output_mode(output_type, config.output_mode),
         deps_type=GenerationDeps,
         system_prompt=system_prompt,
-        model_settings=ModelSettings(temperature=config.temperature),
+        model_settings=(
+            ModelSettings() if config.temperature is None
+            else ModelSettings(temperature=config.temperature)
+        ),
         retries=2,
     )
 

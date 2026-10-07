@@ -5,14 +5,13 @@ import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+import weakref
 from pathlib import Path
-from typing import Literal
 
 import litellm
 from pydantic import ValidationError
 
-from voting.models import CombinedVote, EvaluationInput, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
+from voting.models import CombinedVote, EvaluationInput, JudgeConfig, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
 
 
 logger = logging.getLogger(__name__)
@@ -60,57 +59,6 @@ def _merge_json_objects(texts: list[str]) -> dict:
 	return merged
 
 
-@dataclass(frozen=True)
-class JudgeProfile:
-	"""How a judge's provider differs from the LiteLLM defaults.
-
-	LiteLLM's own capability data can't be trusted for these: it reports
-	Sonnet 5.5 as supporting `tool_choice` and `temperature`, and the API
-	rejects both. So the differences are declared here, per provider.
-	"""
-
-	# Send `response_format`. LiteLLM implements it for Anthropic as a forced
-	# tool call, which Claude from Sonnet 5.5 / Opus 5.5 on rejects with a 400.
-	# Without it, the schema in the system prompt and `_parse_vote` suffice.
-	structured_output: bool = True
-	# "never" for providers whose current models reject a non-default value
-	# (Claude from Opus 4.7 / Sonnet 5 on); "non_reasoning" when only
-	# reasoning models do, as LiteLLM can tell for OpenAI.
-	temperature: Literal["always", "never", "non_reasoning"] = "always"
-	# Mark the shared prefix with `cache_control`. Only Anthropic needs it:
-	# OpenAI and Gemini cache long prefixes on their own, and LiteLLM may not
-	# strip the marker for every provider.
-	cache_marker: bool = False
-	# Concurrent requests. Ollama serves one request per model at a time, so
-	# extra concurrency only queues, and the queue time counts against each
-	# request's timeout (see `max_parallel_requests`).
-	max_parallel: int = 8
-
-
-JUDGE_PROFILES: dict[str, JudgeProfile] = {
-	"anthropic": JudgeProfile(structured_output=False, temperature="never", cache_marker=True),
-	"openai": JudgeProfile(temperature="non_reasoning"),
-	"ollama": JudgeProfile(max_parallel=1),
-}
-
-
-def judge_profile(model: str) -> JudgeProfile:
-	"""The profile for a LiteLLM model string, keyed on its `provider/` prefix."""
-	provider, _, _ = model.partition("/")
-	return JUDGE_PROFILES.get(provider, JudgeProfile())
-
-
-def _accepts_temperature(model: str) -> bool:
-	"""False when the request would be rejected for a non-default temperature."""
-	rule = judge_profile(model).temperature
-	if rule != "non_reasoning":
-		return rule == "always"
-	try:
-		return not litellm.supports_reasoning(model=model)
-	except Exception:
-		return True
-
-
 def default_timeout() -> float:
 	"""Per-request timeout, overridable for slow local hardware.
 
@@ -123,15 +71,16 @@ def default_timeout() -> float:
 		return 120.0
 
 
-def max_parallel_requests(model: str) -> int:
-	"""How many scoring requests may be in flight against `model` at once.
+def max_parallel_requests(judge: JudgeConfig) -> int:
+	"""How many scoring requests may be in flight against `judge` at once.
 
-	`VOTING_MAX_PARALLEL` overrides the provider's profile. Ollama serves one request per model at a time, so firing N candidates
-	concurrently does not make them run in parallel — it queues them, and the
-	per-request timeout counts that queue time. Later candidates then expire
-	before they ever start, which reads downstream as an unrated candidate
-	rather than as a capacity problem. Observed directly: 3 of 5 candidates
-	timing out at exactly 120.0s while the first two scored fine.
+	`VOTING_MAX_PARALLEL` overrides the judge's `max_parallel`. Ollama serves
+	one request per model at a time, so firing N candidates concurrently does
+	not make them run in parallel — it queues them, and the per-request
+	timeout counts that queue time. Later candidates then expire before they
+	ever start, which reads downstream as an unrated candidate rather than as
+	a capacity problem. Observed directly: 3 of 5 candidates timing out at
+	exactly 120.0s while the first two scored fine.
 
 	Serialising costs nothing in wall-clock terms, because Ollama was going to
 	run them one at a time regardless. It just means each timeout covers real
@@ -143,10 +92,30 @@ def max_parallel_requests(model: str) -> int:
 			return max(1, int(raw))
 		except ValueError:
 			pass
-	return judge_profile(model).max_parallel
+	return judge.max_parallel
 
 
-def _system_message(model: str) -> dict:
+# One gate per judge per event loop. The app runs every scoring call on one
+# long-lived loop (see app/services/scoring.py), so a judge's `max_parallel`
+# caps its requests across all concurrent scoring runs, not just within one.
+# Without that, UAT generation scored every accepted AC at once and multiplied
+# the cap by the number of ACs, tripping Anthropic's org-wide concurrency
+# limit. Keyed by loop because an asyncio primitive binds to the loop that
+# first uses it, and tests start a fresh loop each time.
+_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]] = (
+	weakref.WeakKeyDictionary()
+)
+
+
+def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
+	"""The running loop's shared concurrency gate for `judge`."""
+	gates = _gates.setdefault(asyncio.get_running_loop(), {})
+	if judge.id not in gates:
+		gates[judge.id] = asyncio.Semaphore(max_parallel_requests(judge))
+	return gates[judge.id]
+
+
+def _system_message(judge: JudgeConfig) -> dict:
 	"""The evaluator role, response schema and rubrics, all fixed text.
 
 	Every vote across every story shares this exact prefix. Byte-for-byte
@@ -159,7 +128,7 @@ def _system_message(model: str) -> dict:
 		f"{schema_hint}\n\n"
 		f"{COMBINED_PROMPT.read_text(encoding='utf-8')}"
 	)
-	if not judge_profile(model).cache_marker:
+	if not judge.cache_prompt:
 		return {"role": "system", "content": text}
 	return {
 		"role": "system",
@@ -167,14 +136,14 @@ def _system_message(model: str) -> dict:
 	}
 
 
-def _log_cache_usage(model: str, result) -> None:
+def _log_cache_usage(judge: JudgeConfig, result) -> None:
 	"""Debug-log cache reads and writes, the only proof the cache is hitting."""
 	usage = getattr(result, "usage", None)
-	if usage is None or not judge_profile(model).cache_marker:
+	if usage is None or not judge.cache_prompt:
 		return
 	logger.debug(
 		"%s prompt cache: read=%s written=%s uncached=%s",
-		model,
+		judge.model,
 		getattr(usage, "cache_read_input_tokens", None),
 		getattr(usage, "cache_creation_input_tokens", None),
 		getattr(usage, "prompt_tokens", None),
@@ -186,17 +155,15 @@ class LiteLLMCombinedClient:
 
 	def __init__(
 		self,
-		provider_name: str,
-		model: str,
+		judge: JudgeConfig,
 		*,
-		temperature: float = 0.1,
 		timeout: float | None = None,
 		num_retries: int = 2,
 	) -> None:
 		timeout = default_timeout() if timeout is None else timeout
-		self.provider_name = provider_name
-		self.model = model
-		self.temperature = temperature
+		self.judge = judge
+		self.provider_name = judge.display_name
+		self.model = judge.model
 		self.timeout = timeout
 		self.num_retries = num_retries
 
@@ -208,13 +175,8 @@ class LiteLLMCombinedClient:
 		# No max_tokens: OpenAI reasoning models reject it (LiteLLM doesn't
 		# translate it to max_completion_tokens for them), and a small cap would
 		# eat into their reasoning tokens and truncate the vote.
-		sampling = {"temperature": self.temperature} if _accepts_temperature(self.model) else {}
-
-		structured = (
-			{"response_format": COMBINED_VOTE_SCHEMA}
-			if judge_profile(self.model).structured_output
-			else {}
-		)
+		sampling = {} if self.judge.temperature is None else {"temperature": self.judge.temperature}
+		structured = {"response_format": COMBINED_VOTE_SCHEMA} if self.judge.structured_output else {}
 
 		# A successful reply can still carry no usable vote, and LiteLLM's own
 		# num_retries only covers HTTP/network errors — so retry that case here.
@@ -223,7 +185,7 @@ class LiteLLMCombinedClient:
 			result = await litellm.acompletion(
 				model=self.model,
 				messages=[
-					_system_message(self.model),
+					_system_message(self.judge),
 					{"role": "user", "content": prompt},
 				],
 				**structured,
@@ -234,7 +196,7 @@ class LiteLLMCombinedClient:
 				timeout=self.timeout,
 				num_retries=self.num_retries,
 			)
-			_log_cache_usage(self.model, result)
+			_log_cache_usage(self.judge, result)
 			try:
 				return self._parse_vote(result.choices[0])
 			except (ValueError, ValidationError) as error:
@@ -304,9 +266,7 @@ def _error_output(output: str, provider_name: str, model: str, message: str) -> 
 
 
 async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: LiteLLMCombinedClient) -> VotingResult:
-	# Created per call rather than per module: an asyncio primitive binds to
-	# the running loop, and score_candidates starts a fresh loop every time.
-	gate = asyncio.Semaphore(max_parallel_requests(client.model))
+	gate = judge_gate(client.judge)
 
 	async def evaluate_output(output: str) -> EvaluatedOutput:
 		async with gate:
@@ -335,7 +295,7 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 
 	outputs = evaluation_input.output
 	results: list[EvaluatedOutput | BaseException] = []
-	if judge_profile(client.model).cache_marker and len(outputs) > 1:
+	if client.judge.cache_prompt and len(outputs) > 1:
 		# A cache entry only exists once the first request has started
 		# responding, so a cold batch fired all at once would pay the write
 		# premium on every vote and read nothing. Score one candidate first to
