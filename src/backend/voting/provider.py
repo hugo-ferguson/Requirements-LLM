@@ -298,30 +298,25 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 		)
 
 	outputs = evaluation_input.output
+	results: list[EvaluatedOutput | BaseException] = []
 	if supports_prompt_cache(client.model) and len(outputs) > 1:
 		# A cache entry only exists once the first request has started
 		# responding, so a cold batch fired all at once would pay the write
 		# premium on every vote and read nothing. Score one candidate first to
 		# write the shared rubric prefix, then the rest read it.
-		results = await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True)
-		results += await asyncio.gather(
-			*(evaluate_output(output) for output in outputs[1:]),
-			return_exceptions=True,
-		)
-	else:
-		results = await asyncio.gather(
+		results.extend(await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True))
+		outputs = outputs[1:]
+	results.extend(
+		await asyncio.gather(
 			*(evaluate_output(output) for output in outputs),
 			return_exceptions=True,
 		)
+	)
 	evaluated_outputs: list[EvaluatedOutput] = []
 	failures = 0
 	for output, result in zip(evaluation_input.output, results, strict=True):
 		if isinstance(result, Exception):
 			failures += 1
-			# The -1 sentinel below reads as 0.0 once clamped, which is
-			# indistinguishable from a candidate the model genuinely rated
-			# worthless — and a 0.0 always loses its group. Say so, or a
-			# scoring outage quietly decides which candidate wins.
 			logger.warning(
 				"%s (model=%s) failed to score a candidate; it degrades to the "
 				"-1 sentinel and will rank last: %s: %s",
@@ -338,8 +333,10 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 					f"Error evaluating output: {result.__class__.__name__}: {result}",
 				)
 			)
-		else:
+		elif isinstance(result, EvaluatedOutput):
 			evaluated_outputs.append(result)
+		else:
+			raise result
 
 	if failures:
 		logger.warning(
