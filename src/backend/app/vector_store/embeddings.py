@@ -33,6 +33,13 @@ class EmbeddingProvider(ABC):
 class LocalEmbeddingProvider(EmbeddingProvider):
 	"""Runs a small embedding model locally with fastembed."""
 
+	# fastembed's default batch is 256 chunks. The model's activations grow
+	# with batch size x sequence length squared, so a large PDF briefly needed
+	# gigabytes — enough to exhaust Docker's WSL VM and take the whole stack
+	# down mid-upload. Small batches give identical vectors at a fraction of
+	# the peak memory, for a negligible cost in speed on CPU.
+	BATCH_SIZE = 16
+
 	def __init__(self, model_name: str = "BAAI/bge-base-en-v1.5"):
 		from fastembed import TextEmbedding
 
@@ -44,7 +51,10 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 		return self._dimension
 
 	def embed_texts(self, texts: list[str]) -> list[list[float]]:
-		return [vector.tolist() for vector in self._model.embed(texts)]
+		return [
+			vector.tolist()
+			for vector in self._model.embed(texts, batch_size=self.BATCH_SIZE)
+		]
 
 
 class LiteLLMEmbeddingProvider(EmbeddingProvider):

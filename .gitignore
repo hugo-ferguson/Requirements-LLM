@@ -217,3 +217,7 @@ src/frontend/vite.config.d.ts
 
 # MacOS
 .DS_Store
+# Local generation agent roster (R8). Names models, base URLs and the env
+# vars holding their API keys, so it is machine-specific and may carry secrets.
+# Commit config/generation_agents.example.json instead.
+src/backend/config/generation_agents.json

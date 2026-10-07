@@ -18,8 +18,15 @@ export type UatRegenerateSelectedResponse =
   paths["/sessions/{session_id}/uat-cases/{uat_id}/regenerate"]["post"]["responses"]["200"]["content"]["application/json"];
 type UatApplyApprovedRequest =
   paths["/sessions/{session_id}/uat-cases/{uat_id}/apply-approved"]["post"]["requestBody"]["content"]["application/json"];
+export type UatCaseAlternative = NonNullable<UatCase["alternatives"]>[number];
 
 export const uatCasesApi = {
+  selectAlternative: (sessionId: string, uatId: number, candidateId: number): Promise<UatCase> =>
+    request<UatCase>(
+      `/sessions/${sessionId}/uat-cases/${uatId}/alternatives/${candidateId}/select`,
+      { method: "POST" },
+    ),
+
   list: (sessionId: string): Promise<UatCaseGroupsResult> =>
     request<UatCaseGroupsResult>(`/sessions/${sessionId}/uat-cases`),
 

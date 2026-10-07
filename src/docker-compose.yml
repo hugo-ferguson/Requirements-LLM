@@ -24,8 +24,12 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/app}
       CORS_ORIGINS: '["http://localhost:5173"]'
-      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://localhost:11434}
-      VOTING_PROVIDERS: ${VOTING_PROVIDERS:-qwen:ollama/qwen2.5:7b,llama:ollama/llama3.1:8b}
+      # Only used if you switch a model to a local Ollama one; from inside a
+      # container, the host machine is host.docker.internal, not localhost.
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+      # Scoring judges (see .env.example). The default needs ANTHROPIC_API_KEY
+      # and OPENAI_API_KEY; `claude` must always be defined.
+      VOTING_PROVIDERS: ${VOTING_PROVIDERS:-claude:anthropic/claude-haiku-4-5-20251001,luna:openai/gpt-6-luna}
     ports:
       - "8000:8000"
     volumes:

@@ -41,6 +41,37 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 150
 
+
+    # --- Ensemble generation layer ---
+    # Roster of generation agents (backlog R8). Relative paths resolve
+    # against the backend working directory.
+    generation_roster_path: str = "config/generation_agents.json"
+    # Per-agent wall-clock limit. Keeps one slow model from eating the whole
+    # 60s budget in R6.
+    generation_timeout_seconds: float = 45.0
+    # Upper bound on criteria requested from each agent.
+    generation_max_criteria: int = 8
+    # Number of RAG chunks injected into each agent's prompt (R11).
+    rag_top_k: int = 5
+    # Set false to skip the voting layer and return unscored candidates -
+    # useful when iterating on prompts without paying for the voters.
+    generation_enable_voting: bool = True
+    # Two-pass generation: one agent fixes the titles, the rest write their own
+    # given/when/then against them, so candidates for the same behaviour can be
+    # compared directly instead of pooled into an ungrouped union. Costs one
+    # extra sequential pass; set false to restore the single-pass ensemble.
+    generation_title_anchored: bool = True
+    # Voting judges: comma-separated names from VOTING_PROVIDERS. Every judge
+    # scores every candidate and their rubric scores are averaged, so one
+    # model's taste (or its preference for its own family's wording) does not
+    # pick every winner alone. A judge that fails is averaged out.
+    voting_judges: str = "claude"
+
+    @property
+    def voting_judge_names(self) -> list[str]:
+        names = [name.strip().lower() for name in self.voting_judges.split(",")]
+        return [name for name in names if name] or ["claude"]
+
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 
 

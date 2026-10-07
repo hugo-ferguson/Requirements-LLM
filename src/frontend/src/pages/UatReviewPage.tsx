@@ -16,9 +16,8 @@ type Mode = "list" | "regenerate";
 export function UatReviewPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { groups, isLoading, loadError, updateText, updateStatus, applyApproved } = useUatCases(
-    sessionId!,
-  );
+  const { groups, isLoading, loadError, updateText, updateStatus, applyApproved, selectAlternative } =
+    useUatCases(sessionId!);
 
   const [expandedAcId, setExpandedAcId] = useState<number | null>(null);
   const [selectedUatId, setSelectedUatId] = useState<number | null>(null);
@@ -27,6 +26,7 @@ export function UatReviewPage() {
   const [regenerateTargetId, setRegenerateTargetId] = useState<number | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [swapError, setSwapError] = useState<string | null>(null);
 
   const fetchCandidates = useCallback(
     (
@@ -52,6 +52,15 @@ export function UatReviewPage() {
 
   function handleReject(uatId: number, currentStatus: string) {
     updateStatus(uatId, currentStatus === "rejected" ? "pending" : "rejected");
+  }
+
+  async function handleSelectAlternative(uatId: number, candidateId: number) {
+    setSwapError(null);
+    try {
+      await selectAlternative(uatId, candidateId);
+    } catch {
+      setSwapError("Couldn't switch to that version. Please try again.");
+    }
   }
 
   function handleEnterRegenerate() {
@@ -186,6 +195,7 @@ export function UatReviewPage() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
+      {swapError && <p className="mb-3 text-sm text-red-600">{swapError}</p>}
       <div className="flex-1 space-y-3">
         {groups.map((group, index) => (
           <div key={group.ac.id}>
@@ -213,6 +223,9 @@ export function UatReviewPage() {
                     }}
                     onAccept={() => handleAccept(uatCase.id, uatCase.status)}
                     onReject={() => handleReject(uatCase.id, uatCase.status)}
+                    onSelectAlternative={(candidateId) =>
+                      handleSelectAlternative(uatCase.id, candidateId)
+                    }
                   />
                 ))}
               </div>

@@ -638,6 +638,66 @@
         }
       }
     },
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/alternatives/{candidate_id}/select": {
+      "post": {
+        "tags": [
+          "acceptance-criteria"
+        ],
+        "summary": "Select Alternative",
+        "operationId": "select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "ac_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Ac Id"
+            }
+          },
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectAlternativeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff": {
       "post": {
         "tags": [
@@ -1008,6 +1068,66 @@
         }
       }
     },
+    "/sessions/{session_id}/uat-cases/{uat_id}/alternatives/{candidate_id}/select": {
+      "post": {
+        "tags": [
+          "uat-cases"
+        ],
+        "summary": "Select Uat Alternative",
+        "operationId": "select_uat_alternative_sessions__session_id__uat_cases__uat_id__alternatives__candidate_id__select_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "uat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Uat Id"
+            }
+          },
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UatCase"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/documents/upload": {
       "post": {
         "tags": [
@@ -1195,7 +1315,7 @@
           },
           "overall_score": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Overall Score"
           },
@@ -1208,6 +1328,24 @@
             ],
             "title": "Status",
             "default": "pending"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterionAlternative"
+            },
+            "type": "array",
+            "title": "Alternatives"
           }
         },
         "type": "object",
@@ -1222,29 +1360,86 @@
         ],
         "title": "AcceptanceCriterion"
       },
+      "AcceptanceCriterionAlternative": {
+        "properties": {
+          "candidate_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
+          "given": {
+            "type": "string",
+            "title": "Given"
+          },
+          "when": {
+            "type": "string",
+            "title": "When"
+          },
+          "then": {
+            "type": "string",
+            "title": "Then"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/AcceptanceCriterionScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "given",
+          "when",
+          "then",
+          "scores",
+          "overall_score"
+        ],
+        "title": "AcceptanceCriterionAlternative",
+        "description": "A losing candidate for the same title as its parent criterion.\n\nCarries no `status`: an alternative is not a reviewable item in its own\nright, it is the answer to \"what did the other model say?\". It does carry\n`candidate_id` once persisted, so the reviewer can swap it in."
+      },
       "AcceptanceCriterionScores": {
         "properties": {
           "relevance": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Relevance"
           },
           "correctness": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Correctness"
           },
           "understandability": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Understandability"
           },
           "coverage": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Coverage"
           }
@@ -1613,6 +1808,23 @@
         ],
         "title": "RegenerateSelectedResponse"
       },
+      "SelectAlternativeResponse": {
+        "properties": {
+          "acceptance_criterion": {
+            "$ref": "#/components/schemas/AcceptanceCriterion"
+          },
+          "uat_cases_affected": {
+            "type": "integer",
+            "title": "Uat Cases Affected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "acceptance_criterion",
+          "uat_cases_affected"
+        ],
+        "title": "SelectAlternativeResponse"
+      },
       "SessionCreate": {
         "properties": {
           "name": {
@@ -1750,7 +1962,7 @@
           },
           "overall_score": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Overall Score"
           },
@@ -1763,6 +1975,24 @@
             ],
             "title": "Status",
             "default": "pending"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/UatCaseAlternative"
+            },
+            "type": "array",
+            "title": "Alternatives"
           }
         },
         "type": "object",
@@ -1775,6 +2005,53 @@
           "overall_score"
         ],
         "title": "UatCase"
+      },
+      "UatCaseAlternative": {
+        "properties": {
+          "candidate_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/UatCaseScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Overall Score"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "description",
+          "scores",
+          "overall_score"
+        ],
+        "title": "UatCaseAlternative",
+        "description": "Another model's version of the same test case; swappable via `candidate_id`."
       },
       "UatCaseGroup": {
         "properties": {
@@ -1816,25 +2093,25 @@
         "properties": {
           "relevance": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Relevance"
           },
           "correctness": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Correctness"
           },
           "understandability": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Understandability"
           },
           "coverage": {
             "type": "number",
-            "maximum": 10.0,
+            "maximum": 5.0,
             "minimum": 0.0,
             "title": "Coverage"
           }

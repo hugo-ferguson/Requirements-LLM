@@ -8,6 +8,7 @@ from app.models_acceptance_criteria import (
     ApplyApprovedRequest,
     RegenerateSelectedRequest,
     RegenerateSelectedResponse,
+    SelectAlternativeResponse,
 )
 from app.models_conversation import AcceptanceCriterion, GenerateResult
 from app.models_session import MessageRead
@@ -101,6 +102,21 @@ def apply_approved(
     if items is None:
         raise HTTPException(status_code=404, detail="Acceptance criterion not found")
     return GenerateResult(acceptance_criteria=items)
+
+
+@router.post(
+    "/{ac_id}/alternatives/{candidate_id}/select", response_model=SelectAlternativeResponse
+)
+def select_alternative(
+    session_id: int,
+    ac_id: int,
+    candidate_id: int,
+    service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
+) -> SelectAlternativeResponse:
+    result = service.select_alternative(session_id, ac_id, candidate_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Acceptance criterion or alternative not found")
+    return result
 
 
 @router.post("/regenerate-all-kickoff", response_model=MessageRead, status_code=201)

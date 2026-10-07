@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, ToolCallPart
@@ -16,7 +18,8 @@ from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
 from app.services.agents import GenerationError
 from app.services.scoring import CandidateScore
-from app.services.uat_cases import GeneratedUatCase, GeneratedUatCases, UatCaseService
+from app.generation.models import UatAgentResult
+from app.services.uat_cases import GeneratedUatCase, UatCaseService
 
 
 @pytest.fixture(name="db_session")
@@ -57,15 +60,16 @@ def _fake_scorer(prompt, candidates, *, reference_answer="", settings=None):
 
 
 def _service(
-    db_session: Session, *, generation_agent=None, regen_agent=None, scorer=None
+    db_session: Session, *, regen_agent=None, scorer=None, uat_ensemble=None
 ) -> UatCaseService:
+    extra = {"uat_ensemble": uat_ensemble} if uat_ensemble else {}
     return UatCaseService(
         SessionRepository(db_session),
         UatCaseRepository(db_session),
         AcceptanceCriteriaRepository(db_session),
-        generation_agent=generation_agent,
         regen_agent=regen_agent,
         scorer=scorer or _fake_scorer,
+        **extra,
     )
 
 
@@ -75,56 +79,48 @@ def _tool_response(info: AgentInfo, **fields) -> ModelResponse:
     )
 
 
-def test_generate_persists_real_cases_from_the_model_scored_by_the_scorer(
+async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
     db_session: Session,
 ) -> None:
+    # The autouse fixture points the roster at two offline `test` agents.
     session_id, ac_id = _seed_accepted_ac(db_session)
+    service = _service(db_session)
 
-    def write_cases(messages, info):
-        return _tool_response(
-            info,
-            cases=[
-                {"title": "Happy path", "description": "Valid credentials log the user in"},
-                {"title": "Wrong password", "description": "An error is shown, no login occurs"},
-            ],
-        )
-
-    service = _service(
-        db_session,
-        generation_agent=Agent(
-            FunctionModel(write_cases), output_type=GeneratedUatCases, system_prompt="test"
-        ),
-    )
-
-    result = service.generate(session_id)
+    result = await service.generate(session_id)
 
     assert result is not None
     [group] = result.groups
     assert group.ac.id == ac_id
-    assert len(group.uat_cases) == 2
-    titles = {c.title for c in group.uat_cases}
-    assert titles == {"Happy path", "Wrong password"}
+    assert [c.title for c in group.uat_cases] == [
+        "Log in with valid credentials",
+        "Reject a wrong password",
+    ]
     for case in group.uat_cases:
         assert case.scores.relevance == 3
         assert case.overall_score == 3.75
         assert case.status == "pending"
+        # Equal scores tie-break on agent id, so test-a's version is shown.
+        assert case.source_agent == "test-a"
+        [alt] = case.alternatives
+        assert alt.source_agent == "test-b"
+        assert alt.description.startswith("test-b:")
+        assert alt.candidate_id is not None
 
 
-def test_generate_raises_generation_error_and_persists_nothing_when_the_model_fails(
+async def test_generate_raises_generation_error_and_persists_nothing_when_every_agent_fails(
     db_session: Session,
 ) -> None:
     session_id, _ = _seed_accepted_ac(db_session)
 
-    def explode(messages, info):
-        raise RuntimeError("upstream is down")
+    async def all_failed(prompt, *, timeout_seconds):
+        return [
+            UatAgentResult(agent_id="a", provider="test", model="test", error="upstream is down")
+        ], []
 
-    service = _service(
-        db_session,
-        generation_agent=Agent(FunctionModel(explode), output_type=GeneratedUatCases, system_prompt="test"),
-    )
+    service = _service(db_session, uat_ensemble=all_failed)
 
-    with pytest.raises(GenerationError):
-        service.generate(session_id)
+    with pytest.raises(GenerationError, match="upstream is down"):
+        await service.generate(session_id)
 
     listed = service.list_items(session_id)
     assert listed.groups == []
@@ -135,22 +131,11 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
 ) -> None:
     session_id, ac_id = _seed_accepted_ac(db_session)
 
-    def write_cases(messages, info):
-        return _tool_response(
-            info,
-            cases=[
-                {"title": "Original", "description": "Original description"},
-                {"title": "Second", "description": "Second description"},
-            ],
-        )
-
-    seed_service = _service(
-        db_session,
-        generation_agent=Agent(
-            FunctionModel(write_cases), output_type=GeneratedUatCases, system_prompt="test"
-        ),
-    )
-    seed_service.generate(session_id)
+    # Seeded from the offline `test` roster the autouse fixture configures.
+    # Kept synchronous: regenerate_selected uses run_sync, which can't run
+    # inside an already-running event loop.
+    seed_service = _service(db_session)
+    asyncio.run(seed_service.generate(session_id))
     [group] = seed_service.list_items(session_id).groups
     target_id = group.uat_cases[0].id
 

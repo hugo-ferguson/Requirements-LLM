@@ -1,7 +1,4 @@
-from app.models_acceptance_criteria import AcceptanceCriterionRecord
 from app.models_conversation import (
-    AcceptanceCriterion,
-    AcceptanceCriterionScores,
     ConversationAttachment,
     ConversationMessage,
     ConversationRequest,
@@ -20,7 +17,9 @@ from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
+from app.services.acceptance_criteria import to_acceptance_criteria
 from app.services.conversation import ConversationService
+from app.services.generation import GenerationService
 
 
 def _to_conversation_message(message: Message) -> ConversationMessage:
@@ -41,24 +40,6 @@ def _to_message_read(message: Message) -> MessageRead:
     )
 
 
-def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
-    return AcceptanceCriterion(
-        id=record.id,
-        title=record.title,
-        given=record.given,
-        when=record.when,
-        then=record.then,
-        scores=AcceptanceCriterionScores(
-            relevance=record.relevance,
-            correctness=record.correctness,
-            understandability=record.understandability,
-            coverage=record.coverage,
-        ),
-        overall_score=record.overall_score,
-        status=record.status,
-    )
-
-
 class SessionService:
     """Business logic for sessions and their messages, independent of HTTP concerns."""
 
@@ -69,12 +50,14 @@ class SessionService:
         conversation_service: ConversationService,
         acceptance_criteria_repository: AcceptanceCriteriaRepository,
         uat_case_repository: UatCaseRepository,
+        generation_service: GenerationService,
     ):
         self.sessions = session_repository
         self.messages = message_repository
         self.conversation = conversation_service
         self.acceptance_criteria = acceptance_criteria_repository
         self.uat_cases = uat_case_repository
+        self.generation = generation_service
 
     def create_session(self, data: SessionCreate) -> ChatSession:
         return self.sessions.create(data.name or "New session")
@@ -137,18 +120,27 @@ class SessionService:
         self.sessions.touch(chat_session)
         return _to_message_read(reply_message)
 
-    def generate(self, session_id: int) -> GenerateResult | None:
+    async def generate(self, session_id: int) -> GenerateResult | None:
+        """Run the ensemble pipeline for this session and persist the result.
+
+        Async because the generation layer fans out to every enabled agent
+        concurrently; see `app.generation.orchestrator.run_ensemble`.
+        """
         chat_session = self.sessions.get(session_id)
         if chat_session is None:
             return None
 
         history = self.messages.list_for_session(session_id)
-        request = ConversationRequest(messages=[_to_conversation_message(m) for m in history])
-        reply = self.conversation.generate(request)
+        messages = [_to_conversation_message(m) for m in history]
+        criteria = await self.generation.generate(messages)
 
         # Regenerating ACs replaces their ids, so any UAT cases generated
         # against the old ids would otherwise be left as orphaned rows (or
         # violate the FK, in a database that enforces it) — clear them too.
         self.uat_cases.delete_for_session(session_id)
-        persisted = self.acceptance_criteria.persist_batch(session_id, reply.acceptance_criteria)
-        return GenerateResult(acceptance_criteria=[_to_acceptance_criterion(r) for r in persisted])
+        persisted = self.acceptance_criteria.persist_batch(session_id, criteria)
+        return GenerateResult(
+            acceptance_criteria=to_acceptance_criteria(
+                self.acceptance_criteria, session_id, persisted
+            )
+        )

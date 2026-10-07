@@ -2,15 +2,18 @@ from pydantic_ai import Agent
 
 from app.config import Settings, settings as default_settings
 from app.models_acceptance_criteria import (
+    AcceptanceCriterionCandidateRecord,
     AcceptanceCriterionRecord,
     AcceptanceCriterionStatusUpdate,
     AcceptanceCriterionTextUpdate,
     ApplyApprovedRequest,
     RegenerateSelectedRequest,
     RegenerateSelectedResponse,
+    SelectAlternativeResponse,
 )
 from app.models_conversation import (
     AcceptanceCriterion,
+    AcceptanceCriterionAlternative,
     AcceptanceCriterionScores,
     ConversationMessage,
     ConversationRequest,
@@ -58,7 +61,17 @@ def _build_regeneration_prompt(
     return "\n".join(parts)
 
 
-def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
+def to_acceptance_criterion(
+    record: AcceptanceCriterionRecord,
+    candidates: list[AcceptanceCriterionCandidateRecord] | None = None,
+) -> AcceptanceCriterion:
+    """Wire model for one AC, with the other models' versions attached.
+
+    `candidates` are the stored candidate rows at the record's position; the
+    winner row supplies `source_agent`, the rest become `alternatives`.
+    """
+    candidates = candidates or []
+    winner = next((c for c in candidates if c.is_winner), None)
     return AcceptanceCriterion(
         id=record.id,
         title=record.title,
@@ -73,7 +86,35 @@ def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCri
         ),
         overall_score=record.overall_score,
         status=record.status,
+        source_agent=winner.source_agent if winner else None,
+        alternatives=[
+            AcceptanceCriterionAlternative(
+                candidate_id=c.id,
+                given=c.given,
+                when=c.when,
+                then=c.then,
+                scores=AcceptanceCriterionScores(
+                    relevance=c.relevance,
+                    correctness=c.correctness,
+                    understandability=c.understandability,
+                    coverage=c.coverage,
+                ),
+                overall_score=c.overall_score,
+                source_agent=c.source_agent,
+            )
+            for c in candidates
+            if not c.is_winner
+        ],
     )
+
+
+def to_acceptance_criteria(
+    ac_repository: AcceptanceCriteriaRepository,
+    session_id: int,
+    records: list[AcceptanceCriterionRecord],
+) -> list[AcceptanceCriterion]:
+    by_position = ac_repository.candidates_by_position(session_id)
+    return [to_acceptance_criterion(r, by_position.get(r.position)) for r in records]
 
 
 class AcceptanceCriteriaService:
@@ -115,7 +156,7 @@ class AcceptanceCriteriaService:
     def list_items(self, session_id: int) -> list[AcceptanceCriterion] | None:
         if self.sessions.get(session_id) is None:
             return None
-        return [_to_acceptance_criterion(r) for r in self.ac.list_for_session(session_id)]
+        return to_acceptance_criteria(self.ac, session_id, self.ac.list_for_session(session_id))
 
     def update_text(
         self, session_id: int, ac_id: int, data: AcceptanceCriterionTextUpdate
@@ -124,7 +165,7 @@ class AcceptanceCriteriaService:
         if record is None:
             return None
         updated = self.ac.update_text(record, data.title, data.given, data.when, data.then)
-        return _to_acceptance_criterion(updated)
+        return self._with_alternatives(updated)
 
     def update_status(
         self, session_id: int, ac_id: int, data: AcceptanceCriterionStatusUpdate
@@ -133,7 +174,34 @@ class AcceptanceCriteriaService:
         if record is None:
             return None
         updated = self.ac.update_status(record, data.status)
-        return _to_acceptance_criterion(updated)
+        return self._with_alternatives(updated)
+
+    def _with_alternatives(self, record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
+        [criterion] = to_acceptance_criteria(self.ac, record.session_id, [record])
+        return criterion
+
+    def select_alternative(
+        self, session_id: int, ac_id: int, candidate_id: int
+    ) -> SelectAlternativeResponse | None:
+        """Swap another model's version in as the displayed one.
+
+        Returns None when the AC or candidate doesn't exist, or the candidate
+        belongs to a different criterion — all of which the route maps to 404.
+        """
+        record = self.ac.get(session_id, ac_id)
+        candidate = self.ac.get_candidate(session_id, candidate_id)
+        if record is None or candidate is None:
+            return None
+        if candidate.criterion_position != record.position:
+            return None
+
+        if not candidate.is_winner:
+            record = self.ac.swap_in_candidate(record, candidate)
+
+        return SelectAlternativeResponse(
+            acceptance_criterion=self._with_alternatives(record),
+            uat_cases_affected=len(self.uat_cases.list_for_ac(ac_id)),
+        )
 
     def regenerate_selected(
         self, session_id: int, ac_id: int, data: RegenerateSelectedRequest
@@ -195,7 +263,7 @@ class AcceptanceCriteriaService:
         # otherwise this would violate the FK in a database that enforces it.
         self.uat_cases.delete_for_ac(ac_id)
         updated = self.ac.replace_one(session_id, ac_id, data.candidates)
-        return [_to_acceptance_criterion(r) for r in updated]
+        return to_acceptance_criteria(self.ac, session_id, updated)
 
     def regenerate_all_kickoff(self, session_id: int) -> MessageRead | None:
         chat_session = self.sessions.get(session_id)

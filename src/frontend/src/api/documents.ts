@@ -4,6 +4,13 @@ import type { paths } from "./schema";
 export type UploadRead =
   paths["/documents/upload"]["post"]["responses"]["201"]["content"]["application/json"];
 
+/**
+ * How long an upload may take before the browser gives up. The backend allows
+ * the vision model 300s plus retries for an image, so this sits above that —
+ * it exists to end a request that will never answer, not to hurry a slow one.
+ */
+export const UPLOAD_TIMEOUT_MS = 6 * 60 * 1000;
+
 export const documentsApi = {
   /**
    * Uploads one file for ingest and returns its extracted text.
@@ -16,7 +23,11 @@ export const documentsApi = {
   upload: (file: File): Promise<UploadRead> => {
     const body = new FormData();
     body.append("file", file);
-    return request<UploadRead>("/documents/upload", { method: "POST", body });
+    return request<UploadRead>("/documents/upload", {
+      method: "POST",
+      body,
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
   },
 
   /** Deletes an ingested document along with its chunks. */
