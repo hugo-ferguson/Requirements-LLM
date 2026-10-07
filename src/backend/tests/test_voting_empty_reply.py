@@ -63,6 +63,31 @@ def test_normal_content_is_parsed_in_one_call(fake_completion) -> None:
     assert vote.correctness.score == 4
     assert len(calls) == 1
     assert "max_tokens" not in calls[0]
+
+
+def test_a_claude_judge_gets_no_forced_tool_call_or_temperature(fake_completion) -> None:
+    # Live failure: Sonnet 5.5 rejected every vote with "tool_choice: type
+    # "tool" and "any" are not supported", because LiteLLM implements
+    # response_format for Anthropic as a forced tool call. It also rejects a
+    # non-default temperature.
+    replies, calls = fake_completion
+    replies.append(_reply(content=VOTE_JSON))
+    client = LiteLLMCombinedClient("Claude", "anthropic/claude-sonnet-5-5")
+
+    asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
+
+    assert "response_format" not in calls[0]
+    assert "temperature" not in calls[0]
+
+
+def test_other_judges_keep_structured_output_and_temperature(fake_completion) -> None:
+    replies, calls = fake_completion
+    replies.append(_reply(content=VOTE_JSON))
+    client = LiteLLMCombinedClient("Qwen", "ollama/qwen2.5:7b")
+
+    asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
+
+    assert calls[0]["response_format"] == provider.COMBINED_VOTE_SCHEMA
     assert calls[0]["temperature"] == 0.1
 
 

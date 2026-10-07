@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import litellm
 from pydantic import ValidationError
@@ -58,14 +60,51 @@ def _merge_json_objects(texts: list[str]) -> dict:
 	return merged
 
 
-def _accepts_temperature(model: str) -> bool:
-	"""False for OpenAI reasoning models, which only accept the default temperature.
+@dataclass(frozen=True)
+class JudgeProfile:
+	"""How a judge's provider differs from the LiteLLM defaults.
 
-	LiteLLM lists `temperature` as supported for them, so `drop_params` does
-	not strip it and the request would be rejected. An unknown model keeps it.
+	LiteLLM's own capability data can't be trusted for these: it reports
+	Sonnet 5.5 as supporting `tool_choice` and `temperature`, and the API
+	rejects both. So the differences are declared here, per provider.
 	"""
-	if not model.startswith("openai/"):
-		return True
+
+	# Send `response_format`. LiteLLM implements it for Anthropic as a forced
+	# tool call, which Claude from Sonnet 5.5 / Opus 5.5 on rejects with a 400.
+	# Without it, the schema in the system prompt and `_parse_vote` suffice.
+	structured_output: bool = True
+	# "never" for providers whose current models reject a non-default value
+	# (Claude from Opus 4.7 / Sonnet 5 on); "non_reasoning" when only
+	# reasoning models do, as LiteLLM can tell for OpenAI.
+	temperature: Literal["always", "never", "non_reasoning"] = "always"
+	# Mark the shared prefix with `cache_control`. Only Anthropic needs it:
+	# OpenAI and Gemini cache long prefixes on their own, and LiteLLM may not
+	# strip the marker for every provider.
+	cache_marker: bool = False
+	# Concurrent requests. Ollama serves one request per model at a time, so
+	# extra concurrency only queues, and the queue time counts against each
+	# request's timeout (see `max_parallel_requests`).
+	max_parallel: int = 8
+
+
+JUDGE_PROFILES: dict[str, JudgeProfile] = {
+	"anthropic": JudgeProfile(structured_output=False, temperature="never", cache_marker=True),
+	"openai": JudgeProfile(temperature="non_reasoning"),
+	"ollama": JudgeProfile(max_parallel=1),
+}
+
+
+def judge_profile(model: str) -> JudgeProfile:
+	"""The profile for a LiteLLM model string, keyed on its `provider/` prefix."""
+	provider, _, _ = model.partition("/")
+	return JUDGE_PROFILES.get(provider, JudgeProfile())
+
+
+def _accepts_temperature(model: str) -> bool:
+	"""False when the request would be rejected for a non-default temperature."""
+	rule = judge_profile(model).temperature
+	if rule != "non_reasoning":
+		return rule == "always"
 	try:
 		return not litellm.supports_reasoning(model=model)
 	except Exception:
@@ -87,7 +126,7 @@ def default_timeout() -> float:
 def max_parallel_requests(model: str) -> int:
 	"""How many scoring requests may be in flight against `model` at once.
 
-	Ollama serves one request per model at a time, so firing N candidates
+	`VOTING_MAX_PARALLEL` overrides the provider's profile. Ollama serves one request per model at a time, so firing N candidates
 	concurrently does not make them run in parallel — it queues them, and the
 	per-request timeout counts that queue time. Later candidates then expire
 	before they ever start, which reads downstream as an unrated candidate
@@ -104,17 +143,7 @@ def max_parallel_requests(model: str) -> int:
 			return max(1, int(raw))
 		except ValueError:
 			pass
-	return 1 if model.startswith("ollama/") else 8
-
-
-def supports_prompt_cache(model: str) -> bool:
-	"""True for models that only cache a prompt when it is explicitly marked.
-
-	Anthropic needs a `cache_control` marker. OpenAI and Gemini cache long
-	prefixes on their own, and Ollama has nothing to cache, so neither gets
-	the marker, which LiteLLM may not strip for every provider.
-	"""
-	return model.startswith("anthropic/")
+	return judge_profile(model).max_parallel
 
 
 def _system_message(model: str) -> dict:
@@ -130,7 +159,7 @@ def _system_message(model: str) -> dict:
 		f"{schema_hint}\n\n"
 		f"{COMBINED_PROMPT.read_text(encoding='utf-8')}"
 	)
-	if not supports_prompt_cache(model):
+	if not judge_profile(model).cache_marker:
 		return {"role": "system", "content": text}
 	return {
 		"role": "system",
@@ -141,7 +170,7 @@ def _system_message(model: str) -> dict:
 def _log_cache_usage(model: str, result) -> None:
 	"""Debug-log cache reads and writes, the only proof the cache is hitting."""
 	usage = getattr(result, "usage", None)
-	if usage is None or not supports_prompt_cache(model):
+	if usage is None or not judge_profile(model).cache_marker:
 		return
 	logger.debug(
 		"%s prompt cache: read=%s written=%s uncached=%s",
@@ -181,6 +210,12 @@ class LiteLLMCombinedClient:
 		# eat into their reasoning tokens and truncate the vote.
 		sampling = {"temperature": self.temperature} if _accepts_temperature(self.model) else {}
 
+		structured = (
+			{"response_format": COMBINED_VOTE_SCHEMA}
+			if judge_profile(self.model).structured_output
+			else {}
+		)
+
 		# A successful reply can still carry no usable vote, and LiteLLM's own
 		# num_retries only covers HTTP/network errors — so retry that case here.
 		last_error: Exception | None = None
@@ -191,7 +226,7 @@ class LiteLLMCombinedClient:
 					_system_message(self.model),
 					{"role": "user", "content": prompt},
 				],
-				response_format=COMBINED_VOTE_SCHEMA,
+				**structured,
 				**sampling,
 				# Drop whatever else a given judge doesn't support instead of
 				# failing the vote.
@@ -211,10 +246,11 @@ class LiteLLMCombinedClient:
 	def _parse_vote(self, choice) -> CombinedVote:
 		"""Read the vote from the reply text, falling back to its tool calls.
 
-		For Anthropic, LiteLLM implements `response_format` as a forced tool
-		call and only copies the arguments into `content` when the reply holds
-		exactly one call to its JSON tool. Claude sometimes splits the vote
-		into one tool call per rubric instead, which leaves `content` empty —
+		Where LiteLLM implements `response_format` as a tool call (it did for
+		Anthropic, before Anthropic judges stopped receiving it), it only copies
+		the arguments into `content` when the reply holds exactly one call to
+		its JSON tool. A model can split the vote into one tool call per
+		rubric instead, which leaves `content` empty —
 		how candidates ended up unrated with "returned no message content". So
 		the tool calls are merged back into a single vote.
 		"""
@@ -299,7 +335,7 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 
 	outputs = evaluation_input.output
 	results: list[EvaluatedOutput | BaseException] = []
-	if supports_prompt_cache(client.model) and len(outputs) > 1:
+	if judge_profile(client.model).cache_marker and len(outputs) > 1:
 		# A cache entry only exists once the first request has started
 		# responding, so a cold batch fired all at once would pay the write
 		# premium on every vote and read nothing. Score one candidate first to
