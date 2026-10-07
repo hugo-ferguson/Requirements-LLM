@@ -16,7 +16,9 @@ from voting.models import CombinedVote, EvaluationInput, EvaluatedOutput, Provid
 logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
-COMBINED_PROMPT = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer" / "combined.txt"
+PROMPT_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer"
+COMBINED_PROMPT = PROMPT_DIR / "combined.txt"
+COMBINED_INPUT_PROMPT = PROMPT_DIR / "combined_input.txt"
 
 # Two attempts: one retry of a reply that came back without a usable vote.
 EMPTY_REPLY_ATTEMPTS = 2
@@ -105,6 +107,51 @@ def max_parallel_requests(model: str) -> int:
 	return 1 if model.startswith("ollama/") else 8
 
 
+def supports_prompt_cache(model: str) -> bool:
+	"""True for models that only cache a prompt when it is explicitly marked.
+
+	Anthropic needs a `cache_control` marker. OpenAI and Gemini cache long
+	prefixes on their own, and Ollama has nothing to cache, so neither gets
+	the marker, which LiteLLM may not strip for every provider.
+	"""
+	return model.startswith("anthropic/")
+
+
+def _system_message(model: str) -> dict:
+	"""The evaluator role, response schema and rubrics, all fixed text.
+
+	Every vote across every story shares this exact prefix. Byte-for-byte
+	stability is what lets the cache hit, so nothing per-request belongs here.
+	"""
+	schema_hint = json.dumps(CombinedVote.model_json_schema(), indent=2)
+	text = (
+		"You are an acceptance-criteria evaluator. "
+		"Return only valid JSON matching this schema:\n"
+		f"{schema_hint}\n\n"
+		f"{COMBINED_PROMPT.read_text(encoding='utf-8')}"
+	)
+	if not supports_prompt_cache(model):
+		return {"role": "system", "content": text}
+	return {
+		"role": "system",
+		"content": [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}],
+	}
+
+
+def _log_cache_usage(model: str, result) -> None:
+	"""Debug-log cache reads and writes, the only proof the cache is hitting."""
+	usage = getattr(result, "usage", None)
+	if usage is None or not supports_prompt_cache(model):
+		return
+	logger.debug(
+		"%s prompt cache: read=%s written=%s uncached=%s",
+		model,
+		getattr(usage, "cache_read_input_tokens", None),
+		getattr(usage, "cache_creation_input_tokens", None),
+		getattr(usage, "prompt_tokens", None),
+	)
+
+
 class LiteLLMCombinedClient:
 	"""Evaluates acceptance criteria using any LiteLLM-supported model."""
 
@@ -125,11 +172,9 @@ class LiteLLMCombinedClient:
 		self.num_retries = num_retries
 
 	async def evaluate(self, *, instruction: str, response: str) -> CombinedVote:
-		prompt = COMBINED_PROMPT.read_text(encoding="utf-8")
+		prompt = COMBINED_INPUT_PROMPT.read_text(encoding="utf-8")
 		prompt = prompt.replace("{orig_instruction}", instruction)
 		prompt = prompt.replace("{orig_response}", response)
-
-		schema_hint = json.dumps(CombinedVote.model_json_schema(), indent=2)
 
 		# No max_tokens: OpenAI reasoning models reject it (LiteLLM doesn't
 		# translate it to max_completion_tokens for them), and a small cap would
@@ -143,14 +188,7 @@ class LiteLLMCombinedClient:
 			result = await litellm.acompletion(
 				model=self.model,
 				messages=[
-					{
-						"role": "system",
-						"content": (
-							"You are an acceptance-criteria evaluator. "
-							"Return only valid JSON matching this schema:\n"
-							f"{schema_hint}"
-						),
-					},
+					_system_message(self.model),
 					{"role": "user", "content": prompt},
 				],
 				response_format=COMBINED_VOTE_SCHEMA,
@@ -161,6 +199,7 @@ class LiteLLMCombinedClient:
 				timeout=self.timeout,
 				num_retries=self.num_retries,
 			)
+			_log_cache_usage(self.model, result)
 			try:
 				return self._parse_vote(result.choices[0])
 			except (ValueError, ValidationError) as error:
@@ -258,10 +297,22 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 			overall_score=overall_score,
 		)
 
-	results = await asyncio.gather(
-		*(evaluate_output(output) for output in evaluation_input.output),
-		return_exceptions=True,
-	)
+	outputs = evaluation_input.output
+	if supports_prompt_cache(client.model) and len(outputs) > 1:
+		# A cache entry only exists once the first request has started
+		# responding, so a cold batch fired all at once would pay the write
+		# premium on every vote and read nothing. Score one candidate first to
+		# write the shared rubric prefix, then the rest read it.
+		results = await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True)
+		results += await asyncio.gather(
+			*(evaluate_output(output) for output in outputs[1:]),
+			return_exceptions=True,
+		)
+	else:
+		results = await asyncio.gather(
+			*(evaluate_output(output) for output in outputs),
+			return_exceptions=True,
+		)
 	evaluated_outputs: list[EvaluatedOutput] = []
 	failures = 0
 	for output, result in zip(evaluation_input.output, results, strict=True):
