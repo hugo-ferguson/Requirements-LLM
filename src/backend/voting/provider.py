@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 import litellm
+from pydantic import ValidationError
 
 from voting.models import CombinedVote, EvaluationInput, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
 
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
 COMBINED_PROMPT = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer" / "combined.txt"
+
+# Two attempts: one retry of a reply that came back without a usable vote.
+EMPTY_REPLY_ATTEMPTS = 2
 
 COMBINED_VOTE_SCHEMA = {
 	"type": "json_schema",
@@ -37,6 +41,33 @@ def _strip_markdown_fences(text: str) -> str:
 	if match:
 		return match.group(0)
 	return stripped
+
+
+def _merge_json_objects(texts: list[str]) -> dict:
+	"""Combine JSON objects spread over several strings; later keys win."""
+	merged: dict = {}
+	for text in texts:
+		try:
+			value = json.loads(_strip_markdown_fences(text))
+		except json.JSONDecodeError:
+			continue
+		if isinstance(value, dict):
+			merged.update(value)
+	return merged
+
+
+def _accepts_temperature(model: str) -> bool:
+	"""False for OpenAI reasoning models, which only accept the default temperature.
+
+	LiteLLM lists `temperature` as supported for them, so `drop_params` does
+	not strip it and the request would be rejected. An unknown model keeps it.
+	"""
+	if not model.startswith("openai/"):
+		return True
+	try:
+		return not litellm.supports_reasoning(model=model)
+	except Exception:
+		return True
 
 
 def default_timeout() -> float:
@@ -100,31 +131,85 @@ class LiteLLMCombinedClient:
 
 		schema_hint = json.dumps(CombinedVote.model_json_schema(), indent=2)
 
-		result = await litellm.acompletion(
-			model=self.model,
-			messages=[
-				{
-					"role": "system",
-					"content": (
-						"You are an acceptance-criteria evaluator. "
-						"Return only valid JSON matching this schema:\n"
-						f"{schema_hint}"
-					),
-				},
-				{"role": "user", "content": prompt},
-			],
-			response_format=COMBINED_VOTE_SCHEMA,
-			temperature=self.temperature,
-			timeout=self.timeout,
-			num_retries=self.num_retries,
+		# No max_tokens: OpenAI reasoning models reject it (LiteLLM doesn't
+		# translate it to max_completion_tokens for them), and a small cap would
+		# eat into their reasoning tokens and truncate the vote.
+		sampling = {"temperature": self.temperature} if _accepts_temperature(self.model) else {}
+
+		# A successful reply can still carry no usable vote, and LiteLLM's own
+		# num_retries only covers HTTP/network errors — so retry that case here.
+		last_error: Exception | None = None
+		for _ in range(EMPTY_REPLY_ATTEMPTS):
+			result = await litellm.acompletion(
+				model=self.model,
+				messages=[
+					{
+						"role": "system",
+						"content": (
+							"You are an acceptance-criteria evaluator. "
+							"Return only valid JSON matching this schema:\n"
+							f"{schema_hint}"
+						),
+					},
+					{"role": "user", "content": prompt},
+				],
+				response_format=COMBINED_VOTE_SCHEMA,
+				**sampling,
+				# Drop whatever else a given judge doesn't support instead of
+				# failing the vote.
+				drop_params=True,
+				timeout=self.timeout,
+				num_retries=self.num_retries,
+			)
+			try:
+				return self._parse_vote(result.choices[0])
+			except (ValueError, ValidationError) as error:
+				last_error = error
+
+		assert last_error is not None
+		raise last_error
+
+	def _parse_vote(self, choice) -> CombinedVote:
+		"""Read the vote from the reply text, falling back to its tool calls.
+
+		For Anthropic, LiteLLM implements `response_format` as a forced tool
+		call and only copies the arguments into `content` when the reply holds
+		exactly one call to its JSON tool. Claude sometimes splits the vote
+		into one tool call per rubric instead, which leaves `content` empty —
+		how candidates ended up unrated with "returned no message content". So
+		the tool calls are merged back into a single vote.
+		"""
+		message = choice.message
+		tool_calls = getattr(message, "tool_calls", None) or []
+		shape = (
+			f"finish_reason={getattr(choice, 'finish_reason', None)!r}, "
+			f"tool_calls={len(tool_calls)}"
 		)
 
-		content = result.choices[0].message.content
-		if not isinstance(content, str) or not content.strip():
-			raise ValueError(f"{self.model} returned no message content")
+		arguments = [
+			call.function.arguments
+			for call in tool_calls
+			if isinstance(getattr(call.function, "arguments", None), str)
+		]
+		texts = [message.content] if isinstance(message.content, str) else []
+		merged = _merge_json_objects(arguments)
+		if merged:
+			texts.append(json.dumps(merged))
+		texts += arguments
+		texts = [text for text in texts if text.strip()]
 
-		cleaned = _strip_markdown_fences(content)
-		return CombinedVote.model_validate_json(cleaned)
+		if not texts:
+			raise ValueError(f"{self.model} returned no message content ({shape})")
+
+		first_error: ValidationError | None = None
+		for text in texts:
+			try:
+				return CombinedVote.model_validate_json(_strip_markdown_fences(text))
+			except ValidationError as error:
+				first_error = first_error or error
+		raise ValueError(
+			f"{self.model} returned no complete vote ({shape}): {first_error}"
+		) from first_error
 
 
 def _error_output(output: str, provider_name: str, model: str, message: str) -> EvaluatedOutput:

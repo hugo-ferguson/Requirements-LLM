@@ -1,7 +1,4 @@
-from app.models_acceptance_criteria import AcceptanceCriterionRecord
 from app.models_conversation import (
-    AcceptanceCriterion,
-    AcceptanceCriterionScores,
     ConversationAttachment,
     ConversationMessage,
     ConversationRequest,
@@ -20,6 +17,7 @@ from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
+from app.services.acceptance_criteria import to_acceptance_criteria
 from app.services.conversation import ConversationService
 from app.services.generation import GenerationService
 
@@ -39,24 +37,6 @@ def _to_message_read(message: Message) -> MessageRead:
         text=message.text,
         attachments=[ConversationAttachment(**attachment) for attachment in message.attachments],
         created_at=message.created_at,
-    )
-
-
-def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
-    return AcceptanceCriterion(
-        id=record.id,
-        title=record.title,
-        given=record.given,
-        when=record.when,
-        then=record.then,
-        scores=AcceptanceCriterionScores(
-            relevance=record.relevance,
-            correctness=record.correctness,
-            understandability=record.understandability,
-            coverage=record.coverage,
-        ),
-        overall_score=record.overall_score,
-        status=record.status,
     )
 
 
@@ -159,4 +139,8 @@ class SessionService:
         # violate the FK, in a database that enforces it) — clear them too.
         self.uat_cases.delete_for_session(session_id)
         persisted = self.acceptance_criteria.persist_batch(session_id, criteria)
-        return GenerateResult(acceptance_criteria=[_to_acceptance_criterion(r) for r in persisted])
+        return GenerateResult(
+            acceptance_criteria=to_acceptance_criteria(
+                self.acceptance_criteria, session_id, persisted
+            )
+        )

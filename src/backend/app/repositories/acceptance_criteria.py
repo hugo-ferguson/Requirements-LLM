@@ -106,11 +106,7 @@ class AcceptanceCriteriaRepository:
     def candidates_for_session(
         self, session_id: int
     ) -> list[AcceptanceCriterionCandidateRecord]:
-        """Every stored candidate for a session, grouped position then best first.
-
-        Not yet read by any route — it exists so the alternatives are
-        queryable for debugging and for the frontend work that follows.
-        """
+        """Every stored candidate for a session, grouped position then best first."""
         statement = (
             select(AcceptanceCriterionCandidateRecord)
             .where(AcceptanceCriterionCandidateRecord.session_id == session_id)
@@ -120,6 +116,75 @@ class AcceptanceCriteriaRepository:
             )
         )
         return list(self.session.exec(statement).all())
+
+    def candidates_by_position(
+        self, session_id: int
+    ) -> dict[int, list[AcceptanceCriterionCandidateRecord]]:
+        grouped: dict[int, list[AcceptanceCriterionCandidateRecord]] = {}
+        for candidate in self.candidates_for_session(session_id):
+            grouped.setdefault(candidate.criterion_position, []).append(candidate)
+        return grouped
+
+    def get_candidate(
+        self, session_id: int, candidate_id: int
+    ) -> AcceptanceCriterionCandidateRecord | None:
+        candidate = self.session.get(AcceptanceCriterionCandidateRecord, candidate_id)
+        if candidate is None or candidate.session_id != session_id:
+            return None
+        return candidate
+
+    def swap_in_candidate(
+        self,
+        record: AcceptanceCriterionRecord,
+        candidate: AcceptanceCriterionCandidateRecord,
+    ) -> AcceptanceCriterionRecord:
+        """Make `candidate` the displayed version of `record`, demoting the old one.
+
+        The outgoing version is saved from the record's *current* text, not
+        from the winner row as generated, so a reviewer's manual edit becomes
+        an alternative they can swap back to instead of being lost. Title and
+        status are left alone: the title belongs to the group, not to a
+        candidate, and swapping wording is not a review decision.
+        """
+        position_rows = self.candidates_by_position(record.session_id).get(record.position, [])
+        outgoing = next((row for row in position_rows if row.is_winner), None)
+        if outgoing is None:
+            # An AC from regenerate-selected has no candidate rows of its own.
+            outgoing = AcceptanceCriterionCandidateRecord(
+                session_id=record.session_id,
+                criterion_position=record.position,
+                source_agent="unknown",
+                title=record.title,
+                given=record.given,
+                when=record.when,
+                then=record.then,
+                relevance=record.relevance,
+                correctness=record.correctness,
+                understandability=record.understandability,
+                coverage=record.coverage,
+                overall_score=record.overall_score,
+            )
+        outgoing.given = record.given
+        outgoing.when = record.when
+        outgoing.then = record.then
+        outgoing.is_winner = False
+        self.session.add(outgoing)
+
+        record.given = candidate.given
+        record.when = candidate.when
+        record.then = candidate.then
+        record.relevance = candidate.relevance
+        record.correctness = candidate.correctness
+        record.understandability = candidate.understandability
+        record.coverage = candidate.coverage
+        record.overall_score = candidate.overall_score
+        candidate.is_winner = True
+        self.session.add(candidate)
+        self.session.add(record)
+
+        self.session.commit()
+        self.session.refresh(record)
+        return record
 
     def list_for_session(self, session_id: int) -> list[AcceptanceCriterionRecord]:
         statement = (
@@ -196,9 +261,25 @@ class AcceptanceCriteriaRepository:
         ]
 
         merged = remaining[:target_position] + new_records + remaining[target_position:]
+        new_position_by_old = {
+            record.position: index
+            for index, record in enumerate(merged)
+            if record.id is not None
+        }
         for index, record in enumerate(merged):
             record.position = index
             self.session.add(record)
+
+        # Candidates are keyed by position, so they must follow the renumbering
+        # above or alternatives end up attached to a neighbouring criterion.
+        # The replaced criterion's own candidates go with it.
+        for candidate in self.candidates_for_session(session_id):
+            new_position = new_position_by_old.get(candidate.criterion_position)
+            if new_position is None:
+                self.session.delete(candidate)
+            else:
+                candidate.criterion_position = new_position
+                self.session.add(candidate)
         self.session.commit()
         for record in merged:
             self.session.refresh(record)

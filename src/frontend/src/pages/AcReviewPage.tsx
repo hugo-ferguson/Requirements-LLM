@@ -16,7 +16,7 @@ type Mode = "list" | "regenerate";
 export function AcReviewPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { items, isLoading, loadError, updateText, updateStatus, applyApproved } =
+  const { items, isLoading, loadError, updateText, updateStatus, applyApproved, selectAlternative } =
     useAcceptanceCriteria(sessionId!);
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -29,6 +29,8 @@ export function AcReviewPage() {
   const [regenerateAllError, setRegenerateAllError] = useState<string | null>(null);
   const [isGeneratingUat, setIsGeneratingUat] = useState(false);
   const [generateUatError, setGenerateUatError] = useState<string | null>(null);
+  const [swapNotice, setSwapNotice] = useState<string | null>(null);
+  const [swapError, setSwapError] = useState<string | null>(null);
 
   const fetchCandidates = useCallback(
     (
@@ -49,6 +51,22 @@ export function AcReviewPage() {
 
   function handleReject(id: number, currentStatus: string) {
     updateStatus(id, currentStatus === "rejected" ? "pending" : "rejected");
+  }
+
+  async function handleSelectAlternative(acId: number, acIndex: number, candidateId: number) {
+    setSwapError(null);
+    setSwapNotice(null);
+    try {
+      const staleUatCases = await selectAlternative(acId, candidateId);
+      if (staleUatCases > 0) {
+        setSwapNotice(
+          `AC #${acIndex + 1} has ${staleUatCases} test case${staleUatCases === 1 ? "" : "s"} ` +
+            "written against the previous version. Regenerate them from the UAT page if needed.",
+        );
+      }
+    } catch {
+      setSwapError("Couldn't switch to that version. Please try again.");
+    }
   }
 
   function handleEnterRegenerate() {
@@ -193,6 +211,20 @@ export function AcReviewPage() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
+      {swapNotice && (
+        <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <span>{swapNotice}</span>
+          <button
+            type="button"
+            onClick={() => setSwapNotice(null)}
+            aria-label="Dismiss"
+            className="text-amber-600 hover:text-amber-900"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {swapError && <p className="mb-3 text-sm text-red-600">{swapError}</p>}
       <div className="flex-1 space-y-3">
         {items.map((item, index) => (
           <AcCard
@@ -210,6 +242,9 @@ export function AcReviewPage() {
             }}
             onAccept={() => handleAccept(item.id, item.status)}
             onReject={() => handleReject(item.id, item.status)}
+            onSelectAlternative={(candidateId) =>
+              handleSelectAlternative(item.id, index, candidateId)
+            }
           />
         ))}
       </div>

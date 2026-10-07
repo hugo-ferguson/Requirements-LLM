@@ -308,11 +308,9 @@ def _groups_to_wire_models(groups: list[CandidateGroup]) -> list[AcceptanceCrite
         wire.append(
             AcceptanceCriterion(
                 id=index + 1,
-                # The group's title, not the winner's own. Pass-2 agents are
-                # asked to copy titles verbatim but drift on case and
-                # punctuation, and `group_by_title` normalises that away by
-                # keeping the anchor's spelling. Taking the winner's title here
-                # would leak whichever variant happened to score highest.
+                # The group's title, i.e. the anchor's spelling. Pass-2
+                # candidates already carry it, but taking it from the group
+                # keeps the displayed title independent of which agent won.
                 title=group.title,
                 given=winner.criterion.given,
                 when=winner.criterion.when,

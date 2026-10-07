@@ -1,3 +1,5 @@
+import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,6 +9,8 @@ from app.ingest.extract import IMAGE_EXTENSIONS, extract_text
 from app.vector_store.embeddings import EmbeddingProvider
 from app.vector_store.models import Document, DocumentChunk
 from app.vector_store.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 
 class EmptyDocumentError(ValueError):
@@ -62,8 +66,18 @@ class IngestService:
         Returns the extracted text, plus the stored document and its chunk
         count when the file was stored.
         """
+        # Progress is logged at each stage: uvicorn only logs a request once it
+        # finishes, so without these a slow upload looks exactly like a dead one.
+        started = time.perf_counter()
+        logger.info("ingest %r: started (%d KB)", filename, len(data) // 1024)
         text = extract_text(data, filename, self.settings)
         extension = Path(filename).suffix.lower()
+        logger.info(
+            "ingest %r: extracted %d characters in %.1fs",
+            filename,
+            len(text),
+            time.perf_counter() - started,
+        )
 
         if extension in IMAGE_EXTENSIONS:
             if not text.strip():
@@ -83,6 +97,7 @@ class IngestService:
 
         # Embed before writing anything, so a provider failure leaves no
         # half-ingested document behind.
+        logger.info("ingest %r: embedding %d chunk(s)", filename, len(chunks))
         embeddings = self.embedding_provider.embed_texts(chunks)
 
         document = self.vector_store.create_document(
@@ -107,6 +122,13 @@ class IngestService:
             ]
         )
 
+        logger.info(
+            "ingest %r: stored as document %s, %d chunk(s), %.1fs total",
+            filename,
+            document.id,
+            len(chunks),
+            time.perf_counter() - started,
+        )
         return IngestResult(document=document, chunk_count=len(chunks), text=text)
 
     def delete_document(self, document_id: int) -> bool:

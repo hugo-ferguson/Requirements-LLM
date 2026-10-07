@@ -61,6 +61,17 @@ class Settings(BaseSettings):
     # compared directly instead of pooled into an ungrouped union. Costs one
     # extra sequential pass; set false to restore the single-pass ensemble.
     generation_title_anchored: bool = True
+    # Voting judges: comma-separated names from VOTING_PROVIDERS. Every judge
+    # scores every candidate and their rubric scores are averaged, so one
+    # model's taste (or its preference for its own family's wording) does not
+    # pick every winner alone. A judge that fails is averaged out.
+    voting_judges: str = "claude"
+
+    @property
+    def voting_judge_names(self) -> list[str]:
+        names = [name.strip().lower() for name in self.voting_judges.split(",")]
+        return [name for name in names if name] or ["claude"]
+
     model_config = SettingsConfigDict(env_file=_ENV_FILES, extra="ignore")
 
 

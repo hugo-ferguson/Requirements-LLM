@@ -31,10 +31,12 @@ class AcceptanceCriterionScores(SQLModel):
 class AcceptanceCriterionAlternative(SQLModel):
     """A losing candidate for the same title as its parent criterion.
 
-    Carries no `status` or `id`: an alternative is not a reviewable item in
-    its own right, it is the answer to "what did the other model say?".
+    Carries no `status`: an alternative is not a reviewable item in its own
+    right, it is the answer to "what did the other model say?". It does carry
+    `candidate_id` once persisted, so the reviewer can swap it in.
     """
 
+    candidate_id: int | None = None
     given: str
     when: str
     then: str
