@@ -1,3 +1,6 @@
+# Our config.
+src/backend/config/generation_agents.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
