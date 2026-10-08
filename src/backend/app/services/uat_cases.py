@@ -326,7 +326,7 @@ class UatCaseService:
             result = self.regen_agent.run_sync(prompt)
         except Exception as error:
             raise GenerationError(
-                f"{get_models_config().chat_model} could not regenerate '{target.title}': {error}"
+                f"{get_models_config().chat_model.name} could not regenerate '{target.title}': {error}"
             ) from error
 
         case = result.output

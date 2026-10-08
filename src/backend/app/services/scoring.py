@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Isolated to this module: voting.voting imports LiteLLM and the MCP server at
-# load time, so ANY import failure here — missing optional dep, unrelated
+# Isolated to this module: voting.voting imports the model SDKs and the MCP
+# server at load time, so ANY import failure here — missing optional dep, unrelated
 # packaging issue — must degrade to the all-zero fallback below instead of
 # taking down every route that imports this module.
 try:
@@ -64,15 +64,11 @@ _ZERO_SCORE = CandidateScore(0.0, 0.0, 0.0, 0.0, 0.0, failed=True)
 
 
 # Every scoring call runs on this one event loop, in a background thread,
-# rather than on a fresh `asyncio.run` loop per call. Two reasons:
-# - A judge's `max_parallel` gate is per loop (voting.provider.judge_gate), so
-#   one shared loop makes it cap requests across concurrent scoring runs. UAT
-#   generation scores every accepted AC at once; with a loop each, the cap was
-#   multiplied by the number of ACs and tripped Anthropic's org-wide
-#   concurrent-request limit.
-# - LiteLLM binds a background logging task to the first loop it sees. Closing
-#   that loop after every call destroyed the task each time ("Task was
-#   destroyed but it is pending!").
+# rather than on a fresh `asyncio.run` loop per call. A judge's `max_parallel`
+# gate is per loop (voting.provider.judge_gate), so one shared loop makes it
+# cap requests across concurrent scoring runs. UAT generation scores every
+# accepted AC at once; with a loop each, the cap was multiplied by the number
+# of ACs and tripped Anthropic's org-wide concurrent-request limit.
 _loop: asyncio.AbstractEventLoop | None = None
 _loop_lock = threading.Lock()
 
@@ -151,7 +147,7 @@ def score_candidates(
 
     resolved_settings = settings or default_settings
     if resolved_settings.gemini_api_key and not os.environ.get("GEMINI_API_KEY"):
-        # A Gemini judge's key is found by LiteLLM in os.environ, a path
+        # A Gemini judge's provider finds its key in os.environ, a path
         # independent of Settings' explicit multi-file .env read. Bridge the
         # two so "reuse Settings.gemini_api_key" holds outside Docker too.
         os.environ["GEMINI_API_KEY"] = resolved_settings.gemini_api_key

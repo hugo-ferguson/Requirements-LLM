@@ -4,9 +4,9 @@ import json
 from voting.models import EvaluatedOutput, JudgeConfig, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
 
 JUDGES = [
-    JudgeConfig(id="gemini", model="gemini/gemini-3.6-flash"),
-    JudgeConfig(id="prometheus", model="ollama/ggozad/prometheus2:latest", style="per_rubric"),
-    JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5"),
+    JudgeConfig(id="gemini", provider="google", model="gemini-3.6-flash"),
+    JudgeConfig(id="prometheus", provider="ollama", model="ggozad/prometheus2:latest", style="per_rubric"),
+    JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5"),
 ]
 
 

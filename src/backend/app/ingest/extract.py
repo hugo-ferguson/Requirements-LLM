@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import base64
 import logging
 from io import BytesIO
 from pathlib import Path
 
-import litellm
+from pydantic_ai import Agent, BinaryContent
 
 from app.config import Settings
 from app.llm_config import get_models_config
+from llm.spec import build_model
 
 logger = logging.getLogger(__name__)
 
@@ -78,39 +78,26 @@ def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
     """Transcribes and describes an image via a vision-capable model."""
     vision_model = get_models_config().vision_model
     image_bytes = _prepare_image(data, extension)
-    b64 = base64.b64encode(image_bytes).decode("ascii")
     mime = MIME_TYPES.get(extension, "image/png")
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": IMAGE_PROMPT},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{b64}"},
-                },
-            ],
-        }
-    ]
-
     try:
-        response = litellm.completion(
-            model=vision_model,
-            messages=messages,
-            timeout=300.0,
-            num_retries=2,
+        agent = Agent(
+            build_model(vision_model),
+            model_settings=vision_model.model_settings(timeout=300.0),
+        )
+        result = agent.run_sync(
+            [IMAGE_PROMPT, BinaryContent(data=image_bytes, media_type=mime)]
         )
     except Exception as error:
         raise ImageExtractionError(
-            f"Vision model {vision_model} failed: {error}"
+            f"Vision model {vision_model.name} failed: {error}"
         ) from error
 
-    content = response.choices[0].message.content
+    content = result.output
 
-    if not isinstance(content, str) or not content.strip():
+    if not content.strip():
         raise ImageExtractionError(
-            f"{vision_model} returned no text for the image"
+            f"{vision_model.name} returned no text for the image"
         )
 
     return content.strip()

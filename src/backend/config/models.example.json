@@ -1,30 +1,29 @@
 {
-    "chat_model": "anthropic:claude-haiku-4-5-20251001",
-    "chat_output_mode": "native",
-    "vision_model": "anthropic/claude-haiku-4-5-20251001",
+    "chat_model": {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+    },
+    "vision_model": {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+    },
     "generation_agents": [
         {
             "id": "claude",
             "provider": "anthropic",
             "model": "claude-haiku-4-5-20251001",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "temperature": null,
-            "output_mode": "native",
             "enabled": true
         },
         {
             "id": "openai-luna",
             "provider": "openai",
             "model": "gpt-6-luna",
-            "api_key_env": "OPENAI_API_KEY",
-            "temperature": null,
             "enabled": true
         },
         {
             "id": "gemini-flash",
             "provider": "google",
             "model": "gemini-3.6-flash",
-            "api_key_env": "GEMINI_API_KEY",
             "temperature": 0.7,
             "enabled": false
         },
@@ -34,7 +33,6 @@
             "model": "qwen2.5:7b",
             "base_url": "http://host.docker.internal:11434/v1",
             "temperature": 0.7,
-            "output_mode": "native",
             "enabled": false
         },
         {
@@ -43,36 +41,38 @@
             "model": "llama3.1:8b",
             "base_url": "http://host.docker.internal:11434/v1",
             "temperature": 0.7,
-            "output_mode": "native",
             "enabled": false
         }
     ],
     "judges": [
         {
             "id": "claude",
-            "model": "anthropic/claude-haiku-4-5-20251001",
-            "temperature": null,
-            "structured_output": false,
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5-20251001",
             "cache_prompt": true,
             "max_parallel": 4,
             "enabled": true
         },
         {
             "id": "luna",
-            "model": "openai/gpt-6-luna",
-            "temperature": null,
+            "provider": "openai",
+            "model": "gpt-6-luna",
             "enabled": true
         },
         {
             "id": "qwen-local",
-            "model": "ollama/qwen2.5:7b",
+            "provider": "ollama",
+            "model": "qwen2.5:7b",
+            "base_url": "http://host.docker.internal:11434/v1",
             "temperature": 0.1,
             "max_parallel": 1,
             "enabled": false
         },
         {
             "id": "prometheus",
-            "model": "ollama/ggozad/prometheus2:latest",
+            "provider": "ollama",
+            "model": "ggozad/prometheus2:latest",
+            "base_url": "http://host.docker.internal:11434/v1",
             "style": "per_rubric",
             "max_parallel": 1,
             "enabled": false

@@ -24,7 +24,9 @@ from app.services.uat_cases import UatCaseService
 
 
 def _agent(agent_id: str) -> GenerationAgentConfig:
-    return GenerationAgentConfig(id=agent_id, provider="test", model="test", temperature=0.0)
+    return GenerationAgentConfig(
+        id=agent_id, provider="test", model="test", temperature=0.0, output_mode="tool"
+    )
 
 
 # --- Ensemble --------------------------------------------------------------

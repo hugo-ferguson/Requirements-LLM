@@ -18,7 +18,7 @@ from voting.models import (
     VotingResult,
 )
 from voting.prometheus import evaluate_with_prometheus
-from voting.provider import LiteLLMCombinedClient, evaluate_with_combined_model
+from voting.provider import CombinedJudgeClient, evaluate_with_combined_model
 
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def _merge_provider_outputs(evaluation_input: EvaluationInput, provider_outputs:
 async def _evaluate_with_judge(judge: JudgeConfig, evaluation_input: EvaluationInput) -> VotingResult:
     if judge.style == "per_rubric":
         return await evaluate_with_prometheus(evaluation_input, judge)
-    client = LiteLLMCombinedClient(judge)
+    client = CombinedJudgeClient(judge)
     return await evaluate_with_combined_model(evaluation_input, client)
 
 

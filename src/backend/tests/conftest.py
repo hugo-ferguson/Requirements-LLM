@@ -36,6 +36,8 @@ def stub_generation_agents() -> Generator[None, None, None]:
 
     Keeps the tests offline and free: no API keys, no Ollama, no token spend.
     Voting is disabled for the same reason - the voters need a live provider.
+    Every entry there sets `"output_mode": "tool"`: TestModel has no native
+    structured output.
     """
     original_path = settings.models_config_path
     original_voting = settings.generation_enable_voting

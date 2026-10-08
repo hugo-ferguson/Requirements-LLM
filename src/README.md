@@ -69,6 +69,8 @@ src/
 │   ├── scripts/
 │   │   └── export_openapi.py   # dumps OpenAPI schema for the frontend codegen step
 │   ├── tests/
+│   ├── llm/
+│   │   └── spec.py             # one model entry -> a PydanticAI model, for any provider
 │   └── app/
 │       ├── main.py             # FastAPI app, middleware, router registration
 │       ├── config.py           # env-driven settings (pydantic-settings)
@@ -151,10 +153,10 @@ holding each API key but never the key itself.
 
 Install and start Ollama, then enable the `prometheus` judge in
 `backend/config/models.json` and pull its model (`ggozad/prometheus2:latest` in
-the example file). Set `OLLAMA_API_BASE` in
-`.env`: use `http://localhost:11434` when the backend runs on the host, or
-`http://host.docker.internal:11434` when the backend runs in Docker and Ollama
-runs on the host. Change the model name if your Ollama tag differs.
+the example file). Set its `base_url`: use `http://localhost:11434/v1` when
+the backend runs on the host, or `http://host.docker.internal:11434/v1` when
+the backend runs in Docker and Ollama runs on the host. Change the model name
+if your Ollama tag differs.
 
 From `src/backend`, evaluate the sample payload with:
 

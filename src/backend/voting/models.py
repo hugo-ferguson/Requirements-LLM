@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from llm.spec import ModelSpec
+
 
 # The app's model config. The voting package reads its `judges` section only
 # when run standalone (the scripts here, the MCP server); the app passes
@@ -13,30 +15,21 @@ from pydantic import BaseModel, Field
 DEFAULT_MODELS_CONFIG = Path(__file__).resolve().parent.parent / "config" / "models.json"
 
 
-class JudgeConfig(BaseModel):
+class JudgeConfig(ModelSpec):
     """One scoring judge, as declared under `judges` in config/models.json.
 
-    The fields after `model` say how the judge's API differs from LiteLLM's
-    defaults. They are set per judge rather than inferred from the model
-    name, because LiteLLM's own capability data gets them wrong: it reports
-    Sonnet 5.5 as accepting `tool_choice` and `temperature`, and the API
-    rejects both.
+    The model fields (`provider`, `model`, `temperature`, `output_mode`, ...)
+    are the same as every other entry in that file; the rest say how the
+    judge votes.
     """
 
     id: str = Field(description="Label used in logs and results, e.g. 'claude'")
-    model: str = Field(description="LiteLLM model string, e.g. 'anthropic/claude-sonnet-5-5'")
     enabled: bool = True
     # One call scoring all four rubrics, or Prometheus-style, one call each.
     style: Literal["combined", "per_rubric"] = "combined"
-    # None sends no temperature at all. Claude from Opus 4.7 / Sonnet 5 on and
-    # OpenAI reasoning models reject any non-default value.
-    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    # Send `response_format`. LiteLLM implements it for Anthropic as a forced
-    # tool call, which Claude from Sonnet 5.5 / Opus 5.5 on rejects; without
-    # it the schema in the system prompt is enough.
-    structured_output: bool = True
-    # Mark the shared rubric prefix with `cache_control`. Anthropic needs the
-    # marker; OpenAI and Gemini cache long prefixes on their own.
+    # Mark the shared rubric prefix for caching, and score one candidate before
+    # the rest so they read the cache it writes. Anthropic needs the marker;
+    # OpenAI and Gemini cache long prefixes on their own.
     cache_prompt: bool = False
     # Requests in flight at once. 1 for Ollama, which serves one request per
     # model at a time, so extra concurrency only queues against the timeout.

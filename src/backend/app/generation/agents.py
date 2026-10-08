@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import Model
-from pydantic_ai.settings import ModelSettings
 
-from app.llm_config import GenerationAgentConfig, with_output_mode
+from app.llm_config import GenerationAgentConfig
 from app.generation.models import (
     GeneratedCriteriaSet,
     GeneratedCriterion,
@@ -24,6 +23,7 @@ from app.generation.models import (
     NumberedUatCaseSet,
 )
 from app.generation.prompts import SYSTEM_PROMPT, GenerationDeps
+from llm.spec import build_model, with_output_mode
 
 GenerationAgent = Agent[GenerationDeps, GeneratedCriteriaSet]
 GenerationOutput = (
@@ -32,10 +32,6 @@ GenerationOutput = (
     | type[GeneratedUatCaseSet]
     | type[NumberedUatCaseSet]
 )
-
-
-class AgentBuildError(RuntimeError):
-    """Raised when an agent cannot be constructed (missing key, missing extra)."""
 
 
 def _stub_output(config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet):
@@ -114,82 +110,15 @@ def _build_model(
 ) -> Model:
     """Translate a roster entry into a concrete PydanticAI model object.
 
-    Provider SDKs are imported inside each branch so that a provider the team
-    isn't using doesn't need to be installed.
+    The `test` provider answers with `_stub_output`; every real provider goes
+    through the one generic builder.
     """
     if config.provider == "test":
         from pydantic_ai.models.test import TestModel
 
         return TestModel(custom_output_args=_stub_output(config, output_type))
 
-    if config.provider in ("openai", "ollama"):
-        try:
-            from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
-            from pydantic_ai.providers.openai import OpenAIProvider
-        except ImportError as error:  # pragma: no cover - depends on extras
-            raise AgentBuildError(
-                "The OpenAI extra is not installed. Add 'pydantic-ai-slim[openai]'."
-            ) from error
-
-        if config.provider == "ollama":
-            # Ollama exposes an OpenAI-compatible API. The key is ignored by
-            # Ollama but the client requires a non-empty string.
-            base_url = (
-                config.base_url or "http://localhost:11434/v1").rstrip("/")
-            if not base_url.endswith("/v1"):
-                base_url = f"{base_url}/v1"
-            return OpenAIChatModel(
-                config.model,
-                provider=OpenAIProvider(base_url=base_url, api_key="ollama"),
-            )
-
-        api_key = config.api_key()
-        if not api_key:
-            raise AgentBuildError(
-                f"Agent {config.id!r} needs {config.api_key_env} set in the environment."
-            )
-        # OpenAI's reasoning models reject function tools on /v1/chat/completions
-        # unless reasoning is switched off, and structured output here is a tool
-        # call. The Responses API accepts both, so real OpenAI goes there.
-        return OpenAIResponsesModel(
-            config.model,
-            provider=OpenAIProvider(api_key=api_key, base_url=config.base_url),
-        )
-
-    if config.provider == "anthropic":
-        try:
-            from pydantic_ai.models.anthropic import AnthropicModel
-            from pydantic_ai.providers.anthropic import AnthropicProvider
-        except ImportError as error:  # pragma: no cover - depends on extras
-            raise AgentBuildError(
-                "The Anthropic extra is not installed. Add 'pydantic-ai-slim[anthropic]'."
-            ) from error
-
-        api_key = config.api_key()
-        if not api_key:
-            raise AgentBuildError(
-                f"Agent {config.id!r} needs {config.api_key_env} set in the environment."
-            )
-        return AnthropicModel(config.model, provider=AnthropicProvider(api_key=api_key))
-
-    if config.provider == "google":
-        try:
-            from pydantic_ai.models.google import GoogleModel
-            from pydantic_ai.providers.google import GoogleProvider
-        except ImportError as error:  # pragma: no cover - depends on extras
-            raise AgentBuildError(
-                "The Google extra is not installed. Add 'pydantic-ai-slim[google]'."
-            ) from error
-
-        api_key = config.api_key()
-        if not api_key:
-            raise AgentBuildError(
-                f"Agent {config.id!r} needs {config.api_key_env} set in the environment."
-            )
-        return GoogleModel(config.model, provider=GoogleProvider(api_key=api_key))
-
-    raise AgentBuildError(
-        f"Unknown provider {config.provider!r} for agent {config.id!r}.")
+    return build_model(config)
 
 
 def build_agent(
@@ -212,10 +141,7 @@ def build_agent(
         output_type=with_output_mode(output_type, config.output_mode),
         deps_type=GenerationDeps,
         system_prompt=system_prompt,
-        model_settings=(
-            ModelSettings() if config.temperature is None
-            else ModelSettings(temperature=config.temperature)
-        ),
+        model_settings=config.model_settings(),
         retries=2,
     )
 

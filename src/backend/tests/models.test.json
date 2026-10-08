@@ -1,25 +1,37 @@
 {
-  "chat_model": "test",
-  "vision_model": "test/vision",
+  "chat_model": {
+    "provider": "test",
+    "model": "test",
+    "output_mode": "tool"
+  },
+  "vision_model": {
+    "provider": "test",
+    "model": "vision",
+    "output_mode": "tool"
+  },
   "generation_agents": [
     {
       "id": "test-a",
       "provider": "test",
       "model": "test",
-      "enabled": true
+      "enabled": true,
+      "output_mode": "tool"
     },
     {
       "id": "test-b",
       "provider": "test",
       "model": "test",
-      "enabled": true
+      "enabled": true,
+      "output_mode": "tool"
     }
   ],
   "judges": [
     {
       "id": "claude",
-      "model": "test/judge",
-      "enabled": true
+      "provider": "test",
+      "model": "judge",
+      "enabled": true,
+      "output_mode": "tool"
     }
   ]
 }

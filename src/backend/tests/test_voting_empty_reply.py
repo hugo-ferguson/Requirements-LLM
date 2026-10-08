@@ -1,186 +1,110 @@
-"""A successful voter reply that carries no usable vote.
+"""What a judge sends, and what happens when its reply carries no usable vote.
 
-Regression cover for a live run where Haiku, via LiteLLM, returned empty
-message content for 2 of 10 candidates. Each was scored as the -1 sentinel,
-lost its group, and showed as 0.0/5 — with nothing logged to say why.
+An unusable reply is retried once before the candidate falls back to the -1
+sentinel, which loses its group. Each provider gets structured output in a
+form it accepts, and none of the settings it rejects.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
 
 import pytest
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 
-import voting.provider as provider
+from tests.fake_llm_api import FakeLlmApi
 from voting.models import JudgeConfig
-from voting.provider import LiteLLMCombinedClient
+from voting.provider import CombinedJudgeClient
 
 VOTE_JSON = json.dumps(
-    {
-        name: {"feedback": "fine", "score": 4}
-        for name in ("correctness", "coverage", "relevance", "understandability")
-    }
+	{
+		name: {"feedback": "fine", "score": 4}
+		for name in ("correctness", "coverage", "relevance", "understandability")
+	}
 )
 
-
-def _reply(content=None, tool_arguments: list[str] | None = None, finish_reason="stop"):
-    tool_calls = [
-        SimpleNamespace(function=SimpleNamespace(name="json_tool_call", arguments=arguments))
-        for arguments in (tool_arguments or [])
-    ]
-    message = SimpleNamespace(content=content, tool_calls=tool_calls or None)
-    return SimpleNamespace(
-        choices=[SimpleNamespace(message=message, finish_reason=finish_reason)]
-    )
+HAIKU = JudgeConfig(id="claude", provider="anthropic", model="claude-haiku-4-5-20251001")
 
 
 @pytest.fixture
-def fake_completion(monkeypatch):
-    """Queue replies for litellm.acompletion; returns the list of calls made."""
-    replies: list = []
-    calls: list[dict] = []
-
-    async def acompletion(**kwargs):
-        calls.append(kwargs)
-        return replies.pop(0)
-
-    monkeypatch.setattr(provider.litellm, "acompletion", acompletion)
-    return replies, calls
+def api(monkeypatch) -> FakeLlmApi:
+	monkeypatch.setenv("FAKE_LLM_API_KEY", "test-key")
+	return FakeLlmApi(default_reply=VOTE_JSON)
 
 
-def _evaluate():
-    client = LiteLLMCombinedClient(JudgeConfig(id="claude", model="anthropic/claude-haiku-4-5-20251001"))
-    return asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
+def _evaluate(api: FakeLlmApi, judge: JudgeConfig = HAIKU):
+	client = CombinedJudgeClient(judge, model=api.model(judge))
+	return asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
 
 
-def test_normal_content_is_parsed_in_one_call(fake_completion) -> None:
-    replies, calls = fake_completion
-    replies.append(_reply(content=VOTE_JSON))
+def test_normal_content_is_parsed_in_one_call(api) -> None:
+	vote = _evaluate(api)
 
-    vote = _evaluate()
-
-    assert vote.correctness.score == 4
-    assert len(calls) == 1
-    assert "max_tokens" not in calls[0]
+	assert vote.correctness.score == 4
+	assert len(api.requests) == 1
 
 
-def test_a_judge_without_structured_output_or_temperature_sends_neither(fake_completion) -> None:
-    # Live failure: Sonnet 5.5 rejected every vote with "tool_choice: type
-    # "tool" and "any" are not supported", because LiteLLM implements
-    # response_format for Anthropic as a forced tool call. It also rejects a
-    # non-default temperature.
-    replies, calls = fake_completion
-    replies.append(_reply(content=VOTE_JSON))
-    client = LiteLLMCombinedClient(
-        JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5", structured_output=False)
-    )
+def test_a_claude_judge_gets_a_json_schema_and_no_tool_call_or_temperature(api) -> None:
+	# Sonnet 5.5 rejects a forced tool call and a non-default temperature.
+	_evaluate(api, JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5"))
 
-    asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
-
-    assert "response_format" not in calls[0]
-    assert "temperature" not in calls[0]
+	[request] = api.requests
+	assert request["output_config"]["format"]["type"] == "json_schema"
+	assert "tools" not in request
+	assert "tool_choice" not in request
+	assert "temperature" not in request
 
 
-def test_a_judge_with_structured_output_and_temperature_sends_both(fake_completion) -> None:
-    replies, calls = fake_completion
-    replies.append(_reply(content=VOTE_JSON))
-    client = LiteLLMCombinedClient(JudgeConfig(id="qwen", model="ollama/qwen2.5:7b", temperature=0.1))
+def test_an_ollama_judge_gets_a_json_schema_and_its_temperature(api) -> None:
+	judge = JudgeConfig(
+		id="qwen", provider="ollama", model="qwen2.5:7b", base_url="http://ollama:11434/v1", temperature=0.1
+	)
 
-    asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
+	_evaluate(api, judge)
 
-    assert calls[0]["response_format"] == provider.COMBINED_VOTE_SCHEMA
-    assert calls[0]["temperature"] == 0.1
-
-
-def test_vote_is_recovered_from_tool_calls_when_content_is_empty(fake_completion) -> None:
-    replies, calls = fake_completion
-    # Two tool calls: the shape LiteLLM does not copy into `content`.
-    replies.append(_reply(content=None, tool_arguments=[VOTE_JSON, VOTE_JSON]))
-
-    vote = _evaluate()
-
-    assert vote.relevance.score == 4
-    assert len(calls) == 1
+	[request] = api.requests
+	assert request["response_format"]["type"] == "json_schema"
+	assert request["temperature"] == 0.1
 
 
-def test_an_empty_reply_is_retried_once(fake_completion) -> None:
-    replies, calls = fake_completion
-    replies.extend([_reply(content=""), _reply(content=VOTE_JSON)])
+def test_an_openai_reasoning_judge_is_not_sent_temperature_or_max_tokens(api) -> None:
+	# Reasoning models reject `max_tokens` and any non-default temperature.
+	_evaluate(api, JudgeConfig(id="luna", provider="openai", model="gpt-6-luna"))
 
-    vote = _evaluate()
-
-    assert vote.coverage.score == 4
-    assert len(calls) == 2
-
-
-def test_an_unparseable_reply_is_retried_once(fake_completion) -> None:
-    replies, calls = fake_completion
-    replies.extend([_reply(content="not json"), _reply(content=VOTE_JSON)])
-
-    assert _evaluate().understandability.score == 4
-    assert len(calls) == 2
+	[request] = api.requests
+	assert request["text"]["format"]["type"] == "json_schema"
+	assert "temperature" not in request
+	assert "max_output_tokens" not in request
 
 
-def test_two_empty_replies_raise_with_the_finish_reason(fake_completion) -> None:
-    replies, calls = fake_completion
-    replies.extend(
-        [_reply(content=None, finish_reason="tool_use"), _reply(content=None, finish_reason="tool_use")]
-    )
+def test_an_empty_reply_is_retried_once(api) -> None:
+	api.replies.extend(["", VOTE_JSON])
 
-    with pytest.raises(ValueError, match=r"finish_reason='tool_use', tool_calls=0"):
-        _evaluate()
-    assert len(calls) == 2
+	vote = _evaluate(api)
+
+	assert vote.coverage.score == 4
+	assert len(api.requests) == 2
 
 
-def _rubric_call(name: str) -> str:
-    return json.dumps({name: {"feedback": f"{name} is fine", "score": 3}})
+def test_an_unparseable_reply_is_retried_once(api) -> None:
+	api.replies.extend(["not json", VOTE_JSON])
+
+	assert _evaluate(api).understandability.score == 4
+	assert len(api.requests) == 2
 
 
-def test_a_vote_split_into_one_tool_call_per_rubric_is_merged(fake_completion) -> None:
-    replies, calls = fake_completion
-    # The shape the live failure points to: content empty, one rubric per tool call.
-    replies.append(
-        _reply(
-            content=None,
-            tool_arguments=[
-                _rubric_call(name)
-                for name in ("correctness", "coverage", "relevance", "understandability")
-            ],
-        )
-    )
+def test_an_incomplete_vote_is_retried_once(api) -> None:
+	partial = json.dumps({"correctness": {"feedback": "fine", "score": 3}})
+	api.replies.extend([partial, VOTE_JSON])
 
-    vote = _evaluate()
-
-    assert [vote.correctness.score, vote.coverage.score, vote.relevance.score] == [3, 3, 3]
-    assert vote.understandability.feedback == "understandability is fine"
-    assert len(calls) == 1
+	assert _evaluate(api).relevance.score == 4
+	assert len(api.requests) == 2
 
 
-def test_an_incomplete_split_vote_is_retried_then_reported(fake_completion) -> None:
-    replies, calls = fake_completion
-    partial = [_rubric_call("correctness"), _rubric_call("coverage")]
-    replies.extend(
-        [
-            _reply(content=None, tool_arguments=partial, finish_reason="tool_use"),
-            _reply(content=None, tool_arguments=partial, finish_reason="tool_use"),
-        ]
-    )
+def test_two_unusable_replies_raise(api) -> None:
+	api.replies.extend(["", ""])
 
-    with pytest.raises(ValueError, match=r"no complete vote \(finish_reason='tool_use', tool_calls=2\)"):
-        _evaluate()
-    assert len(calls) == 2
-
-
-def test_an_openai_reasoning_judge_is_not_sent_temperature_or_max_tokens(fake_completion) -> None:
-    # Live failure: gpt-6-luna rejected every vote over `max_tokens`, and
-    # reasoning models only accept the default temperature.
-    replies, calls = fake_completion
-    replies.append(_reply(content=VOTE_JSON))
-    client = LiteLLMCombinedClient(JudgeConfig(id="luna", model="openai/gpt-6-luna"))
-
-    asyncio.run(client.evaluate(instruction="a user story", response="a criterion"))
-
-    assert "temperature" not in calls[0]
-    assert "max_tokens" not in calls[0]
+	with pytest.raises(UnexpectedModelBehavior):
+		_evaluate(api)
+	assert len(api.requests) == 2

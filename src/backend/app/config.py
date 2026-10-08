@@ -24,10 +24,9 @@ class Settings(BaseSettings):
     sql_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    embedding_provider: Literal["local", "litellm"] = "local"
+    embedding_provider: Literal["local"] = "local"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384
-    embedding_api_key: str | None = None
 
     # Which models do what (chat, vision, generation, judging) is set in
     # config/models.json, not here. See app/llm_config.py. Resolved

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-import re
 import weakref
 from pathlib import Path
 
-import litellm
-from pydantic import ValidationError
+from pydantic_ai import Agent, RunUsage
+from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
 
+from llm.spec import build_model, with_output_mode
 from voting.models import CombinedVote, EvaluationInput, JudgeConfig, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
 
 
@@ -21,42 +21,10 @@ PROMPT_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_lay
 COMBINED_PROMPT = PROMPT_DIR / "combined.txt"
 COMBINED_INPUT_PROMPT = PROMPT_DIR / "combined_input.txt"
 
-# Two attempts: one retry of a reply that came back without a usable vote.
-EMPTY_REPLY_ATTEMPTS = 2
-
-COMBINED_VOTE_SCHEMA = {
-	"type": "json_schema",
-	"json_schema": {
-		"name": "CombinedVote",
-		"schema": CombinedVote.model_json_schema(),
-	},
-}
-
-
-def _strip_markdown_fences(text: str) -> str:
-	"""Remove markdown code fences that some models wrap JSON output in."""
-	stripped = text.strip()
-	if stripped.startswith("```"):
-		stripped = stripped.strip("`")
-		if stripped.lower().startswith("json"):
-			stripped = stripped[4:].lstrip()
-	match = re.search(r"\{.*\}", stripped, re.DOTALL)
-	if match:
-		return match.group(0)
-	return stripped
-
-
-def _merge_json_objects(texts: list[str]) -> dict:
-	"""Combine JSON objects spread over several strings; later keys win."""
-	merged: dict = {}
-	for text in texts:
-		try:
-			value = json.loads(_strip_markdown_fences(text))
-		except json.JSONDecodeError:
-			continue
-		if isinstance(value, dict):
-			merged.update(value)
-	return merged
+# One retry of a reply that came back without a usable vote: empty, or not
+# matching the schema. Network and rate-limit errors are retried separately,
+# by the provider's SDK.
+INVALID_REPLY_RETRIES = 1
 
 
 def default_timeout() -> float:
@@ -115,138 +83,67 @@ def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
 	return gates[judge.id]
 
 
-def _system_message(judge: JudgeConfig) -> dict:
-	"""The evaluator role, response schema and rubrics, all fixed text.
+def judge_settings(judge: JudgeConfig) -> ModelSettings:
+	"""Request settings for every call `judge` makes.
+
+	`anthropic_cache_instructions` marks the system prompt for caching. Only
+	Anthropic reads it; every other provider ignores it.
+	"""
+	return judge.model_settings(
+		timeout=default_timeout(),
+		anthropic_cache_instructions=judge.cache_prompt,
+	)
+
+
+def _system_prompt() -> str:
+	"""The evaluator role and rubrics, all fixed text.
 
 	Every vote across every story shares this exact prefix. Byte-for-byte
 	stability is what lets the cache hit, so nothing per-request belongs here.
+	The response schema isn't in it either: the judge's output mode sends it.
 	"""
-	schema_hint = json.dumps(CombinedVote.model_json_schema(), indent=2)
-	text = (
-		"You are an acceptance-criteria evaluator. "
-		"Return only valid JSON matching this schema:\n"
-		f"{schema_hint}\n\n"
+	return (
+		"You are an acceptance-criteria evaluator.\n\n"
 		f"{COMBINED_PROMPT.read_text(encoding='utf-8')}"
 	)
-	if not judge.cache_prompt:
-		return {"role": "system", "content": text}
-	return {
-		"role": "system",
-		"content": [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}],
-	}
 
 
-def _log_cache_usage(judge: JudgeConfig, result) -> None:
+def log_cache_usage(judge: JudgeConfig, usage: RunUsage) -> None:
 	"""Debug-log cache reads and writes, the only proof the cache is hitting."""
-	usage = getattr(result, "usage", None)
-	if usage is None or not judge.cache_prompt:
+	if not judge.cache_prompt:
 		return
 	logger.debug(
-		"%s prompt cache: read=%s written=%s uncached=%s",
-		judge.model,
-		getattr(usage, "cache_read_input_tokens", None),
-		getattr(usage, "cache_creation_input_tokens", None),
-		getattr(usage, "prompt_tokens", None),
+		"%s prompt cache: read=%s written=%s input=%s",
+		judge.name,
+		usage.cache_read_tokens,
+		usage.cache_write_tokens,
+		usage.input_tokens,
 	)
 
 
-class LiteLLMCombinedClient:
-	"""Evaluates acceptance criteria using any LiteLLM-supported model."""
+class CombinedJudgeClient:
+	"""Scores all four rubrics in one request, for judges with `style: "combined"`."""
 
-	def __init__(
-		self,
-		judge: JudgeConfig,
-		*,
-		timeout: float | None = None,
-		num_retries: int = 2,
-	) -> None:
-		timeout = default_timeout() if timeout is None else timeout
+	def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
 		self.judge = judge
 		self.provider_name = judge.display_name
 		self.model = judge.model
-		self.timeout = timeout
-		self.num_retries = num_retries
+		self.agent = Agent(
+			model or build_model(judge),
+			output_type=with_output_mode(CombinedVote, judge.output_mode),
+			instructions=_system_prompt(),
+			model_settings=judge_settings(judge),
+			retries=INVALID_REPLY_RETRIES,
+		)
 
 	async def evaluate(self, *, instruction: str, response: str) -> CombinedVote:
 		prompt = COMBINED_INPUT_PROMPT.read_text(encoding="utf-8")
 		prompt = prompt.replace("{orig_instruction}", instruction)
 		prompt = prompt.replace("{orig_response}", response)
 
-		# No max_tokens: OpenAI reasoning models reject it (LiteLLM doesn't
-		# translate it to max_completion_tokens for them), and a small cap would
-		# eat into their reasoning tokens and truncate the vote.
-		sampling = {} if self.judge.temperature is None else {"temperature": self.judge.temperature}
-		structured = {"response_format": COMBINED_VOTE_SCHEMA} if self.judge.structured_output else {}
-
-		# A successful reply can still carry no usable vote, and LiteLLM's own
-		# num_retries only covers HTTP/network errors — so retry that case here.
-		last_error: Exception | None = None
-		for _ in range(EMPTY_REPLY_ATTEMPTS):
-			result = await litellm.acompletion(
-				model=self.model,
-				messages=[
-					_system_message(self.judge),
-					{"role": "user", "content": prompt},
-				],
-				**structured,
-				**sampling,
-				# Drop whatever else a given judge doesn't support instead of
-				# failing the vote.
-				drop_params=True,
-				timeout=self.timeout,
-				num_retries=self.num_retries,
-			)
-			_log_cache_usage(self.judge, result)
-			try:
-				return self._parse_vote(result.choices[0])
-			except (ValueError, ValidationError) as error:
-				last_error = error
-
-		assert last_error is not None
-		raise last_error
-
-	def _parse_vote(self, choice) -> CombinedVote:
-		"""Read the vote from the reply text, falling back to its tool calls.
-
-		Where LiteLLM implements `response_format` as a tool call (it did for
-		Anthropic, before Anthropic judges stopped receiving it), it only copies
-		the arguments into `content` when the reply holds exactly one call to
-		its JSON tool. A model can split the vote into one tool call per
-		rubric instead, which leaves `content` empty —
-		how candidates ended up unrated with "returned no message content". So
-		the tool calls are merged back into a single vote.
-		"""
-		message = choice.message
-		tool_calls = getattr(message, "tool_calls", None) or []
-		shape = (
-			f"finish_reason={getattr(choice, 'finish_reason', None)!r}, "
-			f"tool_calls={len(tool_calls)}"
-		)
-
-		arguments = [
-			call.function.arguments
-			for call in tool_calls
-			if isinstance(getattr(call.function, "arguments", None), str)
-		]
-		texts = [message.content] if isinstance(message.content, str) else []
-		merged = _merge_json_objects(arguments)
-		if merged:
-			texts.append(json.dumps(merged))
-		texts += arguments
-		texts = [text for text in texts if text.strip()]
-
-		if not texts:
-			raise ValueError(f"{self.model} returned no message content ({shape})")
-
-		first_error: ValidationError | None = None
-		for text in texts:
-			try:
-				return CombinedVote.model_validate_json(_strip_markdown_fences(text))
-			except ValidationError as error:
-				first_error = first_error or error
-		raise ValueError(
-			f"{self.model} returned no complete vote ({shape}): {first_error}"
-		) from first_error
+		result = await self.agent.run(prompt)
+		log_cache_usage(self.judge, result.usage)
+		return result.output
 
 
 def _error_output(output: str, provider_name: str, model: str, message: str) -> EvaluatedOutput:
@@ -265,7 +162,7 @@ def _error_output(output: str, provider_name: str, model: str, message: str) -> 
 	)
 
 
-async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: LiteLLMCombinedClient) -> VotingResult:
+async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: CombinedJudgeClient) -> VotingResult:
 	gate = judge_gate(client.judge)
 
 	async def evaluate_output(output: str) -> EvaluatedOutput:

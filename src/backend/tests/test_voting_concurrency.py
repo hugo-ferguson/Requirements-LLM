@@ -22,12 +22,12 @@ from voting.provider import (
 )
 
 
-OLLAMA = JudgeConfig(id="qwen", model="ollama/qwen2.5:7b", max_parallel=1)
-CLOUD = JudgeConfig(id="luna", model="openai/gpt-6-luna")
+OLLAMA = JudgeConfig(id="qwen", provider="ollama", model="qwen2.5:7b", max_parallel=1)
+CLOUD = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 class _RecordingClient:
-    """Stands in for LiteLLMCombinedClient, tracking overlap."""
+    """Stands in for CombinedJudgeClient, tracking overlap."""
 
     def __init__(self, judge: JudgeConfig, delay: float = 0.02) -> None:
         self.judge = judge
@@ -62,7 +62,7 @@ def _input(candidates: list[str]) -> EvaluationInput:
         prompt="a user story",
         output=candidates,
         reference_answer="",
-        judges=[JudgeConfig(id="test", model="test/test")],
+        judges=[JudgeConfig(id="test", provider="test", model="test")],
     )
 
 
@@ -123,7 +123,7 @@ def test_one_judge_limit_covers_concurrent_scoring_runs():
     """UAT generation scores every accepted AC at once. The judge's limit has
     to hold across those runs, not apply separately to each, or the total
     trips the provider's org-wide concurrency limit."""
-    judge = JudgeConfig(id="claude-limited", model="anthropic/claude-sonnet-5-5", max_parallel=2)
+    judge = JudgeConfig(id="claude-limited", provider="anthropic", model="claude-sonnet-5-5", max_parallel=2)
     client = _RecordingClient(judge)
 
     async def three_runs_at_once():

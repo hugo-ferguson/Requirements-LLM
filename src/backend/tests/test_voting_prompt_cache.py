@@ -1,10 +1,10 @@
 """Prompt caching on the voting layer.
 
-Every vote shares the same rubric and schema text, so for judges with
-`cache_prompt` (Anthropic needs it) it is sent as a cache-marked system block.
-These tests pin the two things that silently break caching: per-vote text
-leaking into the cached prefix, and a cold batch fired all at once so that
-nothing is ever read back.
+Every vote shares the same rubric text, so for judges with `cache_prompt`
+(Anthropic needs it) it is sent as a cache-marked system block. These tests pin
+the two things that silently break caching: per-vote text leaking into the
+cached prefix, and a cold batch fired all at once so that nothing is ever read
+back.
 """
 
 from __future__ import annotations
@@ -13,9 +13,11 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-import voting.provider as provider
+import pytest
+
+from tests.fake_llm_api import FakeLlmApi
 from voting.models import EvaluationInput, JudgeConfig
-from voting.provider import LiteLLMCombinedClient, evaluate_with_combined_model
+from voting.provider import CombinedJudgeClient, evaluate_with_combined_model
 
 VOTE_JSON = json.dumps(
     {
@@ -24,64 +26,53 @@ VOTE_JSON = json.dumps(
     }
 )
 
-
-def _capture_calls(monkeypatch) -> list[dict]:
-    calls: list[dict] = []
-
-    async def acompletion(**kwargs):
-        calls.append(kwargs)
-        message = SimpleNamespace(content=VOTE_JSON, tool_calls=None)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="stop")])
-
-    monkeypatch.setattr(provider.litellm, "acompletion", acompletion)
-    return calls
+CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5", cache_prompt=True)
+LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
-CLAUDE = JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5", cache_prompt=True)
-LUNA = JudgeConfig(id="luna", model="openai/gpt-6-luna")
+@pytest.fixture
+def api(monkeypatch) -> FakeLlmApi:
+    monkeypatch.setenv("FAKE_LLM_API_KEY", "test-key")
+    return FakeLlmApi(default_reply=VOTE_JSON)
 
 
-def _vote(judge: JudgeConfig, response: str) -> None:
-    client = LiteLLMCombinedClient(judge)
+def _vote(api: FakeLlmApi, judge: JudgeConfig, response: str) -> None:
+    client = CombinedJudgeClient(judge, model=api.model(judge))
     asyncio.run(client.evaluate(instruction="a user story", response=response))
 
 
-def test_a_caching_judge_gets_a_cache_marked_system_prefix(monkeypatch) -> None:
-    calls = _capture_calls(monkeypatch)
+def test_a_caching_judge_gets_a_cache_marked_system_prefix(api) -> None:
+    _vote(api, CLAUDE, "a criterion")
 
-    _vote(CLAUDE, "a criterion")
-
-    system, user = calls[0]["messages"]
-    [block] = system["content"]
-    assert block["cache_control"] == {"type": "ephemeral"}
+    [request] = api.requests
+    [block] = request["system"]
+    assert block["cache_control"]["type"] == "ephemeral"
     assert "[Correctness]" in block["text"]
     assert "a user story" not in block["text"]
     assert "a criterion" not in block["text"]
-    assert "a user story" in user["content"]
-    assert "a criterion" in user["content"]
+    user = json.dumps(request["messages"])
+    assert "a user story" in user
+    assert "a criterion" in user
 
 
-def test_the_cached_prefix_is_identical_for_every_candidate(monkeypatch) -> None:
-    calls = _capture_calls(monkeypatch)
+def test_the_cached_prefix_is_identical_for_every_candidate(api) -> None:
+    _vote(api, CLAUDE, "first criterion")
+    _vote(api, CLAUDE, "second criterion")
 
-    _vote(CLAUDE, "first criterion")
-    _vote(CLAUDE, "second criterion")
-
-    assert calls[0]["messages"][0] == calls[1]["messages"][0]
+    first, second = api.requests
+    assert first["system"] == second["system"]
 
 
-def test_other_judges_get_a_plain_system_message(monkeypatch) -> None:
-    calls = _capture_calls(monkeypatch)
+def test_other_judges_get_the_same_prefix_without_a_cache_marker(api) -> None:
+    _vote(api, LUNA, "a criterion")
 
-    _vote(LUNA, "a criterion")
-
-    system = calls[0]["messages"][0]
-    assert isinstance(system["content"], str)
-    assert "[Correctness]" in system["content"]
+    [request] = api.requests
+    assert "[Correctness]" in request["instructions"]
+    assert "cache_control" not in json.dumps(request)
 
 
 class _RecordingClient:
-    """Stands in for LiteLLMCombinedClient, recording which votes overlap."""
+    """Stands in for CombinedJudgeClient, recording which votes overlap."""
 
     def __init__(self, judge: JudgeConfig) -> None:
         self.judge = judge

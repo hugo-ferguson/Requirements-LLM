@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 from pathlib import Path
 
-import litellm
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
 
-from voting.provider import judge_gate
+from llm.spec import build_model, with_output_mode
+from voting.provider import INVALID_REPLY_RETRIES, judge_gate, judge_settings, log_cache_usage
 from voting.models import (
     EvaluationInput,
     EvaluatedOutput,
@@ -22,77 +22,35 @@ from voting.models import (
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
 RUBRIC_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer"
-
-PROMETHEUS_VOTE_SCHEMA = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "PrometheusVote",
-        "schema": PrometheusVote.model_json_schema(),
-    },
-}
+SYSTEM_PROMPT = "You are the Prometheus voting evaluator. Follow the supplied rubric exactly."
 
 
-def _strip_markdown_fences(text: str) -> str:
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = stripped.strip("`")
-        if stripped.lower().startswith("json"):
-            stripped = stripped[4:].lstrip()
-    match = re.search(r"\{.*\}", stripped, re.DOTALL)
-    if match:
-        return match.group(0)
-    return stripped
-
-
-class LiteLLMPrometheusClient:
+class PrometheusJudgeClient:
     """Scores one rubric per call, for judges with `style: "per_rubric"`."""
 
-    def __init__(self, judge: JudgeConfig, *, timeout: float = 120.0, num_retries: int = 2) -> None:
+    def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
         self.judge = judge
         self.model = judge.model
-        self.timeout = timeout
-        self.num_retries = num_retries
+        self.agent = Agent(
+            model or build_model(judge),
+            output_type=with_output_mode(PrometheusVote, judge.output_mode),
+            instructions=SYSTEM_PROMPT,
+            model_settings=judge_settings(judge),
+            retries=INVALID_REPLY_RETRIES,
+        )
 
     async def evaluate(self, *, instruction: str, response: str, rubric_name: str) -> PrometheusVote:
         rubric = (RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
         prompt = rubric.replace("{orig_instruction}", instruction)
         prompt = prompt.replace("{orig_response}", response)
 
-        schema_hint = json.dumps(PrometheusVote.model_json_schema(), indent=2)
-        sampling = {} if self.judge.temperature is None else {"temperature": self.judge.temperature}
-        structured = {"response_format": PROMETHEUS_VOTE_SCHEMA} if self.judge.structured_output else {}
-
-        result = await litellm.acompletion(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are the Prometheus voting evaluator. "
-                        "Follow the supplied rubric exactly. "
-                        "Return only valid JSON matching this schema:\n"
-                        f"{schema_hint}"
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            **structured,
-            **sampling,
-            drop_params=True,
-            timeout=self.timeout,
-            num_retries=self.num_retries,
-        )
-
-        content = result.choices[0].message.content
-        if not isinstance(content, str):
-            raise ValueError("Model returned no message content")
-
-        cleaned = _strip_markdown_fences(content)
-        return PrometheusVote.model_validate_json(cleaned)
+        result = await self.agent.run(prompt)
+        log_cache_usage(self.judge, result.usage)
+        return result.output
 
 
 async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: JudgeConfig) -> VotingResult:
-    evaluator = LiteLLMPrometheusClient(judge)
+    evaluator = PrometheusJudgeClient(judge)
     # Same queue-timeout trap as the combined path, and worse here: this fans
     # out four rubric calls per candidate, so an unbounded gather over N
     # candidates puts 4N requests in front of a server that runs one at a

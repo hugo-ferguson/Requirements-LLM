@@ -101,12 +101,19 @@ Settings live in two files:
   - `judges`: the models that score every candidate; their scores are averaged. Disabling one
     of the two default judges roughly halves scoring cost.
 
-  Each agent and judge can set `temperature` (leave it `null` for newer Claude models and
-  OpenAI reasoning models, which reject any other value). Generation agents and the chat
-  model also set how structured output is requested: `output_mode` / `chat_output_mode`,
-  one of `tool`, `native` or `prompted` — use `native` for Claude, whose newer models reject
-  the forced tool call `tool` sends, and for Ollama. Judges take `structured_output`,
-  `cache_prompt` and `max_parallel`. The example file shows the settings each provider needs.
+  Every model is written the same way, whichever provider it uses:
+  `{"provider": "anthropic", "model": "claude-sonnet-5-5"}`. `provider` is `anthropic`,
+  `openai`, `google` or `ollama` (or any other provider PydanticAI supports). Optional
+  settings, the same for every model:
+  - `temperature`: leave it out for newer Claude models and OpenAI reasoning models, which
+    reject any value but the default.
+  - `output_mode`: how structured output is requested. `native` (the default) uses the
+    provider's JSON-schema mode; `tool` and `prompted` are for models without one.
+  - `base_url`: where the model is served, e.g. an Ollama server.
+  - `api_key_env`: the `.env` variable holding the key, if it isn't the provider's standard
+    one (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`).
+
+  Judges also take `cache_prompt`, `max_parallel` and `style`. The example file shows them.
 - **`src/.env`** — API keys, database and URL settings, and tuning numbers, explained there.
 
 **Cost:** each generation calls every enabled model, and every candidate is scored by every
@@ -136,23 +143,15 @@ then run `wsl --shutdown` and restart Docker Desktop. On macOS, set memory under
 
 **The backend won't start: "Model config not found"** — the second copy in step 2 was
 skipped. Copy `models.example.json` to `models.json`, then `docker compose restart backend`.
-If you set the app up before `models.json` existed, it replaces `generation_agents.json` and
-the `LLM_MODEL`, `VISION_MODEL`, `VOTING_PROVIDERS` and `VOTING_JUDGES` lines in `.env`; move
-any model changes you made there into `models.json`. The backend log warns about each
-retired `.env` line that is still set.
 
 **Every score shows 0.0** — the judges couldn't be reached. Check both API keys in `src/.env`,
 then `docker compose up -d --force-recreate backend`. The backend log names the failing judge.
-A judge that logs a 400 about `tool_choice` or `temperature` needs `"structured_output": false`
-or `"temperature": null` in `models.json`.
+A model that logs a 400 about `temperature` needs its `"temperature"` removed in `models.json`;
+one that logs a 400 about `tool_choice` needs `"output_mode": "native"`.
 
-**A generation agent or the chat logs a 400: `tool_choice: type "tool" and "any" are not
-supported`** — set that agent's `"output_mode"` (or the top-level `"chat_output_mode"`) to
-`"native"` in `models.json`, then `docker compose restart backend`.
-
-**Only one model's versions appear, or the backend log says "Agent … needs ANTHROPIC_API_KEY /
-OPENAI_API_KEY set in the environment"** — that key is missing, or the backend wasn't recreated
-after adding it: `docker compose up -d --force-recreate backend`.
+**Only one model's versions appear, or the backend log says "Set the `ANTHROPIC_API_KEY`
+environment variable"** — that key is missing, or the backend wasn't recreated after adding
+it: `docker compose up -d --force-recreate backend`.
 
 **A change to `.env` seems ignored** — `.env` is only read when the container is created, so a
 plain restart isn't enough; use `docker compose up -d --force-recreate backend`.

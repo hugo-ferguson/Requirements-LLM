@@ -3,8 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from functools import lru_cache
 
-import litellm
-
 from app.config import Settings, settings
 
 
@@ -57,26 +55,6 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 		]
 
 
-class LiteLLMEmbeddingProvider(EmbeddingProvider):
-	"""Calls any LiteLLM-supported embedding endpoint."""
-
-	def __init__(self, model: str, api_key: str | None = None):
-		self._model = model
-		self._api_key = api_key
-		self._dimension = len(self.embed_texts(["_"])[0])
-
-	@property
-	def dimension(self) -> int:
-		return self._dimension
-
-	def embed_texts(self, texts: list[str]) -> list[list[float]]:
-		kwargs: dict = {"model": self._model, "input": texts}
-		if self._api_key:
-			kwargs["api_key"] = self._api_key
-		response = litellm.embedding(**kwargs)
-		return [item["embedding"] for item in response.data]
-
-
 @lru_cache(maxsize=1)
 def get_embedding_provider() -> EmbeddingProvider:
 	"""
@@ -109,11 +87,5 @@ def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
 def _construct_provider(settings: Settings) -> EmbeddingProvider:
 	if settings.embedding_provider == "local":
 		return LocalEmbeddingProvider(model_name=settings.embedding_model)
-
-	if settings.embedding_provider == "litellm":
-		return LiteLLMEmbeddingProvider(
-			model=settings.embedding_model,
-			api_key=settings.embedding_api_key,
-		)
 
 	raise ValueError(f"Unknown provider: {settings.embedding_provider!r}")

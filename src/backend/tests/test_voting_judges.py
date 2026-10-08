@@ -17,8 +17,8 @@ from voting.models import (
 )
 
 RUBRICS = ("correctness", "coverage", "relevance", "understandability")
-CLAUDE = JudgeConfig(id="claude", model="anthropic/claude-sonnet-5-5")
-LUNA = JudgeConfig(id="luna", model="openai/gpt-6-luna")
+CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5")
+LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> VotingResult:
@@ -110,8 +110,7 @@ def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(monkey
 
 
 def test_every_scoring_call_runs_on_one_long_lived_loop(monkeypatch) -> None:
-    """A loop per call multiplied each judge's concurrency limit and destroyed
-    LiteLLM's logging task every time the loop closed."""
+    """A loop per call multiplied each judge's concurrency limit."""
     import threading
 
     loops = []

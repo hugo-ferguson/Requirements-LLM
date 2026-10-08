@@ -202,7 +202,7 @@ class ConversationService:
             result = self.agent.run_sync(prompt)
         except Exception as error:
             raise GenerationError(
-                f"{get_models_config().chat_model} could not generate acceptance "
+                f"{get_models_config().chat_model.name} could not generate acceptance "
                 f"criteria: {error}"
             ) from error
 

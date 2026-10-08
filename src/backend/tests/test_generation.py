@@ -21,12 +21,11 @@ from pydantic_ai import NativeOutput, PromptedOutput
 
 from app.config import Settings
 from app.generation import orchestrator
-from app.generation.agents import AgentBuildError, build_agent
+from app.generation.agents import build_agent
 from app.llm_config import (
     GenerationAgentConfig,
     ModelsConfigError,
     load_models_config,
-    with_output_mode,
 )
 from app.generation.models import (
     AgentResult,
@@ -57,12 +56,13 @@ from app.services.generation import (
     NoUserStoryError,
     compose_user_story,
 )
+from llm.spec import ModelBuildError, with_output_mode
 
 
 def _test_agent(agent_id: str) -> GenerationAgentConfig:
     """A roster entry backed by TestModel, so no provider is ever contacted."""
     return GenerationAgentConfig(
-        id=agent_id, provider="test", model="test", temperature=0.0
+        id=agent_id, provider="test", model="test", temperature=0.0, output_mode="tool"
     )
 
 
@@ -249,13 +249,13 @@ async def test_generated_criteria_survive_a_full_ensemble_run() -> None:
 
 
 QWEN = {"id": "qwen", "provider": "ollama", "model": "qwen2.5:7b"}
-JUDGE = {"id": "claude", "model": "anthropic/claude-sonnet-5-5"}
+JUDGE = {"id": "claude", "provider": "anthropic", "model": "claude-sonnet-5-5"}
 
 
 def _write_config(tmp_path, generation_agents: list[dict], judges: list[dict] | None = None, **extra):
     payload = {
-        "chat_model": "anthropic:claude-sonnet-5-5",
-        "vision_model": "anthropic/claude-sonnet-5-5",
+        "chat_model": {"provider": "anthropic", "model": "claude-sonnet-5-5"},
+        "vision_model": {"provider": "anthropic", "model": "claude-haiku-4-5"},
         "generation_agents": generation_agents,
         "judges": [JUDGE] if judges is None else judges,
         **extra,
@@ -273,8 +273,8 @@ def test_models_config_loads_every_section_from_one_file(tmp_path) -> None:
 
     config = load_models_config(path)
 
-    assert config.chat_model == "anthropic:claude-sonnet-5-5"
-    assert config.vision_model == "anthropic/claude-sonnet-5-5"
+    assert config.chat_model.name == "anthropic:claude-sonnet-5-5"
+    assert config.vision_model.name == "anthropic:claude-haiku-4-5"
     assert [agent.id for agent in config.generation_agents] == ["qwen", "llama"]
     assert config.generation_agents[0].model == "qwen2.5:7b"
     assert [judge.id for judge in config.judges] == ["claude"]
@@ -285,7 +285,7 @@ def test_models_config_returns_only_enabled_agents_and_judges(tmp_path) -> None:
     path = _write_config(
         tmp_path,
         [QWEN, {"id": "gemini", "provider": "google", "model": "gemini-2.0-flash", "enabled": False}],
-        judges=[JUDGE, {"id": "luna", "model": "openai/gpt-6-luna", "enabled": False}],
+        judges=[JUDGE, {"id": "luna", "provider": "openai", "model": "gpt-6-luna", "enabled": False}],
     )
 
     config = load_models_config(path)
@@ -302,14 +302,18 @@ def test_temperature_is_omitted_unless_set(tmp_path) -> None:
     assert config.judges[0].temperature is None
 
 
-def test_output_mode_defaults_to_tool_calls_and_is_read_per_agent(tmp_path) -> None:
+def test_output_mode_defaults_to_native_and_is_read_per_entry(tmp_path) -> None:
     config = load_models_config(
-        _write_config(tmp_path, [QWEN, {**QWEN, "id": "claude", "output_mode": "native"}],
-                      chat_output_mode="native")
+        _write_config(
+            tmp_path,
+            [QWEN, {**QWEN, "id": "small", "output_mode": "prompted"}],
+            judges=[{**JUDGE, "output_mode": "tool"}],
+        )
     )
 
-    assert [agent.output_mode for agent in config.generation_agents] == ["tool", "native"]
-    assert config.chat_output_mode == "native"
+    assert [agent.output_mode for agent in config.generation_agents] == ["native", "prompted"]
+    assert config.chat_model.output_mode == "native"
+    assert config.judges[0].output_mode == "tool"
 
 
 def test_output_mode_wraps_the_output_type() -> None:
@@ -326,13 +330,6 @@ def test_models_config_missing_file_names_the_path_and_the_fix(tmp_path) -> None
         load_models_config(tmp_path / "absent.json")
 
     assert "models.example.json" in str(error.value)
-
-
-def test_a_leftover_generation_agents_file_is_pointed_at(tmp_path) -> None:
-    (tmp_path / "generation_agents.json").write_text("{}", encoding="utf-8")
-
-    with pytest.raises(ModelsConfigError, match="replaces generation_agents.json"):
-        load_models_config(tmp_path / "models.json")
 
 
 def test_models_config_rejects_malformed_json(tmp_path) -> None:
@@ -405,7 +402,7 @@ def test_agent_without_its_key_fails_to_build_and_names_the_variable(
     )
     monkeypatch.delenv("A_TEST_KEY", raising=False)
 
-    with pytest.raises(AgentBuildError, match="A_TEST_KEY"):
+    with pytest.raises(ModelBuildError, match="A_TEST_KEY"):
         build_agent(config)
 
 
