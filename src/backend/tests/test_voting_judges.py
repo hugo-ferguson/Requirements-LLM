@@ -6,10 +6,10 @@ import asyncio
 
 import app.services.scoring as scoring
 import voting.voting as voting
-from app.config import Settings
 from voting.models import (
     EvaluatedOutput,
     EvaluationInput,
+    JudgeConfig,
     ProviderFeedback,
     RubricAverage,
     RubricFeedback,
@@ -17,6 +17,8 @@ from voting.models import (
 )
 
 RUBRICS = ("correctness", "coverage", "relevance", "understandability")
+CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5")
+LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> VotingResult:
@@ -46,21 +48,31 @@ def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> Voting
     )
 
 
-def test_judge_names_come_from_settings() -> None:
-    assert Settings(voting_judges="claude, Luna ,").voting_judge_names == ["claude", "luna"]
-    assert Settings(voting_judges="").voting_judge_names == ["claude"]
-
-
-def test_score_candidates_asks_every_configured_judge(monkeypatch) -> None:
+def test_score_candidates_uses_the_enabled_judges_from_the_models_config(monkeypatch) -> None:
     seen: list[list[str]] = []
 
     async def fake_evaluate_input(evaluation_input):
-        seen.append(evaluation_input.providers)
+        seen.append([judge.id for judge in evaluation_input.judges])
         return _judged(evaluation_input, "any", 4)
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
 
-    scoring.score_candidates("prompt", ["a"], settings=Settings(voting_judges="claude,luna"))
+    # tests/models.test.json declares one judge, `claude`.
+    scoring.score_candidates("prompt", ["a"])
+
+    assert seen == [["claude"]]
+
+
+def test_score_candidates_asks_every_given_judge(monkeypatch) -> None:
+    seen: list[list[str]] = []
+
+    async def fake_evaluate_input(evaluation_input):
+        seen.append([judge.id for judge in evaluation_input.judges])
+        return _judged(evaluation_input, "any", 4)
+
+    monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
+
+    scoring.score_candidates("prompt", ["a"], judges=[CLAUDE, LUNA])
 
     assert seen == [["claude", "luna"]]
 
@@ -68,12 +80,12 @@ def test_score_candidates_asks_every_configured_judge(monkeypatch) -> None:
 def test_two_judges_are_averaged(monkeypatch) -> None:
     scores = {"claude": 4, "luna": 2}
 
-    async def judge(name, evaluation_input):
-        return _judged(evaluation_input, name, scores[name])
+    async def judge(judge_config, evaluation_input):
+        return _judged(evaluation_input, judge_config.id, scores[judge_config.id])
 
-    monkeypatch.setattr(voting, "_evaluate_with_provider", judge)
+    monkeypatch.setattr(voting, "_evaluate_with_judge", judge)
     evaluation_input = EvaluationInput(
-        ai="t", model="t", prompt="p", output=["a"], providers=["claude", "luna"]
+        ai="t", model="t", prompt="p", output=["a"], judges=[CLAUDE, LUNA]
     )
 
     [result] = asyncio.run(voting.evaluate_input(evaluation_input)).output
@@ -83,17 +95,36 @@ def test_two_judges_are_averaged(monkeypatch) -> None:
 
 
 def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(monkeypatch) -> None:
-    async def judge(name, evaluation_input):
-        if name == "luna":
+    async def judge(judge_config, evaluation_input):
+        if judge_config.id == "luna":
             raise RuntimeError("luna is down")
-        return _judged(evaluation_input, name, 4)
+        return _judged(evaluation_input, judge_config.id, 4)
 
-    monkeypatch.setattr(voting, "_evaluate_with_provider", judge)
+    monkeypatch.setattr(voting, "_evaluate_with_judge", judge)
     monkeypatch.setattr(scoring, "_evaluate_input", voting.evaluate_input)
 
-    [score] = scoring.score_candidates(
-        "prompt", ["a"], settings=Settings(voting_judges="claude,luna")
-    )
+    [score] = scoring.score_candidates("prompt", ["a"], judges=[CLAUDE, LUNA])
 
     assert score.failed is False
     assert score.overall == 4.0
+
+
+def test_every_scoring_call_runs_on_one_long_lived_loop(monkeypatch) -> None:
+    """A loop per call multiplied each judge's concurrency limit."""
+    import threading
+
+    loops = []
+
+    async def fake_evaluate_input(evaluation_input):
+        loops.append((asyncio.get_running_loop(), threading.current_thread()))
+        return _judged(evaluation_input, "any", 4)
+
+    monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
+
+    scoring.score_candidates("prompt", ["a"], judges=[CLAUDE])
+    scoring.score_candidates("prompt", ["b"], judges=[CLAUDE])
+
+    (first_loop, first_thread), (second_loop, _) = loops
+    assert first_loop is second_loop
+    assert not first_loop.is_closed()
+    assert first_thread is not threading.main_thread()

@@ -217,7 +217,9 @@ src/frontend/vite.config.d.ts
 
 # MacOS
 .DS_Store
-# Local generation agent roster (R8). Names models, base URLs and the env
-# vars holding their API keys, so it is machine-specific and may carry secrets.
-# Commit config/generation_agents.example.json instead.
+# Local model config (R8): chat, vision, generation and judge models. Names
+# models, base URLs and the env vars holding their API keys, so it is
+# machine-specific. Commit config/models.example.json instead.
+src/backend/config/models.json
+# Superseded by models.json; kept ignored so a stale local copy isn't committed.
 src/backend/config/generation_agents.json

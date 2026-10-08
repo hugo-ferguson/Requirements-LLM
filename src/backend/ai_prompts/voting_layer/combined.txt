@@ -1,16 +1,10 @@
 ###Task Description:
-An instruction and a response to evaluate are given. Evaluate the response against all four score rubrics below.
+An instruction and a response to evaluate are given in the user message. Evaluate the response against all four score rubrics below.
 
 1. Write detailed feedback for each rubric strictly based on that rubric.
 2. Compare the response against the instruction when assigning each score.
 3. Return an integer score from 1 to 5 for each rubric.
 4. Return only valid JSON matching the requested response schema.
-
-###The instruction to evaluate:
-{orig_instruction}
-
-###Response to evaluate:
-{orig_response}
 
 ###Score Rubrics:
 
@@ -49,5 +43,3 @@ Evaluate how clearly the generated acceptance criteria are written. Consider whe
 3: The acceptance criteria are generally understandable but include some ambiguous or unnecessarily complex statements.
 4: The acceptance criteria are clear and well structured, with only minor opportunities for improving clarity.
 5: The acceptance criteria are exceptionally clear, concise, unambiguous, and easy to understand and implement.
-
-###Feedback:

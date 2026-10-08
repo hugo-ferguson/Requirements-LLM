@@ -1,73 +1,30 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-import re
+import weakref
 from pathlib import Path
 
-import litellm
-from pydantic import ValidationError
+from pydantic_ai import Agent, RunUsage
+from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
 
-from voting.models import CombinedVote, EvaluationInput, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
+from llm.spec import build_model, with_output_mode
+from voting.models import CombinedVote, EvaluationInput, JudgeConfig, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
 
 
 logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
-COMBINED_PROMPT = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer" / "combined.txt"
+PROMPT_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer"
+COMBINED_PROMPT = PROMPT_DIR / "combined.txt"
+COMBINED_INPUT_PROMPT = PROMPT_DIR / "combined_input.txt"
 
-# Two attempts: one retry of a reply that came back without a usable vote.
-EMPTY_REPLY_ATTEMPTS = 2
-
-COMBINED_VOTE_SCHEMA = {
-	"type": "json_schema",
-	"json_schema": {
-		"name": "CombinedVote",
-		"schema": CombinedVote.model_json_schema(),
-	},
-}
-
-
-def _strip_markdown_fences(text: str) -> str:
-	"""Remove markdown code fences that some models wrap JSON output in."""
-	stripped = text.strip()
-	if stripped.startswith("```"):
-		stripped = stripped.strip("`")
-		if stripped.lower().startswith("json"):
-			stripped = stripped[4:].lstrip()
-	match = re.search(r"\{.*\}", stripped, re.DOTALL)
-	if match:
-		return match.group(0)
-	return stripped
-
-
-def _merge_json_objects(texts: list[str]) -> dict:
-	"""Combine JSON objects spread over several strings; later keys win."""
-	merged: dict = {}
-	for text in texts:
-		try:
-			value = json.loads(_strip_markdown_fences(text))
-		except json.JSONDecodeError:
-			continue
-		if isinstance(value, dict):
-			merged.update(value)
-	return merged
-
-
-def _accepts_temperature(model: str) -> bool:
-	"""False for OpenAI reasoning models, which only accept the default temperature.
-
-	LiteLLM lists `temperature` as supported for them, so `drop_params` does
-	not strip it and the request would be rejected. An unknown model keeps it.
-	"""
-	if not model.startswith("openai/"):
-		return True
-	try:
-		return not litellm.supports_reasoning(model=model)
-	except Exception:
-		return True
+# One retry of a reply that came back without a usable vote: empty, or not
+# matching the schema. Network and rate-limit errors are retried separately,
+# by the provider's SDK.
+INVALID_REPLY_RETRIES = 1
 
 
 def default_timeout() -> float:
@@ -82,15 +39,16 @@ def default_timeout() -> float:
 		return 120.0
 
 
-def max_parallel_requests(model: str) -> int:
-	"""How many scoring requests may be in flight against `model` at once.
+def max_parallel_requests(judge: JudgeConfig) -> int:
+	"""How many scoring requests may be in flight against `judge` at once.
 
-	Ollama serves one request per model at a time, so firing N candidates
-	concurrently does not make them run in parallel — it queues them, and the
-	per-request timeout counts that queue time. Later candidates then expire
-	before they ever start, which reads downstream as an unrated candidate
-	rather than as a capacity problem. Observed directly: 3 of 5 candidates
-	timing out at exactly 120.0s while the first two scored fine.
+	`VOTING_MAX_PARALLEL` overrides the judge's `max_parallel`. Ollama serves
+	one request per model at a time, so firing N candidates concurrently does
+	not make them run in parallel — it queues them, and the per-request
+	timeout counts that queue time. Later candidates then expire before they
+	ever start, which reads downstream as an unrated candidate rather than as
+	a capacity problem. Observed directly: 3 of 5 candidates timing out at
+	exactly 120.0s while the first two scored fine.
 
 	Serialising costs nothing in wall-clock terms, because Ollama was going to
 	run them one at a time regardless. It just means each timeout covers real
@@ -102,114 +60,90 @@ def max_parallel_requests(model: str) -> int:
 			return max(1, int(raw))
 		except ValueError:
 			pass
-	return 1 if model.startswith("ollama/") else 8
+	return judge.max_parallel
 
 
-class LiteLLMCombinedClient:
-	"""Evaluates acceptance criteria using any LiteLLM-supported model."""
+# One gate per judge per event loop. The app runs every scoring call on one
+# long-lived loop (see app/services/scoring.py), so a judge's `max_parallel`
+# caps its requests across all concurrent scoring runs, not just within one.
+# Without that, UAT generation scored every accepted AC at once and multiplied
+# the cap by the number of ACs, tripping Anthropic's org-wide concurrency
+# limit. Keyed by loop because an asyncio primitive binds to the loop that
+# first uses it, and tests start a fresh loop each time.
+_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]] = (
+	weakref.WeakKeyDictionary()
+)
 
-	def __init__(
-		self,
-		provider_name: str,
-		model: str,
-		*,
-		temperature: float = 0.1,
-		timeout: float | None = None,
-		num_retries: int = 2,
-	) -> None:
-		timeout = default_timeout() if timeout is None else timeout
-		self.provider_name = provider_name
-		self.model = model
-		self.temperature = temperature
-		self.timeout = timeout
-		self.num_retries = num_retries
+
+def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
+	"""The running loop's shared concurrency gate for `judge`."""
+	gates = _gates.setdefault(asyncio.get_running_loop(), {})
+	if judge.id not in gates:
+		gates[judge.id] = asyncio.Semaphore(max_parallel_requests(judge))
+	return gates[judge.id]
+
+
+def judge_settings(judge: JudgeConfig) -> ModelSettings:
+	"""Request settings for every call `judge` makes.
+
+	`anthropic_cache_instructions` marks the system prompt for caching. Only
+	Anthropic reads it; every other provider ignores it.
+	"""
+	return judge.model_settings(
+		timeout=default_timeout(),
+		anthropic_cache_instructions=judge.cache_prompt,
+	)
+
+
+def _system_prompt() -> str:
+	"""The evaluator role and rubrics, all fixed text.
+
+	Every vote across every story shares this exact prefix. Byte-for-byte
+	stability is what lets the cache hit, so nothing per-request belongs here.
+	The response schema isn't in it either: the judge's output mode sends it.
+	"""
+	return (
+		"You are an acceptance-criteria evaluator.\n\n"
+		f"{COMBINED_PROMPT.read_text(encoding='utf-8')}"
+	)
+
+
+def log_cache_usage(judge: JudgeConfig, usage: RunUsage) -> None:
+	"""Debug-log cache reads and writes, the only proof the cache is hitting."""
+	if not judge.cache_prompt:
+		return
+	logger.debug(
+		"%s prompt cache: read=%s written=%s input=%s",
+		judge.name,
+		usage.cache_read_tokens,
+		usage.cache_write_tokens,
+		usage.input_tokens,
+	)
+
+
+class CombinedJudgeClient:
+	"""Scores all four rubrics in one request, for judges with `style: "combined"`."""
+
+	def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
+		self.judge = judge
+		self.provider_name = judge.display_name
+		self.model = judge.model
+		self.agent = Agent(
+			model or build_model(judge),
+			output_type=with_output_mode(CombinedVote, judge.output_mode),
+			instructions=_system_prompt(),
+			model_settings=judge_settings(judge),
+			retries=INVALID_REPLY_RETRIES,
+		)
 
 	async def evaluate(self, *, instruction: str, response: str) -> CombinedVote:
-		prompt = COMBINED_PROMPT.read_text(encoding="utf-8")
+		prompt = COMBINED_INPUT_PROMPT.read_text(encoding="utf-8")
 		prompt = prompt.replace("{orig_instruction}", instruction)
 		prompt = prompt.replace("{orig_response}", response)
 
-		schema_hint = json.dumps(CombinedVote.model_json_schema(), indent=2)
-
-		# No max_tokens: OpenAI reasoning models reject it (LiteLLM doesn't
-		# translate it to max_completion_tokens for them), and a small cap would
-		# eat into their reasoning tokens and truncate the vote.
-		sampling = {"temperature": self.temperature} if _accepts_temperature(self.model) else {}
-
-		# A successful reply can still carry no usable vote, and LiteLLM's own
-		# num_retries only covers HTTP/network errors — so retry that case here.
-		last_error: Exception | None = None
-		for _ in range(EMPTY_REPLY_ATTEMPTS):
-			result = await litellm.acompletion(
-				model=self.model,
-				messages=[
-					{
-						"role": "system",
-						"content": (
-							"You are an acceptance-criteria evaluator. "
-							"Return only valid JSON matching this schema:\n"
-							f"{schema_hint}"
-						),
-					},
-					{"role": "user", "content": prompt},
-				],
-				response_format=COMBINED_VOTE_SCHEMA,
-				**sampling,
-				# Drop whatever else a given judge doesn't support instead of
-				# failing the vote.
-				drop_params=True,
-				timeout=self.timeout,
-				num_retries=self.num_retries,
-			)
-			try:
-				return self._parse_vote(result.choices[0])
-			except (ValueError, ValidationError) as error:
-				last_error = error
-
-		assert last_error is not None
-		raise last_error
-
-	def _parse_vote(self, choice) -> CombinedVote:
-		"""Read the vote from the reply text, falling back to its tool calls.
-
-		For Anthropic, LiteLLM implements `response_format` as a forced tool
-		call and only copies the arguments into `content` when the reply holds
-		exactly one call to its JSON tool. Claude sometimes splits the vote
-		into one tool call per rubric instead, which leaves `content` empty —
-		how candidates ended up unrated with "returned no message content". So
-		the tool calls are merged back into a single vote.
-		"""
-		message = choice.message
-		tool_calls = getattr(message, "tool_calls", None) or []
-		shape = (
-			f"finish_reason={getattr(choice, 'finish_reason', None)!r}, "
-			f"tool_calls={len(tool_calls)}"
-		)
-
-		arguments = [
-			call.function.arguments
-			for call in tool_calls
-			if isinstance(getattr(call.function, "arguments", None), str)
-		]
-		texts = [message.content] if isinstance(message.content, str) else []
-		merged = _merge_json_objects(arguments)
-		if merged:
-			texts.append(json.dumps(merged))
-		texts += arguments
-		texts = [text for text in texts if text.strip()]
-
-		if not texts:
-			raise ValueError(f"{self.model} returned no message content ({shape})")
-
-		first_error: ValidationError | None = None
-		for text in texts:
-			try:
-				return CombinedVote.model_validate_json(_strip_markdown_fences(text))
-			except ValidationError as error:
-				first_error = first_error or error
-		raise ValueError(
-			f"{self.model} returned no complete vote ({shape}): {first_error}"
-		) from first_error
+		result = await self.agent.run(prompt)
+		log_cache_usage(self.judge, result.usage)
+		return result.output
 
 
 def _error_output(output: str, provider_name: str, model: str, message: str) -> EvaluatedOutput:
@@ -228,10 +162,8 @@ def _error_output(output: str, provider_name: str, model: str, message: str) -> 
 	)
 
 
-async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: LiteLLMCombinedClient) -> VotingResult:
-	# Created per call rather than per module: an asyncio primitive binds to
-	# the running loop, and score_candidates starts a fresh loop every time.
-	gate = asyncio.Semaphore(max_parallel_requests(client.model))
+async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: CombinedJudgeClient) -> VotingResult:
+	gate = judge_gate(client.judge)
 
 	async def evaluate_output(output: str) -> EvaluatedOutput:
 		async with gate:
@@ -258,19 +190,26 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 			overall_score=overall_score,
 		)
 
-	results = await asyncio.gather(
-		*(evaluate_output(output) for output in evaluation_input.output),
-		return_exceptions=True,
+	outputs = evaluation_input.output
+	results: list[EvaluatedOutput | BaseException] = []
+	if client.judge.cache_prompt and len(outputs) > 1:
+		# A cache entry only exists once the first request has started
+		# responding, so a cold batch fired all at once would pay the write
+		# premium on every vote and read nothing. Score one candidate first to
+		# write the shared rubric prefix, then the rest read it.
+		results.extend(await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True))
+		outputs = outputs[1:]
+	results.extend(
+		await asyncio.gather(
+			*(evaluate_output(output) for output in outputs),
+			return_exceptions=True,
+		)
 	)
 	evaluated_outputs: list[EvaluatedOutput] = []
 	failures = 0
 	for output, result in zip(evaluation_input.output, results, strict=True):
 		if isinstance(result, Exception):
 			failures += 1
-			# The -1 sentinel below reads as 0.0 once clamped, which is
-			# indistinguishable from a candidate the model genuinely rated
-			# worthless — and a 0.0 always loses its group. Say so, or a
-			# scoring outage quietly decides which candidate wins.
 			logger.warning(
 				"%s (model=%s) failed to score a candidate; it degrades to the "
 				"-1 sentinel and will rank last: %s: %s",
@@ -287,8 +226,10 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
 					f"Error evaluating output: {result.__class__.__name__}: {result}",
 				)
 			)
-		else:
+		elif isinstance(result, EvaluatedOutput):
 			evaluated_outputs.append(result)
+		else:
+			raise result
 
 	if failures:
 		logger.warning(

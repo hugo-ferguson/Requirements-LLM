@@ -1,6 +1,7 @@
 from pydantic_ai import Agent
 
 from app.config import Settings, settings as default_settings
+from app.llm_config import get_models_config
 from app.models_acceptance_criteria import (
     AcceptanceCriterionCandidateRecord,
     AcceptanceCriterionRecord,
@@ -217,7 +218,7 @@ class AcceptanceCriteriaService:
             result = self.regen_agent.run_sync(prompt)
         except Exception as error:
             raise GenerationError(
-                f"{self.settings.llm_model} could not regenerate '{target.title}': {error}"
+                f"{get_models_config().chat_model.name} could not regenerate '{target.title}': {error}"
             ) from error
 
         criterion = result.output
