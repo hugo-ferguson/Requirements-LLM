@@ -132,9 +132,9 @@ class GenerationService:
     ) -> list:
         """Score candidates through the shared voting seam.
 
-        `score_candidates` is synchronous and calls `asyncio.run` internally,
-        so it cannot be awaited directly from inside a running loop — it goes
-        through a worker thread. It never raises: a scoring outage returns
+        `score_candidates` is synchronous and blocks until the voting loop
+        finishes, so it goes through a worker thread rather than blocking this
+        one. It never raises: a scoring outage returns
         all-zero scores rather than losing the generated criteria.
         """
         return await asyncio.to_thread(

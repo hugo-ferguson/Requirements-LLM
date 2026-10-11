@@ -1,6 +1,0 @@
-{
-  "agents": [
-    { "id": "test-a", "provider": "test", "model": "test", "enabled": true },
-    { "id": "test-b", "provider": "test", "model": "test", "enabled": true }
-  ]
-}

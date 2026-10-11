@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.generation import orchestrator
-from app.generation.config import GenerationAgentConfig
+from app.llm_config import GenerationAgentConfig
 from app.generation.models import NumberedUatCase, NumberedUatCaseSet
 from app.generation.orchestrator import run_uat_ensemble
 from app.models_conversation import AcceptanceCriterion, AcceptanceCriterionScores
@@ -24,7 +24,9 @@ from app.services.uat_cases import UatCaseService
 
 
 def _agent(agent_id: str) -> GenerationAgentConfig:
-    return GenerationAgentConfig(id=agent_id, provider="test", model="test", temperature=0.0)
+    return GenerationAgentConfig(
+        id=agent_id, provider="test", model="test", temperature=0.0, output_mode="tool"
+    )
 
 
 # --- Ensemble --------------------------------------------------------------

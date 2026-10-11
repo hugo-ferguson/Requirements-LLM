@@ -1,23 +1,7 @@
-from .models import CombinedVote, EvaluationInput, EvaluatedOutput, PrometheusVote, ProviderFeedback, ProviderName, RubricAverage, RubricFeedback, Vote, VotingResult
-from .prometheus import LiteLLMPrometheusClient, evaluate_with_prometheus
-from .provider import LiteLLMCombinedClient, evaluate_with_combined_model
-from .voting import evaluate_input, evaluate_inputs
+"""The voting layer: LLM judges score generated acceptance criteria and UAT
+cases against four rubrics.
 
-__all__ = [
-    "EvaluationInput",
-    "CombinedVote",
-    "EvaluatedOutput",
-    "LiteLLMCombinedClient",
-    "LiteLLMPrometheusClient",
-    "PrometheusVote",
-    "ProviderFeedback",
-    "ProviderName",
-    "RubricAverage",
-    "RubricFeedback",
-    "Vote",
-    "VotingResult",
-    "evaluate_input",
-    "evaluate_inputs",
-    "evaluate_with_combined_model",
-    "evaluate_with_prometheus",
-]
+Import from the submodules directly. Nothing is re-exported here, so that
+importing `voting.models` (as the app's config does) stays cheap and doesn't
+pull in the MCP server.
+"""

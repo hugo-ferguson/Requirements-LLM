@@ -9,7 +9,7 @@ from sqlmodel import Session, SQLModel, create_engine
 import app.db as db
 from app.config import settings
 from app.db import get_session
-from app.generation.config import get_roster
+from app.llm_config import get_models_config
 from app.main import app
 
 TEST_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/app_test"
@@ -27,7 +27,7 @@ def engine_fixture():
 
 
 
-TEST_ROSTER = Path(__file__).with_name("generation_agents.test.json")
+TEST_MODELS_CONFIG = Path(__file__).with_name("models.test.json")
 
 
 @pytest.fixture(autouse=True)
@@ -36,19 +36,21 @@ def stub_generation_agents() -> Generator[None, None, None]:
 
     Keeps the tests offline and free: no API keys, no Ollama, no token spend.
     Voting is disabled for the same reason - the voters need a live provider.
+    Every entry there sets `"output_mode": "tool"`: TestModel has no native
+    structured output.
     """
-    original_path = settings.generation_roster_path
+    original_path = settings.models_config_path
     original_voting = settings.generation_enable_voting
 
-    settings.generation_roster_path = str(TEST_ROSTER)
+    settings.models_config_path = str(TEST_MODELS_CONFIG)
     settings.generation_enable_voting = False
-    get_roster.cache_clear()
+    get_models_config.cache_clear()
 
     yield
 
-    settings.generation_roster_path = original_path
+    settings.models_config_path = original_path
     settings.generation_enable_voting = original_voting
-    get_roster.cache_clear()
+    get_models_config.cache_clear()
 
 @pytest.fixture(name="client")
 def client_fixture(engine) -> Generator[TestClient, None, None]:

@@ -17,8 +17,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.generation.agents import AgentBuildError, build_agent
-from app.generation.config import GenerationAgentConfig, get_roster
+from app.generation.agents import build_agent
+from app.llm_config import GenerationAgentConfig, get_models_config
 from app.generation.models import (
     AgentResult,
     Candidate,
@@ -43,6 +43,7 @@ from app.generation.prompts import (
     build_uat_descriptions_prompt,
     build_user_prompt,
 )
+from llm.spec import ModelBuildError
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ async def _run_agent(
     try:
         agent = make_agent()
         run = await asyncio.wait_for(agent.run(prompt, deps=deps), timeout=timeout_seconds)
-    except AgentBuildError as error:
+    except ModelBuildError as error:
         logger.warning("Generation agent %s not available: %s", config.id, error)
         return _AgentRun(error=str(error), duration_ms=elapsed_ms())
     except asyncio.TimeoutError:
@@ -177,7 +178,7 @@ async def run_ensemble(
     timeout_seconds: float = 90.0,
 ) -> EnsembleResult:
     """Dispatch the same story to every enabled agent simultaneously."""
-    roster = agents if agents is not None else get_roster().enabled_agents()
+    roster = agents if agents is not None else get_models_config().enabled_agents()
 
     results = await asyncio.gather(
         *(
@@ -219,7 +220,7 @@ async def run_title_anchored_ensemble(
     Returns the pass-1 ensemble alongside the groups, because the caller still
     needs `EnsembleResult.prompt` for scoring and `failed` for error reporting.
     """
-    roster = agents if agents is not None else get_roster().enabled_agents()
+    roster = agents if agents is not None else get_models_config().enabled_agents()
     if not roster:
         return EnsembleResult(prompt=build_user_prompt(deps, max_criteria), results=[]), []
 
@@ -382,7 +383,7 @@ async def run_uat_ensemble(
     leaves a usable set. Returns every agent's result (for error reporting)
     and one group per case title — empty only when every agent failed.
     """
-    roster = agents if agents is not None else get_roster().enabled_agents()
+    roster = agents if agents is not None else get_models_config().enabled_agents()
     deps = GenerationDeps(user_story=acceptance_criterion)
     results: list[UatAgentResult] = []
 
