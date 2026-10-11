@@ -60,6 +60,10 @@ class AcceptanceCriterion(SQLModel):
     # alternatives UI whenever it is ready rather than in lockstep with this.
     source_agent: str | None = None
     alternatives: list[AcceptanceCriterionAlternative] = Field(default_factory=list)
+    # UAT cases generated against this AC, whatever their status. Lets the
+    # frontend warn before an edit leaves them out of date (or a regeneration
+    # deletes them). Additive with a default, like the fields above.
+    uat_case_count: int = 0
 
 
 class GenerateResult(SQLModel):

@@ -1263,6 +1263,48 @@
         }
       }
     },
+    "/sessions/{session_id}/export": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Get Export",
+        "operationId": "get_export_sessions__session_id__export_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -1346,6 +1388,11 @@
             },
             "type": "array",
             "title": "Alternatives"
+          },
+          "uat_case_count": {
+            "type": "integer",
+            "title": "Uat Case Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -1644,6 +1691,167 @@
           "text"
         ],
         "title": "ConversationMessage"
+      },
+      "ExportAcceptanceCriterion": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "given": {
+            "type": "string",
+            "title": "Given"
+          },
+          "when": {
+            "type": "string",
+            "title": "When"
+          },
+          "then": {
+            "type": "string",
+            "title": "Then"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/AcceptanceCriterionScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "title": "Overall Score"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          },
+          "uat_cases": {
+            "items": {
+              "$ref": "#/components/schemas/ExportUatCase"
+            },
+            "type": "array",
+            "title": "Uat Cases"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "given",
+          "when",
+          "then",
+          "scores",
+          "overall_score",
+          "uat_cases"
+        ],
+        "title": "ExportAcceptanceCriterion",
+        "description": "An approved AC, with only its approved UAT cases nested under it."
+      },
+      "ExportDocument": {
+        "properties": {
+          "session_name": {
+            "type": "string",
+            "title": "Session Name"
+          },
+          "exported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Exported At"
+          },
+          "acceptance_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/ExportAcceptanceCriterion"
+            },
+            "type": "array",
+            "title": "Acceptance Criteria"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_name",
+          "exported_at",
+          "acceptance_criteria"
+        ],
+        "title": "ExportDocument",
+        "description": "What the downloaded JSON file contains."
+      },
+      "ExportResponse": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/ExportDocument"
+          },
+          "warnings": {
+            "$ref": "#/components/schemas/ExportWarnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "warnings"
+        ],
+        "title": "ExportResponse"
+      },
+      "ExportUatCase": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/UatCaseScores"
+          },
+          "overall_score": {
+            "type": "number",
+            "title": "Overall Score"
+          },
+          "source_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "scores",
+          "overall_score"
+        ],
+        "title": "ExportUatCase"
+      },
+      "ExportWarnings": {
+        "properties": {
+          "unapproved_ac_count": {
+            "type": "integer",
+            "title": "Unapproved Ac Count"
+          },
+          "approved_ac_without_uat": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Approved Ac Without Uat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unapproved_ac_count",
+          "approved_ac_without_uat"
+        ],
+        "title": "ExportWarnings",
+        "description": "What the export leaves out, so the user can confirm before downloading."
       },
       "GenerateResult": {
         "properties": {

@@ -382,6 +382,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Export */
+        get: operations["get_export_sessions__session_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -428,6 +445,11 @@ export interface components {
             source_agent?: string | null;
             /** Alternatives */
             alternatives?: components["schemas"]["AcceptanceCriterionAlternative"][];
+            /**
+             * Uat Case Count
+             * @default 0
+             */
+            uat_case_count: number;
         };
         /**
          * AcceptanceCriterionAlternative
@@ -530,6 +552,69 @@ export interface components {
             text: string;
             /** Attachments */
             attachments?: components["schemas"]["ConversationAttachment"][];
+        };
+        /**
+         * ExportAcceptanceCriterion
+         * @description An approved AC, with only its approved UAT cases nested under it.
+         */
+        ExportAcceptanceCriterion: {
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
+            /** Uat Cases */
+            uat_cases: components["schemas"]["ExportUatCase"][];
+        };
+        /**
+         * ExportDocument
+         * @description What the downloaded JSON file contains.
+         */
+        ExportDocument: {
+            /** Session Name */
+            session_name: string;
+            /**
+             * Exported At
+             * Format: date-time
+             */
+            exported_at: string;
+            /** Acceptance Criteria */
+            acceptance_criteria: components["schemas"]["ExportAcceptanceCriterion"][];
+        };
+        /** ExportResponse */
+        ExportResponse: {
+            document: components["schemas"]["ExportDocument"];
+            warnings: components["schemas"]["ExportWarnings"];
+        };
+        /** ExportUatCase */
+        ExportUatCase: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
+        };
+        /**
+         * ExportWarnings
+         * @description What the export leaves out, so the user can confirm before downloading.
+         */
+        ExportWarnings: {
+            /** Unapproved Ac Count */
+            unapproved_ac_count: number;
+            /** Approved Ac Without Uat */
+            approved_ac_without_uat: string[];
         };
         /** GenerateResult */
         GenerateResult: {
@@ -1605,6 +1690,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChunkRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_export_sessions__session_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportResponse"];
                 };
             };
             /** @description Validation Error */

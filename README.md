@@ -61,7 +61,10 @@ how the app behaves.*
 
 1. **+ New Session** in the sidebar.
 2. **Input** — describe the feature in chat and/or attach files (PDF, `.txt`, `.md`, images).
-   The assistant asks follow-up questions until it has enough context.
+   The assistant asks follow-up questions until it has enough context. Each file can be up to
+   **10 MB** with up to **100,000 characters** of text (about 40 pages), because a file's
+   whole text is sent to the model with every chat message. The limits are set in
+   `src/backend/app/ingest/limits.py`.
 3. **Generate** acceptance criteria (takes up to about a minute). Each one shows its scores
    (1–5 on relevance, correctness, understandability and coverage) and which model wrote it.
    - **▾ other version** — see the other model's version and **Use this version** to swap it in
@@ -70,6 +73,11 @@ how the app behaves.*
      Regenerate Selected**.
 4. **Generate test cases from N approved →** turns the accepted criteria into UAT test cases,
    which you review the same way on the UAT page. **Regenerate All AC** starts over from the chat.
+   Changing an AC that already has test cases asks you to confirm first: editing it or swapping
+   versions leaves them out of date, and regenerating it deletes them.
+5. **Export** downloads a JSON file of the approved criteria, each with its approved test cases
+   nested under it. It warns you first if some criteria aren't approved, or if an approved one
+   has no approved test cases.
 
 ## Everyday commands
 
@@ -165,7 +173,6 @@ Postgres). Stop it, or change the left-hand port numbers under `ports:` in
 
 ## Current limitations
 
-- **Export** is a placeholder page.
 - Each model writes at most **8 acceptance criteria** per generation (`GENERATION_MAX_CRITERIA`);
   a story covering many features may not get criteria for all of them in one run.
 - **Regenerate Selected** uses a single model (`chat_model`), so regenerated items have no

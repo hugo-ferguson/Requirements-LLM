@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Respon
 from pydantic import BaseModel
 
 from app.ingest.extract import ImageExtractionError, UnsupportedFileError
+from app.ingest.limits import MAX_UPLOAD_BYTES
 from app.dependencies import get_ingest_service
-from app.services.ingest import EmptyDocumentError, IngestService
+from app.services.ingest import EmptyDocumentError, FileTooLargeError, IngestService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -43,11 +44,15 @@ def upload_document(
 
     try:
         result = service.ingest_file(
-            file.file.read(),
+            # One byte past the limit is enough for ingest_file to reject it,
+            # without holding the rest of an oversized file in memory.
+            file.file.read(MAX_UPLOAD_BYTES + 1),
             file.filename or "upload",
             title=title,
             tags=tag_names or None,
         )
+    except FileTooLargeError as error:
+        raise HTTPException(status_code=413, detail=str(error)) from error
     except (UnsupportedFileError, EmptyDocumentError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except ImageExtractionError as error:

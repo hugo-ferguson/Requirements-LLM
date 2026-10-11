@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import create_db_and_tables
 from app.llm_config import get_models_config
-from app.routes import documents, acceptance_criteria, items, sessions, uat_cases
+from app.routes import documents, acceptance_criteria, export, items, sessions, uat_cases
 from app.vector_store.embeddings import get_embedding_provider
 
 
@@ -36,6 +36,7 @@ app.include_router(sessions.router)
 app.include_router(acceptance_criteria.router)
 app.include_router(uat_cases.router)
 app.include_router(documents.router)
+app.include_router(export.router)
 
 
 @app.get("/health")
