@@ -4,6 +4,7 @@ from sqlmodel import Session
 from app.db import get_session
 from app.models_conversation import GenerateResult
 from app.models_session import (
+    ChatSession,
     MessageCreate,
     MessageRead,
     SessionCreate,
@@ -44,12 +45,12 @@ def get_session_service(
 @router.post("", response_model=SessionSummary, status_code=201)
 def create_session(
     data: SessionCreate, service: SessionService = Depends(get_session_service)
-) -> SessionSummary:
+) -> ChatSession:
     return service.create_session(data)
 
 
 @router.get("", response_model=list[SessionSummary])
-def list_sessions(service: SessionService = Depends(get_session_service)) -> list[SessionSummary]:
+def list_sessions(service: SessionService = Depends(get_session_service)) -> list[ChatSession]:
     return service.list_sessions()
 
 
@@ -68,7 +69,7 @@ def rename_session(
     session_id: int,
     data: SessionUpdate,
     service: SessionService = Depends(get_session_service),
-) -> SessionSummary:
+) -> ChatSession:
     chat_session = service.rename_session(session_id, data)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")

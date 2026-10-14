@@ -1,4 +1,4 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.models_uat_cases import UatCase, UatCaseCandidateRecord, UatCaseRecord
 
@@ -13,7 +13,7 @@ class UatCaseRepository:
         statement = (
             select(UatCaseRecord)
             .where(UatCaseRecord.session_id == session_id)
-            .order_by(UatCaseRecord.ac_id.asc(), UatCaseRecord.position.asc())
+            .order_by(col(UatCaseRecord.ac_id).asc(), col(UatCaseRecord.position).asc())
         )
         return list(self.session.exec(statement).all())
 
@@ -21,7 +21,7 @@ class UatCaseRepository:
         statement = (
             select(UatCaseRecord)
             .where(UatCaseRecord.ac_id == ac_id)
-            .order_by(UatCaseRecord.position.asc())
+            .order_by(col(UatCaseRecord.position).asc())
         )
         return list(self.session.exec(statement).all())
 
@@ -170,8 +170,8 @@ class UatCaseRepository:
             select(UatCaseCandidateRecord)
             .where(UatCaseCandidateRecord.ac_id == ac_id)
             .order_by(
-                UatCaseCandidateRecord.case_position,
-                UatCaseCandidateRecord.overall_score.desc(),
+                col(UatCaseCandidateRecord.case_position),
+                col(UatCaseCandidateRecord.overall_score).desc(),
             )
         )
         return list(self.session.exec(statement).all())
@@ -183,7 +183,7 @@ class UatCaseRepository:
         statement = (
             select(UatCaseCandidateRecord)
             .where(UatCaseCandidateRecord.session_id == session_id)
-            .order_by(UatCaseCandidateRecord.overall_score.desc())
+            .order_by(col(UatCaseCandidateRecord.overall_score).desc())
         )
         grouped: dict[tuple[int, int], list[UatCaseCandidateRecord]] = {}
         for candidate in self.session.exec(statement).all():

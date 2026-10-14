@@ -136,10 +136,17 @@ def _case(ac_id: int, n: int) -> UatCase:
     )
 
 
+def _id(value: int | None) -> int:
+    """A persisted row's id, which the database has always assigned by now."""
+    assert value is not None
+    return value
+
+
 def _seed(db_session: Session, count: int = 3) -> tuple[UatCaseService, int, list[int]]:
     chat_session = SessionRepository(db_session).create("test session")
+    session_id = _id(chat_session.id)
     [ac] = AcceptanceCriteriaRepository(db_session).persist_batch(
-        chat_session.id,
+        session_id,
         [
             AcceptanceCriterion(
                 id=0,
@@ -154,19 +161,30 @@ def _seed(db_session: Session, count: int = 3) -> tuple[UatCaseService, int, lis
             )
         ],
     )
+    ac_id = _id(ac.id)
     uat_repo = UatCaseRepository(db_session)
     uat_repo.persist_generated(
-        chat_session.id, {ac.id: [_case(ac.id, n) for n in range(count)]})
+        session_id, {ac_id: [_case(ac_id, n) for n in range(count)]})
     service = UatCaseService(
         SessionRepository(
             db_session), uat_repo, AcceptanceCriteriaRepository(db_session)
     )
-    return service, chat_session.id, [r.id for r in uat_repo.list_for_ac(ac.id)]
+    return service, session_id, [_id(r.id) for r in uat_repo.list_for_ac(ac_id)]
 
 
 def _cases(service: UatCaseService, session_id: int) -> list[UatCase]:
-    [group] = service.list_items(session_id).groups
+    result = service.list_items(session_id)
+    assert result is not None
+    [group] = result.groups
     return group.uat_cases
+
+
+def _select(
+    service: UatCaseService, session_id: int, uat_id: int, candidate_id: int | None
+) -> UatCase:
+    case = service.select_alternative(session_id, uat_id, _id(candidate_id))
+    assert case is not None
+    return case
 
 
 def test_list_includes_alternatives_and_source_agent(db_session: Session) -> None:
@@ -184,12 +202,12 @@ def test_list_includes_alternatives_and_source_agent(db_session: Session) -> Non
 
 def test_select_alternative_swaps_and_swapping_back_restores(db_session: Session) -> None:
     service, session_id, uat_ids = _seed(db_session)
-    service.uat.update_status(service.uat.get(
-        session_id, uat_ids[1]), "accepted")
+    record = service.uat.get(session_id, uat_ids[1])
+    assert record is not None
+    service.uat.update_status(record, "accepted")
     [alt] = _cases(service, session_id)[1].alternatives
 
-    swapped = service.select_alternative(
-        session_id, uat_ids[1], alt.candidate_id)
+    swapped = _select(service, session_id, uat_ids[1], alt.candidate_id)
 
     assert (swapped.description, swapped.overall_score, swapped.source_agent) == (
         "b description 1",
@@ -201,8 +219,7 @@ def test_select_alternative_swaps_and_swapping_back_restores(db_session: Session
     assert back.description == "a description 1"
     assert _cases(service, session_id)[0].description == "a description 0"
 
-    restored = service.select_alternative(
-        session_id, uat_ids[1], back.candidate_id)
+    restored = _select(service, session_id, uat_ids[1], back.candidate_id)
     assert (restored.description, restored.source_agent) == (
         "a description 1", "agent-a")
 
@@ -215,8 +232,7 @@ def test_manual_edit_survives_as_the_alternative(db_session: Session) -> None:
     )
     [alt] = _cases(service, session_id)[0].alternatives
 
-    swapped = service.select_alternative(
-        session_id, uat_ids[0], alt.candidate_id)
+    swapped = _select(service, session_id, uat_ids[0], alt.candidate_id)
 
     assert swapped.alternatives[0].description == "edited"
 
@@ -226,7 +242,7 @@ def test_select_alternative_rejects_a_candidate_from_another_case(db_session: Se
     other_case_alt = _cases(service, session_id)[1].alternatives[0]
 
     assert service.select_alternative(
-        session_id, uat_ids[0], other_case_alt.candidate_id) is None
+        session_id, uat_ids[0], _id(other_case_alt.candidate_id)) is None
     assert service.select_alternative(session_id, uat_ids[0], 999_999) is None
     assert _cases(service, session_id)[0].description == "a description 0"
 
@@ -253,6 +269,7 @@ def test_apply_approved_keeps_other_cases_alternatives_on_the_right_case(
         ),
     )
 
+    assert group is not None
     cases = group.uat_cases
     assert [c.title for c in cases] == [
         "Replacement", "Extra", "Case 1", "Case 2"]

@@ -125,7 +125,7 @@ def _prepare_image(data: bytes, extension: str) -> bytes:
 
     original_size = image.size
     image.thumbnail(
-        (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS
+        (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS
     )
 
     buffer = BytesIO()

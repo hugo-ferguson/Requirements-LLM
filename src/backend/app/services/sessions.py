@@ -24,7 +24,7 @@ from app.services.generation import GenerationService
 
 def _to_conversation_message(message: Message) -> ConversationMessage:
     return ConversationMessage(
-        role=message.role,
+        role=message.role,  # type: ignore[arg-type]
         text=message.text,
         attachments=[ConversationAttachment(
             **attachment) for attachment in message.attachments],
@@ -33,8 +33,8 @@ def _to_conversation_message(message: Message) -> ConversationMessage:
 
 def _to_message_read(message: Message) -> MessageRead:
     return MessageRead(
-        id=message.id,
-        role=message.role,
+        id=message.id,  # type: ignore[arg-type]
+        role=message.role,  # type: ignore[arg-type]
         text=message.text,
         attachments=[ConversationAttachment(
             **attachment) for attachment in message.attachments],
@@ -76,7 +76,7 @@ class SessionService:
             return None
         history = self.messages.list_for_session(session_id)
         return SessionDetail(
-            id=chat_session.id,
+            id=chat_session.id,  # type: ignore[arg-type]
             name=chat_session.name,
             created_at=chat_session.created_at,
             updated_at=chat_session.updated_at,

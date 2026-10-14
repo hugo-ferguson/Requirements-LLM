@@ -11,11 +11,13 @@ loses its group, so a capacity problem silently picked the winner.
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 import pytest
 
 from voting.models import EvaluationInput, JudgeConfig
 from voting.provider import (
+    CombinedJudgeClient,
     default_timeout,
     evaluate_with_combined_model,
     max_parallel_requests,
@@ -71,7 +73,8 @@ def test_a_judge_limited_to_one_request_is_scored_one_at_a_time():
     client = _RecordingClient(OLLAMA)
 
     result = asyncio.run(
-        evaluate_with_combined_model(_input(["a", "b", "c", "d", "e"]), client)
+        evaluate_with_combined_model(
+            _input(["a", "b", "c", "d", "e"]), cast(CombinedJudgeClient, client))
     )
 
     assert len(result.output) == 5
@@ -86,7 +89,7 @@ def test_cloud_judges_still_run_concurrently():
     client = _RecordingClient(CLOUD)
 
     asyncio.run(evaluate_with_combined_model(
-        _input(["a", "b", "c", "d"]), client))
+        _input(["a", "b", "c", "d"]), cast(CombinedJudgeClient, client)))
 
     assert client.peak_in_flight > 1
 
@@ -95,7 +98,7 @@ def test_every_candidate_is_still_scored_when_serialised():
     client = _RecordingClient(OLLAMA)
 
     result = asyncio.run(evaluate_with_combined_model(
-        _input(["a", "b", "c"]), client))
+        _input(["a", "b", "c"]), cast(CombinedJudgeClient, client)))
 
     assert [item.output for item in result.output] == ["a", "b", "c"]
     assert all(item.overall_score == 4 for item in result.output)
@@ -132,7 +135,7 @@ def test_one_judge_limit_covers_concurrent_scoring_runs():
 
     async def three_runs_at_once():
         await asyncio.gather(
-            *(evaluate_with_combined_model(_input([f"{run}{c}" for c in "abc"]), client) for run in "xyz")
+            *(evaluate_with_combined_model(_input([f"{run}{c}" for c in "abc"]), cast(CombinedJudgeClient, client)) for run in "xyz")
         )
 
     asyncio.run(three_runs_at_once())

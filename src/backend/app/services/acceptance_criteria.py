@@ -75,7 +75,7 @@ def to_acceptance_criterion(
     candidates = candidates or []
     winner = next((c for c in candidates if c.is_winner), None)
     return AcceptanceCriterion(
-        id=record.id,
+        id=record.id,  # type: ignore[arg-type]
         title=record.title,
         given=record.given,
         when=record.when,
@@ -87,7 +87,7 @@ def to_acceptance_criterion(
             coverage=record.coverage,
         ),
         overall_score=record.overall_score,
-        status=record.status,
+        status=record.status,  # type: ignore[arg-type]
         source_agent=winner.source_agent if winner else None,
         alternatives=[
             AcceptanceCriterionAlternative(
@@ -296,8 +296,8 @@ class AcceptanceCriteriaService:
         )
         self.sessions.touch(chat_session)
         return MessageRead(
-            id=message.id,
-            role=message.role,
+            id=message.id,  # type: ignore[arg-type]
+            role=message.role,  # type: ignore[arg-type]
             text=message.text,
             attachments=[],
             created_at=message.created_at,

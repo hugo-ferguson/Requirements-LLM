@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models import ItemCreate, ItemRead
+from app.models import Item, ItemCreate, ItemRead
 from app.repositories.items import ItemRepository
 from app.services.items import ItemService
 
@@ -14,12 +14,12 @@ def get_item_service(session: Session = Depends(get_session)) -> ItemService:
 
 
 @router.get("", response_model=list[ItemRead])
-def list_items(service: ItemService = Depends(get_item_service)) -> list[ItemRead]:
+def list_items(service: ItemService = Depends(get_item_service)) -> list[Item]:
     return service.list_items()
 
 
 @router.post("", response_model=ItemRead, status_code=201)
 def create_item(
     data: ItemCreate, service: ItemService = Depends(get_item_service)
-) -> ItemRead:
+) -> Item:
     return service.create_item(data)

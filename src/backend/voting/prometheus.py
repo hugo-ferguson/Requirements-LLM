@@ -79,6 +79,10 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
                 error_message = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
                 rubric_feedback.append(RubricFeedback(
                     rubric=rubric_name, value=-1, feedback=error_message))
+            elif isinstance(res, BaseException):
+                # A BaseException that isn't an Exception (e.g. cancellation)
+                # must propagate rather than be scored as a failed rubric.
+                raise res
             else:
                 rubric_feedback.append(RubricFeedback(
                     rubric=rubric_name, value=res.score, feedback=res.feedback))
@@ -130,6 +134,8 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
                     overall_score=-1.0,
                 )
             )
+        elif isinstance(item, BaseException):
+            raise item
         else:
             evaluated_outputs.append(item)
 

@@ -1,4 +1,4 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.models_session import Message
 
@@ -20,7 +20,7 @@ class MessageRepository:
     def list_for_session(self, session_id: int) -> list[Message]:
         statement = (
             select(Message).where(Message.session_id ==
-                                  session_id).order_by(Message.id.asc())
+                                  session_id).order_by(col(Message.id).asc())
         )
         return list(self.session.exec(statement).all())
 

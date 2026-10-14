@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -78,7 +79,7 @@ def _criterion(number: int) -> GeneratedCriterion:
 
 def _settings(**overrides) -> Settings:
     """Settings with explicit values, so a stray .env can't change a result."""
-    base = dict(
+    base: dict[str, Any] = dict(
         rag_top_k=5,
         generation_max_criteria=8,
         generation_timeout_seconds=45.0,
@@ -188,11 +189,11 @@ def test_unscored_criteria_are_returned_when_voting_is_disabled() -> None:
 
 def test_criterion_requires_all_three_gherkin_clauses() -> None:
     with pytest.raises(ValidationError):
-        GeneratedCriterion(
-            title="Missing the then clause",
-            given="a registered user is on the login page",
-            when="they submit valid credentials",
-        )
+        GeneratedCriterion.model_validate({
+            "title": "Missing the then clause",
+            "given": "a registered user is on the login page",
+            "when": "they submit valid credentials",
+        })
 
 
 @pytest.mark.parametrize("clause", ["given", "when", "then"])
@@ -450,7 +451,9 @@ async def test_one_failing_agent_does_not_fail_the_ensemble(
 
     assert [result.agent_id for result in ensemble.successful] == ["healthy"]
     assert [result.agent_id for result in ensemble.failed] == ["broken"]
-    assert "upstream exploded" in ensemble.failed[0].error
+    error = ensemble.failed[0].error
+    assert error is not None
+    assert "upstream exploded" in error
     assert pool_criteria(ensemble), "the healthy agent's work must survive"
 
 
@@ -468,7 +471,9 @@ async def test_a_hanging_agent_is_cut_off_at_the_timeout(
     )
 
     assert ensemble.successful == []
-    assert "Timed out" in ensemble.failed[0].error
+    error = ensemble.failed[0].error
+    assert error is not None
+    assert "Timed out" in error
 
 
 async def test_every_agent_failing_is_reported_as_a_failed_run(

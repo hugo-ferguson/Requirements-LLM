@@ -138,7 +138,7 @@ def score_candidates(
     if not candidates:
         return []
 
-    if _evaluate_input is None:
+    if _evaluate_input is None or EvaluationInput is None:
         logger.warning(
             "voting layer unavailable, scoring %d candidate(s) as zero: %s",
             len(candidates),

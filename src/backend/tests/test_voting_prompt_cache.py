@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -113,7 +114,7 @@ def test_a_caching_judge_scores_one_candidate_before_the_rest() -> None:
     client = _RecordingClient(CLAUDE)
 
     result = asyncio.run(evaluate_with_combined_model(
-        _input(["a", "b", "c", "d"]), client))
+        _input(["a", "b", "c", "d"]), cast(CombinedJudgeClient, client)))
 
     assert [item.output for item in result.output] == ["a", "b", "c", "d"]
     assert client.overlaps["a"] == set(

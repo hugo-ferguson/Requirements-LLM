@@ -47,11 +47,15 @@ def _seed_ac(db_session: Session) -> tuple[int, int]:
             relevance=1, correctness=1, understandability=1, coverage=1),
         overall_score=1,
     )
+    assert chat_session.id is not None
     [record] = ac_repo.persist_batch(chat_session.id, [seeded])
+    assert record.id is not None
     return chat_session.id, record.id
 
 
-def _service(db_session: Session, agent: Agent, scorer=None) -> AcceptanceCriteriaService:
+def _service(
+    db_session: Session, agent: Agent[None, GeneratedCriterion], scorer=None
+) -> AcceptanceCriteriaService:
     return AcceptanceCriteriaService(
         SessionRepository(db_session),
         AcceptanceCriteriaRepository(db_session),

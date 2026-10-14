@@ -1,4 +1,4 @@
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.models_acceptance_criteria import (
     AcceptanceCriterionCandidateRecord,
@@ -111,8 +111,8 @@ class AcceptanceCriteriaRepository:
             select(AcceptanceCriterionCandidateRecord)
             .where(AcceptanceCriterionCandidateRecord.session_id == session_id)
             .order_by(
-                AcceptanceCriterionCandidateRecord.criterion_position,
-                AcceptanceCriterionCandidateRecord.overall_score.desc(),
+                col(AcceptanceCriterionCandidateRecord.criterion_position),
+                col(AcceptanceCriterionCandidateRecord.overall_score).desc(),
             )
         )
         return list(self.session.exec(statement).all())
@@ -193,7 +193,7 @@ class AcceptanceCriteriaRepository:
         statement = (
             select(AcceptanceCriterionRecord)
             .where(AcceptanceCriterionRecord.session_id == session_id)
-            .order_by(AcceptanceCriterionRecord.position.asc())
+            .order_by(col(AcceptanceCriterionRecord.position).asc())
         )
         return list(self.session.exec(statement).all())
 

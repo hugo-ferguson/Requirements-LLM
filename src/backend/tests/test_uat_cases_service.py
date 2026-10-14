@@ -48,8 +48,10 @@ def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
             relevance=1, correctness=1, understandability=1, coverage=1),
         overall_score=1,
     )
+    assert chat_session.id is not None
     [record] = ac_repo.persist_batch(chat_session.id, [seeded])
     ac_repo.update_status(record, "accepted")
+    assert record.id is not None
     return chat_session.id, record.id
 
 
@@ -126,6 +128,7 @@ async def test_generate_raises_generation_error_and_persists_nothing_when_every_
         await service.generate(session_id)
 
     listed = service.list_items(session_id)
+    assert listed is not None
     assert listed.groups == []
 
 
@@ -139,7 +142,9 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
     # inside an already-running event loop.
     seed_service = _service(db_session)
     asyncio.run(seed_service.generate(session_id))
-    [group] = seed_service.list_items(session_id).groups
+    listed = seed_service.list_items(session_id)
+    assert listed is not None
+    [group] = listed.groups
     target_id = group.uat_cases[0].id
 
     def refine(messages, info):

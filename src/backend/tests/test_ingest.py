@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,7 +9,9 @@ from app.ingest.extract import ImageExtractionError, UnsupportedFileError, extra
 from app.main import app
 from app.routes.documents import get_ingest_service
 from app.services.ingest import EmptyDocumentError, IngestResult, IngestService
+from app.vector_store.embeddings import EmbeddingProvider
 from app.vector_store.models import Document, DocumentChunk
+from app.vector_store.vector_store import VectorStore
 
 
 class FakeVectorStore:
@@ -51,7 +55,12 @@ class FakeEmbeddingProvider:
 def service_fixture() -> tuple[IngestService, FakeVectorStore]:
     store = FakeVectorStore()
     settings = Settings(chunk_size=200, chunk_overlap=40)
-    return IngestService(store, FakeEmbeddingProvider(), settings), store
+    service = IngestService(
+        cast(VectorStore, store),
+        cast(EmbeddingProvider, FakeEmbeddingProvider()),
+        settings,
+    )
+    return service, store
 
 
 def test_an_image_is_transcribed_but_never_stored(service, monkeypatch):

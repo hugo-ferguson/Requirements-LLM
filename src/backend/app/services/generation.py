@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from app.config import Settings
@@ -43,6 +44,12 @@ from app.services.scoring import (
 logger = logging.getLogger(__name__)
 
 
+class RetrievedChunk(Protocol):
+    """A retrieved context chunk; only its text is read."""
+
+    content: str
+
+
 @runtime_checkable
 class ContextRetriever(Protocol):
     """The slice of `IngestService` this layer actually needs.
@@ -52,7 +59,7 @@ class ContextRetriever(Protocol):
     change underneath without touching this file.
     """
 
-    def search(self, query: str, k: int = 5): ...
+    def search(self, query: str, k: int = 5) -> Sequence[RetrievedChunk]: ...
 
 
 class NoUserStoryError(ValueError):
@@ -161,6 +168,7 @@ class GenerationService:
         )
 
         groups: list[CandidateGroup] = []
+        ensemble: EnsembleResult | None = None
         if self.settings.generation_title_anchored:
             ensemble, groups = await run_title_anchored_ensemble(
                 deps,
@@ -175,7 +183,7 @@ class GenerationService:
                     "title-anchored generation produced no groups; "
                     "falling back to the flat ensemble"
                 )
-        if not groups:
+        if ensemble is None or not groups:
             ensemble = await run_ensemble(
                 deps,
                 max_criteria=self.settings.generation_max_criteria,

@@ -57,7 +57,7 @@ recent and more specific instruction.
 
 def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
     return AcceptanceCriterion(
-        id=record.id,
+        id=record.id,  # type: ignore[arg-type]
         title=record.title,
         given=record.given,
         when=record.when,
@@ -69,7 +69,7 @@ def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCri
             coverage=record.coverage,
         ),
         overall_score=record.overall_score,
-        status=record.status,
+        status=record.status,  # type: ignore[arg-type]
     )
 
 
@@ -80,7 +80,7 @@ def _to_uat_case(
     candidates = candidates or []
     winner = next((c for c in candidates if c.is_winner), None)
     return UatCase(
-        id=record.id,
+        id=record.id,  # type: ignore[arg-type]
         ac_id=record.ac_id,
         title=record.title,
         description=record.description,
@@ -91,7 +91,7 @@ def _to_uat_case(
             coverage=record.coverage,
         ),
         overall_score=record.overall_score,
-        status=record.status,
+        status=record.status,  # type: ignore[arg-type]
         source_agent=winner.source_agent if winner else None,
         alternatives=[
             UatCaseAlternative(
@@ -212,7 +212,7 @@ class UatCaseService:
             cases.append(
                 UatCase(
                     id=-(index + 1),
-                    ac_id=ac.id,
+                    ac_id=ac.id,  # type: ignore[arg-type]
                     title=group.title,
                     description=winner.case.description,
                     scores=_scores_of(winner),
@@ -240,7 +240,7 @@ class UatCaseService:
     ) -> UatCaseGroup:
         if candidates is None:
             candidates = self.uat.candidates_by_case(ac_record.session_id)
-        cases = self.uat.list_for_ac(ac_record.id)
+        cases = self.uat.list_for_ac(ac_record.id)  # type: ignore[arg-type]
         return UatCaseGroup(
             ac=_to_acceptance_criterion(ac_record),
             uat_cases=[_to_uat_case(c, candidates.get(
@@ -276,7 +276,7 @@ class UatCaseService:
         # mirroring AC generation's replace-the-whole-batch semantics.
         cases = await asyncio.gather(*(self._cases_for(ac) for ac in accepted))
         self.uat.persist_generated(
-            session_id, {ac.id: ac_cases for ac,
+            session_id, {ac.id: ac_cases for ac,  # type: ignore[arg-type]
                          ac_cases in zip(accepted, cases, strict=True)}
         )
         return self.list_items(session_id)

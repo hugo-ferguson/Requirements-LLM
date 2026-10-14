@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.models_session import ChatSession
 
@@ -19,7 +19,8 @@ class SessionRepository:
         return chat_session
 
     def list_all(self) -> list[ChatSession]:
-        statement = select(ChatSession).order_by(ChatSession.updated_at.desc())
+        statement = select(ChatSession).order_by(
+            col(ChatSession.updated_at).desc())
         return list(self.session.exec(statement).all())
 
     def get(self, session_id: int) -> ChatSession | None:

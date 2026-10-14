@@ -2,7 +2,7 @@ import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 
 from app.models_conversation import (
     ConversationAttachment,
@@ -155,15 +155,13 @@ def test_send_message_falls_back_to_canned_reply_on_model_failure():
 def test_the_model_actually_receives_the_attachment_text():
     seen: list[str] = []
 
-    service = _service(
-        FunctionModel(
-            lambda messages, info: (
-                # type: ignore[union-attr]
-                seen.append(str(messages[-1].parts[-1].content)),
-                _tool_response(info),
-            )[1]
-        )
-    )
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        part = messages[-1].parts[-1]
+        assert isinstance(part, UserPromptPart)
+        seen.append(str(part.content))
+        return _tool_response(info)
+
+    service = _service(FunctionModel(respond))
 
     service.generate(
         _request(
