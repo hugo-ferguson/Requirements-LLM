@@ -1,3 +1,5 @@
+"""The local embedding provider and the pgvector store."""
+
 import pytest
 from sqlalchemy import Engine
 from sqlmodel import Session, select
@@ -10,6 +12,7 @@ from app.vector_store.vector_store import VectorStore
 
 @pytest.fixture(scope="module")
 def provider() -> EmbeddingProvider:
+    """Build the configured embedding provider, loading its model."""
     return build_embedding_provider(settings)
 
 

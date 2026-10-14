@@ -1,11 +1,11 @@
-"""Runs the backend test suite and writes a results CSV and a Markdown summary.
+"""Run the backend tests and write a results CSV and Markdown summary.
 
 Pytest records each test in a JUnit XML report, which is flattened into
-`test_results.csv`; `test_summary.md` is then built from that CSV. Both files
-are written next to this script.
+`test_results.csv`; `test_summary.md` is then built from that CSV. Both
+files are written next to this script.
 
-	python tests/run_tests.py                    # whole suite
-	python tests/run_tests.py tests -k voting    # any arguments go to pytest
+    python tests/run_tests.py                  # whole suite
+    python tests/run_tests.py tests -k voting  # args go to pytest
 
 Exits with pytest's exit code.
 """
@@ -31,7 +31,10 @@ JUNIT_OUTCOMES = {"failure": "failed", "error": "error", "skipped": "skipped"}
 
 
 def run_pytest(args: list[str], report: Path) -> int:
-    """Run pytest with `args`, writing a JUnit XML report to `report`."""
+    """Run pytest with `args` and write a JUnit XML report.
+
+    Return pytest's exit code.
+    """
     # xunit1 is the JUnit flavour that records each test's file path.
     return pytest.main([*args, f"--junitxml={report}", "-o", "junit_family=xunit1"])
 
@@ -62,7 +65,7 @@ def write_csv(rows: list[dict], path: Path) -> None:
 
 
 def success_rate(counts: Counter) -> str:
-    """Passed tests as a percentage of the tests that ran, so skips don't count."""
+    """Return the pass rate of the tests that ran, ignoring skips."""
     ran = counts.total() - counts["skipped"]
     return f"{counts['passed'] / ran:.1%}" if ran else "n/a"
 
@@ -78,7 +81,7 @@ def table(headers: list[str], rows: list[list]) -> list[str]:
 
 
 def write_summary(csv_path: Path, path: Path) -> None:
-    """Build a Markdown summary of the results in `csv_path` and write it to `path`."""
+    """Build a Markdown summary of `csv_path` and write it to `path`."""
     with csv_path.open(newline="") as f:
         rows = list(csv.DictReader(f))
 
@@ -132,7 +135,7 @@ def write_summary(csv_path: Path, path: Path) -> None:
 
 
 def main() -> int:
-    """Run the tests, then write the CSV and the summary built from it."""
+    """Run the tests, then write the CSV and its Markdown summary."""
     with tempfile.TemporaryDirectory() as tmp:
         report = Path(tmp) / "junit.xml"
         exit_code = run_pytest(sys.argv[1:] or [str(TESTS_DIR)], report)

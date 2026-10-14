@@ -1,3 +1,5 @@
+"""API tests for reviewing and regenerating acceptance criteria."""
+
 from fastapi.testclient import TestClient
 
 
@@ -8,8 +10,8 @@ def _create_session(client: TestClient) -> dict:
 
 
 def _generate(client: TestClient, session_id: int) -> list[dict]:
-    # Generation now calls a real model and refuses an empty conversation
-    # (see EmptyConversationError), so every test needs real content first.
+    # Generation refuses an empty conversation (see NoUserStoryError),
+    # so every test needs a user story first.
     client.post(
         f"/sessions/{session_id}/messages",
         json={"text": "As a user, I want to log in with my email and password.",
@@ -37,9 +39,9 @@ def test_generate_replaces_existing_batch(client: TestClient) -> None:
     _generate(client, session["id"])
     second = _generate(client, session["id"])
 
-    # The second generate call should replace the first batch, not append to
-    # it — confirm the persisted list matches the second call exactly rather
-    # than containing both batches' worth of items.
+    # The second generate call should replace the first batch, not
+    # append to it — confirm the persisted list matches the second call
+    # exactly rather than containing both batches' worth of items.
     listed = client.get(
         f"/sessions/{session['id']}/acceptance-criteria").json()
     assert listed["acceptance_criteria"] == second
@@ -139,8 +141,9 @@ def test_regenerate_selected_returns_candidates_without_mutating_persisted_list(
     body = response.json()
     assert body["reply"]["role"] == "assistant"
     assert isinstance(body["reply"]["text"], str) and body["reply"]["text"]
-    # Regeneration is a select-one-candidate-add-context-regenerate flow: it
-    # always returns exactly one refined candidate, not several alternatives.
+    # Regeneration is a select-one-candidate-add-context-regenerate
+    # flow: it always returns exactly one refined candidate, not several
+    # alternatives.
     assert len(body["candidates"]) == 1
 
     after = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
@@ -185,11 +188,12 @@ def test_apply_approved_replaces_target_and_leaves_rest_untouched(client: TestCl
 def test_apply_approved_clears_uat_cases_generated_for_the_replaced_ac(
     client: TestClient,
 ) -> None:
-    """Regression test: an AC that already has UAT cases generated against it
-    (via /uat-cases/generate) FKs to that exact ac_id. Replacing the AC via
-    apply-approved must clear those UAT rows first, or deleting the AC row
-    would violate the FK in a database that enforces it (e.g. Postgres,
-    unlike the SQLite engine this test runs against).
+    """Clear an AC's UAT cases before apply-approved replaces it.
+
+    UAT cases generated against an AC (via /uat-cases/generate) hold a
+    foreign key to its exact ac_id, so deleting the AC row without
+    clearing them first would violate that key. The test database is
+    Postgres, which enforces it.
     """
     session = _create_session(client)
     items = _generate(client, session["id"])
@@ -256,10 +260,10 @@ def test_regenerate_all_kickoff_message_references_rejected_titles(client: TestC
     assert body["role"] == "assistant"
     assert rejected["title"] in body["text"]
 
-    # _generate already seeds a user message (and its real assistant reply)
-    # to satisfy the empty-conversation guard, so history isn't empty going
-    # in — check the kickoff message landed as the newest entry, not that
-    # it's the only one.
+    # _generate already seeds a user message (and its assistant reply)
+    # to satisfy the empty-conversation guard, so history isn't
+    # empty going in — check the kickoff message landed as the newest
+    # entry, not that it's the only one.
     detail = client.get(f"/sessions/{session['id']}").json()
     assert detail["messages"][-1]["role"] == "assistant"
     assert detail["messages"][-1]["text"] == body["text"]

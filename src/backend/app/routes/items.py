@@ -1,3 +1,5 @@
+"""HTTP routes for the example items resource."""
+
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
@@ -10,11 +12,13 @@ router = APIRouter(prefix="/items", tags=["items"])
 
 
 def get_item_service(session: Session = Depends(get_session)) -> ItemService:
+    """Build the item service for one request."""
     return ItemService(ItemRepository(session))
 
 
 @router.get("", response_model=list[ItemRead])
 def list_items(service: ItemService = Depends(get_item_service)) -> list[Item]:
+    """Return every item."""
     return service.list_items()
 
 
@@ -22,4 +26,5 @@ def list_items(service: ItemService = Depends(get_item_service)) -> list[Item]:
 def create_item(
     data: ItemCreate, service: ItemService = Depends(get_item_service)
 ) -> Item:
+    """Create an item."""
     return service.create_item(data)

@@ -1,3 +1,5 @@
+"""AcceptanceCriteriaService regeneration, against stub models."""
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, ToolCallPart
@@ -23,6 +25,7 @@ from app.services.scoring import CandidateScore
 
 @pytest.fixture(name="db_session")
 def db_session_fixture():
+    """Yield a session on a fresh in-memory SQLite database."""
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -32,7 +35,7 @@ def db_session_fixture():
 
 
 def _seed_ac(db_session: Session) -> tuple[int, int]:
-    """Creates a session with one AC record; returns (session_id, ac_id)."""
+    """Create a session with one AC; return (session_id, ac_id)."""
     sessions = SessionRepository(db_session)
     ac_repo = AcceptanceCriteriaRepository(db_session)
 

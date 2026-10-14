@@ -1,3 +1,5 @@
+"""The chat assistant and single-agent AC generation, on stub models."""
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -24,13 +26,16 @@ def _request(*messages: ConversationMessage) -> ConversationRequest:
 
 
 def _zero_scorer(prompt, candidates, *, reference_answer="", settings=None):
-    """A fake scorer standing in for the voting layer, so generate-only tests
-    stay offline and don't depend on the real scoring wiring under test."""
+    """Score every candidate 0, standing in for the voting layer.
+
+    Keeps generate-only tests offline and independent of the real
+    scoring wiring.
+    """
     return [CandidateScore(0, 0, 0, 0, 0) for _ in candidates]
 
 
 def _service(model, *, chat_model=None, scorer=None) -> ConversationService:
-    """A service backed by offline models, so no test needs an API key."""
+    """Build a service on offline models, so no test needs a key."""
     return ConversationService(
         agent=Agent(model, output_type=GeneratedCriteria,
                     system_prompt="test"),
@@ -88,7 +93,8 @@ def test_generate_returns_criteria_from_the_model():
     assert result.acceptance_criteria
     first = result.acceptance_criteria[0]
     assert first.title and first.given and first.when and first.then
-    # Ids are positional; the repository assigns the real ones on persist.
+    # Ids are positional; the repository assigns the real ones on
+    # persist.
     assert [c.id for c in result.acceptance_criteria] == list(
         range(1, len(result.acceptance_criteria) + 1)
     )
@@ -149,7 +155,7 @@ def test_send_message_falls_back_to_canned_reply_on_model_failure():
         _request(ConversationMessage(role="user", text="hi")))
 
     assert reply.role == "assistant"
-    assert reply.text  # falls back to the canned string, never raises
+    assert reply.text  # Falls back to the canned reply; never raises.
 
 
 def test_the_model_actually_receives_the_attachment_text():
@@ -218,11 +224,12 @@ def test_a_failing_model_raises_generation_error():
 
 
 def test_generating_from_an_empty_conversation_is_refused_without_calling_the_model():
+    """Refuse an empty conversation before any model call.
+
+    Given nothing to work from, the model happily invents an unrelated
+    feature and writes criteria for it.
     """
-    Guards a real failure seen in testing: given nothing to work from, the
-    model happily invented an unrelated feature and wrote criteria for it.
-    """
-    def explode(messages, info):  # must never be reached
+    def explode(messages, info):  # Must never be reached.
         raise AssertionError("the model should not have been called")
 
     service = _service(FunctionModel(explode))

@@ -1,3 +1,5 @@
+"""Turn uploaded files into embedded, searchable documents."""
+
 import logging
 import time
 from dataclasses import dataclass
@@ -19,11 +21,10 @@ class EmptyDocumentError(ValueError):
 
 @dataclass
 class IngestResult:
-    """
-    The text extracted from an upload, and the Document it was stored as.
+    """The text extracted from an upload, and the document it became.
 
-    `document` is None for files that are read but deliberately not stored —
-    see IngestService.ingest_file.
+    `document` is None for files that are read but deliberately not
+    stored; see `IngestService.ingest_file`.
     """
 
     document: Document | None
@@ -40,6 +41,7 @@ class IngestService:
         embedding_provider: EmbeddingProvider,
         settings: Settings,
     ):
+        """Wire up storage, embeddings and chunking settings."""
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
         self.settings = settings
@@ -52,22 +54,24 @@ class IngestService:
         title: str | None = None,
         tags: list[str] | None = None,
     ) -> IngestResult:
-        """
-        Extracts, chunks and embeds a file, then stores it as one Document.
+        """Extract, chunk and embed a file, then store it as a document.
 
-        Images are the exception: their text goes straight back to the caller
-        and is never stored. A screenshot transcribes to a few hundred tokens
-        — measured across a real screenshot set, five images came to 789
-        tokens, one chunk each — so it fits in a prompt many times over and
-        embedding it only adds a retrieval hop and rows nothing queries.
-        Documents that can actually outgrow a prompt (PDFs, long text) are
-        still chunked and embedded.
+        Images are the exception: their text goes straight back to the
+        caller and is never stored. A screenshot transcribes to a few
+        hundred tokens — measured across a real screenshot set, five
+        images came to 789 tokens, one chunk each — so it fits in a
+        prompt many times over and embedding it only adds a retrieval
+        hop and rows nothing queries. Documents that can actually
+        outgrow a prompt (PDFs, long text) are still chunked and
+        embedded.
 
-        Returns the extracted text, plus the stored document and its chunk
-        count when the file was stored.
+        Return the extracted text, plus the stored document and its
+        chunk count when the file was stored. Raise
+        `EmptyDocumentError` when no text could be extracted.
         """
-        # Progress is logged at each stage: uvicorn only logs a request once it
-        # finishes, so without these a slow upload looks exactly like a dead one.
+        # Progress is logged at each stage: uvicorn only logs a request
+        # once it finishes, so without these a slow upload looks exactly
+        # like a dead one.
         started = time.perf_counter()
         logger.info("ingest %r: started (%d KB)", filename, len(data) // 1024)
         text = extract_text(data, filename, self.settings)
@@ -132,16 +136,15 @@ class IngestService:
         return IngestResult(document=document, chunk_count=len(chunks), text=text)
 
     def delete_document(self, document_id: int) -> bool:
-        """
-        Removes an ingested document. Returns False if it doesn't exist.
+        """Remove an ingested document; False if it doesn't exist.
 
-        Used when an attachment is discarded before it's sent, so abandoned
-        uploads don't linger in the search index.
+        Used when an attachment is discarded before it's sent, so
+        abandoned uploads don't linger in the search index.
         """
         return self.vector_store.delete_document(document_id)
 
     def search(self, query: str, k: int = 5) -> list[DocumentChunk]:
-        """Finds the k chunks most similar to a natural-language query."""
+        """Find the `k` stored chunks most similar to a text query."""
         return self.vector_store.similarity_search(
             self.embedding_provider.embed_query(query), k
         )

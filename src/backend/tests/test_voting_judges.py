@@ -1,4 +1,4 @@
-"""Several judges score every candidate and their scores are averaged."""
+"""Several judges score every candidate; their scores are averaged."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> VotingResult:
-    """What one judge returns: every rubric of every candidate at `score`."""
+    """Return one judge's result, with every rubric at `score`."""
     return VotingResult(
         ai=evaluation_input.ai,
         model=evaluation_input.model,
@@ -113,7 +113,7 @@ def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(monkey
 
 
 def test_every_scoring_call_runs_on_one_long_lived_loop(monkeypatch) -> None:
-    """A loop per call multiplied each judge's concurrency limit."""
+    """Share one loop so judge concurrency limits aren't multiplied."""
     import threading
 
     loops = []

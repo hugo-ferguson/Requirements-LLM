@@ -1,3 +1,5 @@
+"""FastAPI application: middleware, routers and startup checks."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,8 +14,9 @@ from app.vector_store.embeddings import get_embedding_provider
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fail at startup, not on the first generation, if config/models.json is
-    # missing or invalid.
+    """Validate config, create tables and warm the embedding model."""
+    # Fail at startup, not on the first generation, if
+    # config/models.json is missing or invalid.
     get_models_config()
     create_db_and_tables()
     # Load the embedding model up front so the first upload isn't slow.
@@ -40,4 +43,5 @@ app.include_router(documents.router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Report that the API process is up."""
     return {"status": "ok"}

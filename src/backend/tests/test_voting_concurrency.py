@@ -1,11 +1,12 @@
 """Concurrency bounds on the voting layer.
 
-Regression cover for a bug seen in a live run: 3 of 5 candidates timed out at
-exactly 120.0s while the first two scored fine. Ollama serves one request per
-model at a time, so an unbounded `asyncio.gather` queues the rest — and the
-per-request timeout counts that queue time, so later candidates expire before
-they ever start. Downstream that reads as an unrated candidate, which always
-loses its group, so a capacity problem silently picked the winner.
+Regression cover for a bug seen in a live run: 3 of 5 candidates timed
+out at exactly 120.0s while the first two scored fine. Ollama serves one
+request per model at a time, so an unbounded `asyncio.gather` queues the
+rest — and the per-request timeout counts that queue time, so later
+candidates expire before they ever start. Downstream that reads as an
+unrated candidate, which always loses its group, so a capacity problem
+silently picked the winner.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ CLOUD = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 class _RecordingClient:
-    """Stands in for CombinedJudgeClient, tracking overlap."""
+    """Stands in for `CombinedJudgeClient`, tracking overlap."""
 
     def __init__(self, judge: JudgeConfig, delay: float = 0.02) -> None:
         self.judge = judge
@@ -85,7 +86,7 @@ def test_a_judge_limited_to_one_request_is_scored_one_at_a_time():
 
 
 def test_cloud_judges_still_run_concurrently():
-    """The bound is set per judge for local single-model servers, not as a blanket cap."""
+    """Cap only local single-model judges, not every judge."""
     client = _RecordingClient(CLOUD)
 
     asyncio.run(evaluate_with_combined_model(
@@ -126,9 +127,12 @@ def test_timeout_is_overridable_for_slow_local_hardware(monkeypatch):
 
 
 def test_one_judge_limit_covers_concurrent_scoring_runs():
-    """UAT generation scores every accepted AC at once. The judge's limit has
-    to hold across those runs, not apply separately to each, or the total
-    trips the provider's org-wide concurrency limit."""
+    """Hold one judge's limit across concurrent scoring runs.
+
+    UAT generation scores every accepted AC at once. The judge's limit
+    has to hold across those runs, not apply separately to each, or the
+    total trips the provider's org-wide concurrency limit.
+    """
     judge = JudgeConfig(id="claude-limited", provider="anthropic",
                         model="claude-sonnet-5-5", max_parallel=2)
     client = _RecordingClient(judge)

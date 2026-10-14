@@ -1,3 +1,5 @@
+"""HTTP routes for chat sessions, their messages and AC generation."""
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session
 
@@ -32,6 +34,7 @@ def get_session_service(
     session: Session = Depends(get_session),
     generation_service: GenerationService = Depends(get_generation_service),
 ) -> SessionService:
+    """Build the session service for one request."""
     return SessionService(
         SessionRepository(session),
         MessageRepository(session),
@@ -46,11 +49,13 @@ def get_session_service(
 def create_session(
     data: SessionCreate, service: SessionService = Depends(get_session_service)
 ) -> ChatSession:
+    """Create an empty chat session."""
     return service.create_session(data)
 
 
 @router.get("", response_model=list[SessionSummary])
 def list_sessions(service: SessionService = Depends(get_session_service)) -> list[ChatSession]:
+    """Return every session, most recently updated first."""
     return service.list_sessions()
 
 
@@ -58,6 +63,7 @@ def list_sessions(service: SessionService = Depends(get_session_service)) -> lis
 def get_session_detail(
     session_id: int, service: SessionService = Depends(get_session_service)
 ) -> SessionDetail:
+    """Return a session together with its message history."""
     detail = service.get_session_detail(session_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -70,6 +76,7 @@ def rename_session(
     data: SessionUpdate,
     service: SessionService = Depends(get_session_service),
 ) -> ChatSession:
+    """Rename a session."""
     chat_session = service.rename_session(session_id, data)
     if chat_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -80,6 +87,7 @@ def rename_session(
 def delete_session(
     session_id: int, service: SessionService = Depends(get_session_service)
 ) -> Response:
+    """Delete a session with its messages, ACs and test cases."""
     deleted = service.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -92,6 +100,7 @@ def post_message(
     data: MessageCreate,
     service: SessionService = Depends(get_session_service),
 ) -> MessageRead:
+    """Store the user's message and return the assistant's reply."""
     reply = service.post_message(session_id, data)
     if reply is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -102,6 +111,7 @@ def post_message(
 async def generate(
     session_id: int, service: SessionService = Depends(get_session_service)
 ) -> GenerateResult:
+    """Generate and store ranked ACs from the conversation so far."""
     try:
         result = await service.generate(session_id)
     except (EmptyConversationError, NoUserStoryError) as error:

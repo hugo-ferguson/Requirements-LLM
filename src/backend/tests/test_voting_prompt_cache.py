@@ -1,10 +1,10 @@
 """Prompt caching on the voting layer.
 
-Every vote shares the same rubric text, so for judges with `cache_prompt`
-(Anthropic needs it) it is sent as a cache-marked system block. These tests pin
-the two things that silently break caching: per-vote text leaking into the
-cached prefix, and a cold batch fired all at once so that nothing is ever read
-back.
+Every vote shares the same rubric text, so for judges with
+`cache_prompt` (Anthropic needs it) it is sent as a cache-marked system
+block. These tests pin the two things that silently break caching:
+per-vote text leaking into the cached prefix, and a cold batch fired all
+at once so that nothing is ever read back.
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 @pytest.fixture
 def api(monkeypatch) -> FakeLlmApi:
+    """Return a fake API that answers every call with a vote."""
     monkeypatch.setenv("FAKE_LLM_API_KEY", "test-key")
     return FakeLlmApi(default_reply=VOTE_JSON)
 
@@ -74,7 +75,7 @@ def test_other_judges_get_the_same_prefix_without_a_cache_marker(api) -> None:
 
 
 class _RecordingClient:
-    """Stands in for CombinedJudgeClient, recording which votes overlap."""
+    """Stands in for `CombinedJudgeClient`, recording vote overlap."""
 
     def __init__(self, judge: JudgeConfig) -> None:
         self.judge = judge

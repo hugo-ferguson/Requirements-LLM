@@ -1,3 +1,5 @@
+"""Judge configuration carried on the evaluation input."""
+
 from voting.models import EvaluationInput, JudgeConfig
 
 

@@ -1,3 +1,5 @@
+"""API tests for generating and reviewing UAT test cases."""
+
 from fastapi.testclient import TestClient
 
 
@@ -8,8 +10,8 @@ def _create_session(client: TestClient) -> dict:
 
 
 def _generate_ac(client: TestClient, session_id: int) -> list[dict]:
-    # Generation now calls a real model and refuses an empty conversation
-    # (see EmptyConversationError), so every test needs real content first.
+    # Generation refuses an empty conversation (see NoUserStoryError),
+    # so every test needs a user story first.
     client.post(
         f"/sessions/{session_id}/messages",
         json={"text": "As a user, I want to log in with my email and password.",
@@ -115,8 +117,8 @@ def test_generate_ac_clears_existing_uat_cases(client: TestClient) -> None:
     _accept(client, session["id"], ac_items[0]["id"])
     _generate_uat(client, session["id"])
 
-    # Regenerating ACs replaces their ids, so previously generated UAT cases
-    # (tied to the old ids) must be cleared, not left orphaned.
+    # Regenerating ACs replaces their ids, so previously generated UAT
+    # cases (tied to the old ids) must be cleared, not left orphaned.
     _generate_ac(client, session["id"])
     listed = client.get(
         f"/sessions/{session['id']}/uat-cases").json()["groups"]
@@ -209,8 +211,9 @@ def test_regenerate_selected_returns_candidates_without_mutating_persisted_data(
     assert response.status_code == 200
     body = response.json()
     assert body["reply"]["role"] == "assistant"
-    # Regeneration is a select-one-candidate-add-context-regenerate flow: it
-    # always returns exactly one refined candidate, not several alternatives.
+    # Regeneration is a select-one-candidate-add-context-regenerate
+    # flow: it always returns exactly one refined candidate, not several
+    # alternatives.
     assert len(body["candidates"]) == 1
 
     after = client.get(f"/sessions/{session['id']}/uat-cases").json()

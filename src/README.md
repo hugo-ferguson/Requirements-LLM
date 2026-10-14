@@ -158,19 +158,14 @@ the backend runs on the host, or `http://host.docker.internal:11434/v1` when
 the backend runs in Docker and Ollama runs on the host. Change the model name
 if your Ollama tag differs.
 
-From `src/backend`, evaluate the sample payload with:
+For an MCP client, launch the voting module over stdio from `src/backend`
+with:
 
 ```
-uv run python voting/voting.py voting/exampleInput.json
-```
-
-For an MCP client, launch the same module over stdio with:
-
-```
-uv run python voting/voting.py --mcp
+uv run python voting/voting.py
 ```
 
 The MCP tool is named `evaluate_acceptance_criteria`. Each output string is sent separately to
 Prometheus once for each of `correctness`, `coverage`, `relevance`, and
-`understandability`. The sample has no reference answer, so the optional
-`reference_answer` field is empty; add it to the input when one is available.
+`understandability`. The optional `reference_answer` field can be added to an
+input when one is available.

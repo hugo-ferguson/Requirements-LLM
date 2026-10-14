@@ -1,5 +1,5 @@
 # Our config.
-src/backend/config/generation_agents.json
+src/backend/config/models.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

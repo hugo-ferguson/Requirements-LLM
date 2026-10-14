@@ -1,3 +1,5 @@
+"""Batch entry point: score many inputs and save the results as JSON."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +14,7 @@ DEFAULT_OUTPUT_FILENAME = "votingLayerOutput.json"
 
 
 def _select_judges(judge_ids: Sequence[str] | None) -> list[JudgeConfig]:
-    """The enabled judges from config/models.json, optionally narrowed by id."""
+    """Return the enabled judges, optionally narrowed by id."""
     judges = load_judges()
     if judge_ids is None:
         return judges
@@ -32,17 +34,19 @@ async def run_voting_layer(
     judge_ids: Sequence[str] | None = None,
     output_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Evaluate a batch of generated outputs and return the saved result payload.
+    """Evaluate a batch of generated outputs and save the results.
 
     Args:
-        inputs: A list of evaluation items matching the batch format in exampleBatchInput.json.
-        judge_ids: Ids of the judges in config/models.json to use, e.g. ["claude"].
-            Defaults to every enabled judge.
-        output_path: Optional file path for the JSON output; defaults to a file named
-            votingLayerOutput.json next to this module.
+        inputs: Evaluation items, each an `EvaluationInput` or a dict
+            in its shape. Any `judges` they carry are replaced.
+        judge_ids: Ids of the judges in config/models.json to use,
+            e.g. ["claude"]. Defaults to every enabled judge.
+        output_path: Optional file path for the JSON output; defaults
+            to votingLayerOutput.json next to this module.
 
     Returns:
-        A list of result objects in the same shape as the output produced by exampleCall.py.
+        The saved payload: one dumped `VotingResult` per input, ranked
+        by overall score.
     """
     judges = _select_judges(judge_ids)
     validated_inputs: list[EvaluationInput] = []
@@ -71,11 +75,5 @@ def run_voting_layer_sync(
     judge_ids: Sequence[str] | None = None,
     output_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Synchronous convenience wrapper around run_voting_layer."""
+    """Run `run_voting_layer` from synchronous code."""
     return asyncio.run(run_voting_layer(inputs, judge_ids=judge_ids, output_path=output_path))
-
-
-if __name__ == "__main__":
-    input_path = Path(__file__).with_name("exampleBatchInput.json")
-    payload = json.loads(input_path.read_text(encoding="utf-8"))
-    asyncio.run(run_voting_layer(payload))

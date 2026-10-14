@@ -1,8 +1,8 @@
-"""What a judge sends, and what happens when its reply carries no usable vote.
+"""What a judge sends, and what happens when its reply has no vote.
 
-An unusable reply is retried once before the candidate falls back to the -1
-sentinel, which loses its group. Each provider gets structured output in a
-form it accepts, and none of the settings it rejects.
+An unusable reply is retried once before the candidate falls back to the
+-1 sentinel, which loses its group. Each provider gets structured output
+in a form it accepts, and none of the settings it rejects.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ HAIKU = JudgeConfig(id="claude", provider="anthropic",
 
 @pytest.fixture
 def api(monkeypatch) -> FakeLlmApi:
+    """Return a fake API that answers every call with a vote."""
     monkeypatch.setenv("FAKE_LLM_API_KEY", "test-key")
     return FakeLlmApi(default_reply=VOTE_JSON)
 
@@ -47,7 +48,8 @@ def test_normal_content_is_parsed_in_one_call(api) -> None:
 
 
 def test_a_claude_judge_gets_a_json_schema_and_no_tool_call_or_temperature(api) -> None:
-    # Sonnet 5.5 rejects a forced tool call and a non-default temperature.
+    # Sonnet 5.5 rejects a forced tool call and a non-default
+    # temperature.
     _evaluate(api, JudgeConfig(
         id="claude", provider="anthropic", model="claude-sonnet-5-5"))
 
@@ -71,7 +73,8 @@ def test_an_ollama_judge_gets_a_json_schema_and_its_temperature(api) -> None:
 
 
 def test_an_openai_reasoning_judge_is_not_sent_temperature_or_max_tokens(api) -> None:
-    # Reasoning models reject `max_tokens` and any non-default temperature.
+    # Reasoning models reject `max_tokens` and any non-default
+    # temperature.
     _evaluate(api, JudgeConfig(
         id="luna", provider="openai", model="gpt-6-luna"))
 

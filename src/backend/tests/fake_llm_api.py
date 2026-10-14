@@ -1,9 +1,10 @@
-"""A stand-in for the providers' HTTP APIs, for tests that check what is sent.
+"""A stand-in for the providers' HTTP APIs, to check what gets sent.
 
-`FakeLlmApi.model(spec)` builds the real PydanticAI model for a model entry,
-with a mock transport underneath, so the request each provider would receive
-can be inspected without a network or an API key. Replies are queued as text
-and answered in whichever API's shape the request was for.
+`FakeLlmApi.model(spec)` builds the real PydanticAI model for a model
+entry, with a mock transport underneath, so the request each provider
+would receive can be inspected without a network or an API key. Replies
+are queued as text and answered in whichever API's shape the request was
+for.
 """
 
 from __future__ import annotations
@@ -16,12 +17,16 @@ from llm.spec import ModelSpec, build_model
 
 
 class FakeLlmApi:
+    """Records each request and answers it from a queue of replies."""
+
     def __init__(self, default_reply: str = "") -> None:
+        """Answer with `default_reply` once queued replies run out."""
         self.default_reply = default_reply
         self.replies: list[str] = []
         self.requests: list[dict] = []
 
     def model(self, spec: ModelSpec):
+        """Build the real model for `spec`, wired to this fake API."""
         if spec.api_key_env is None and spec.provider != "ollama":
             spec = spec.model_copy(update={"api_key_env": "FAKE_LLM_API_KEY"})
         return build_model(spec, http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(self._reply)))

@@ -1,7 +1,7 @@
-"""Writes the FastAPI app's OpenAPI schema to src/openapi.json.
+"""Write the FastAPI app's OpenAPI schema to src/openapi.json.
 
 Run this after changing routes/models, then run `npm run generate-api`
-in frontend/ to refresh the generated TypeScript types.
+in src/frontend/ to refresh the generated TypeScript types.
 """
 
 import json
@@ -14,6 +14,7 @@ from app.main import app  # noqa: E402
 
 
 def main() -> None:
+    """Export the schema and print where it was written."""
     schema = app.openapi()
     out_path = Path(__file__).resolve().parents[2] / "openapi.json"
     out_path.write_text(json.dumps(schema, indent=2))

@@ -1,3 +1,5 @@
+"""API tests for chat sessions and their messages."""
+
 from fastapi.testclient import TestClient
 
 

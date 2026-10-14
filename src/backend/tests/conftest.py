@@ -1,3 +1,5 @@
+"""Shared fixtures: a Postgres test database and offline models."""
+
 from collections.abc import Generator
 from pathlib import Path
 
@@ -17,6 +19,7 @@ TEST_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/app_t
 
 @pytest.fixture(name="engine", scope="session")
 def engine_fixture():
+    """Create the test schema once per run and drop it afterwards."""
     engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -33,10 +36,11 @@ TEST_MODELS_CONFIG = Path(__file__).with_name("models.test.json")
 def stub_generation_agents() -> Generator[None, None, None]:
     """Point the ensemble at PydanticAI's TestModel for the whole suite.
 
-    Keeps the tests offline and free: no API keys, no Ollama, no token spend.
-    Voting is disabled for the same reason - the voters need a live provider.
-    Every entry there sets `"output_mode": "tool"`: TestModel has no native
-    structured output.
+    Keeps the tests offline and free: no API keys, no Ollama, no token
+    spend. Voting is disabled for the same reason: the voters need a
+    live provider. Every entry in tests/models.test.json sets
+    `"output_mode": "tool"`, because TestModel has no native structured
+    output.
     """
     original_path = settings.models_config_path
     original_voting = settings.generation_enable_voting
@@ -54,6 +58,7 @@ def stub_generation_agents() -> Generator[None, None, None]:
 
 @pytest.fixture(name="client")
 def client_fixture(engine) -> Generator[TestClient, None, None]:
+    """Yield an API client whose writes are rolled back afterwards."""
     original_engine = db.engine
     db.engine = engine
 

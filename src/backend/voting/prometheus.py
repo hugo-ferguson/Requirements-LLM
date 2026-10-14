@@ -1,3 +1,5 @@
+"""Prometheus-style judging: one request per rubric."""
+
 from __future__ import annotations
 
 import asyncio
@@ -27,9 +29,13 @@ SYSTEM_PROMPT = "You are the Prometheus voting evaluator. Follow the supplied ru
 
 
 class PrometheusJudgeClient:
-    """Scores one rubric per call, for judges with `style: "per_rubric"`."""
+    """Scores one rubric per call.
+
+    Used for judges with `style: "per_rubric"`.
+    """
 
     def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
+        """Build the judge's agent; tests may pass their own `model`."""
         self.judge = judge
         self.model = judge.model
         self.agent = Agent(
@@ -41,6 +47,7 @@ class PrometheusJudgeClient:
         )
 
     async def evaluate(self, *, instruction: str, response: str, rubric_name: str) -> PrometheusVote:
+        """Return the judge's vote on one rubric for `response`."""
         rubric = (
             RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
         prompt = rubric.replace("{orig_instruction}", instruction)
@@ -52,11 +59,17 @@ class PrometheusJudgeClient:
 
 
 async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: JudgeConfig) -> VotingResult:
+    """Score every output with one per-rubric judge, four calls each.
+
+    A failed call degrades that rubric (or a failed output, all of its
+    rubrics) to the -1 sentinel; a cancellation still propagates.
+    """
     evaluator = PrometheusJudgeClient(judge)
-    # Same queue-timeout trap as the combined path, and worse here: this fans
-    # out four rubric calls per candidate, so an unbounded gather over N
-    # candidates puts 4N requests in front of a server that runs one at a
-    # time. See `max_parallel_requests` for why serialising costs nothing.
+    # Same queue-timeout trap as the combined path, and worse here: this
+    # fans out four rubric calls per candidate, so an unbounded gather
+    # over N candidates puts 4N requests in front of a server that runs
+    # one at a time. See `max_parallel_requests` for why serialising
+    # costs nothing.
     gate = judge_gate(judge)
 
     async def evaluate_output(output: str) -> EvaluatedOutput:
@@ -80,8 +93,9 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
                 rubric_feedback.append(RubricFeedback(
                     rubric=rubric_name, value=-1, feedback=error_message))
             elif isinstance(res, BaseException):
-                # A BaseException that isn't an Exception (e.g. cancellation)
-                # must propagate rather than be scored as a failed rubric.
+                # A BaseException that isn't an Exception (e.g.
+                # cancellation) must propagate rather than be scored as
+                # a failed rubric.
                 raise res
             else:
                 rubric_feedback.append(RubricFeedback(

@@ -1,12 +1,14 @@
 """Offline tests for the ensemble generation layer.
 
-Everything here runs without a database, Ollama or an API key: the roster is
-pointed at PydanticAI's TestModel by the autouse fixture in conftest.py, and
-the voting layer is faked in-process.
+Everything here runs without a database, Ollama or an API key: the
+roster is pointed at PydanticAI's TestModel by the autouse fixture in
+conftest.py, and the voting layer is faked in-process.
 
-Tests are grouped by the backlog requirement they cover: R7 (valid Gherkin),
-R8 (agents configured by file, not code), R10 (agents run concurrently) and
-R11 (top-K retrieved context reaches the prompt).
+Most tests are grouped by the backlog requirement they cover: R7 (valid
+Gherkin), R8 (agents configured by file, not code), R10 (agents run
+concurrently) and R11 (top-K retrieved context reaches the prompt). The
+rest cover story composition, the scoring seam and title-anchored
+generation.
 """
 
 from __future__ import annotations
@@ -61,14 +63,14 @@ from llm.spec import ModelBuildError, with_output_mode
 
 
 def _test_agent(agent_id: str) -> GenerationAgentConfig:
-    """A roster entry backed by TestModel, so no provider is ever contacted."""
+    """Return a TestModel roster entry, so no provider is contacted."""
     return GenerationAgentConfig(
         id=agent_id, provider="test", model="test", temperature=0.0, output_mode="tool"
     )
 
 
 def _criterion(number: int) -> GeneratedCriterion:
-    """A distinguishable criterion; `title` is what the assertions key on."""
+    """Return a distinguishable criterion; assertions key on `title`."""
     return GeneratedCriterion(
         title=f"Title {number}",
         given=f"precondition {number}",
@@ -78,7 +80,7 @@ def _criterion(number: int) -> GeneratedCriterion:
 
 
 def _settings(**overrides) -> Settings:
-    """Settings with explicit values, so a stray .env can't change a result."""
+    """Return settings with explicit values, immune to a stray .env."""
     base: dict[str, Any] = dict(
         rag_top_k=5,
         generation_max_criteria=8,
@@ -97,7 +99,7 @@ class _FakeChunk:
 
 
 class _FakeIngest:
-    """Records how it was called so the top-K contract can be asserted."""
+    """Records its calls so the top-K contract can be asserted."""
 
     def __init__(self, contents: list[str]) -> None:
         self._contents = contents
@@ -109,11 +111,11 @@ class _FakeIngest:
 
 
 def _fake_scorer(overalls: list[float]):
-    """A Scorer stub returning one CandidateScore per candidate, in order.
+    """Return a scorer stub giving one `CandidateScore` per candidate.
 
-    app.services.scoring.score_candidates guarantees submission order, so the
-    service zips its results against the candidates it sent. This stub holds
-    to the same contract and asserts the count matches.
+    app.services.scoring.score_candidates guarantees submission order,
+    so the service zips its results against the candidates it sent. This
+    stub holds to the same contract and asserts the count matches.
     """
 
     def scorer(prompt, candidates, *, reference_answer='', settings=None):
@@ -130,7 +132,7 @@ def _fake_scorer(overalls: list[float]):
 
 @pytest.mark.asyncio
 async def test_agents_run_concurrently_not_serially(monkeypatch) -> None:
-    """Total time should track the slowest agent, not the sum of all agents."""
+    """Total time should track the slowest agent, not the sum."""
     from app.generation import orchestrator
 
     async def slow_run(config, deps, *, max_criteria, timeout_seconds):
@@ -151,11 +153,12 @@ async def test_agents_run_concurrently_not_serially(monkeypatch) -> None:
 
 
 def test_scores_land_on_their_own_criterion_and_rank_highest_first() -> None:
-    """Each criterion keeps its own score, and the strongest sorts first.
+    """Each criterion keeps its own score; the strongest sorts first.
 
-    Scores arrive from app.services.scoring in submission order, so the pairing
-    is positional. Ranking has to happen before persistence because the
-    repository uses list order for `position` (backlog R14, R17).
+    Scores arrive from app.services.scoring in submission order, so the
+    pairing is positional. Ranking has to happen before persistence
+    because the repository uses list order for `position` (backlog R14,
+    R17).
     """
     criteria = [_criterion(1), _criterion(2), _criterion(3)]
     scores = _fake_scorer([2.0, 5.0, 1.0])(
@@ -178,13 +181,12 @@ def test_unscored_criteria_are_returned_when_voting_is_disabled() -> None:
     assert all(item.overall_score == 0.0 for item in wired)
     assert all(item.scores.coverage == 0.0 for item in wired)
 
-# ---------------------------------------------------------------------------
-# R7 - generated criteria must be structurally valid Gherkin
-#
-# Validity is enforced by the output schema itself: PydanticAI validates every
-# agent response against GeneratedCriteriaSet and retries on failure, so a
-# malformed criterion never leaves an agent.
-# ---------------------------------------------------------------------------
+"""R7: generated criteria must be structurally valid Gherkin.
+
+Validity is enforced by the output schema itself: PydanticAI validates
+every agent response against `GeneratedCriteriaSet` and retries on
+failure, so a malformed criterion never leaves an agent.
+"""
 
 
 def test_criterion_requires_all_three_gherkin_clauses() -> None:
@@ -211,7 +213,7 @@ def test_criterion_rejects_an_empty_clause(clause: str) -> None:
 
 
 def test_criteria_set_requires_at_least_one_criterion() -> None:
-    """An agent returning an empty set is a failure, not an empty success."""
+    """An agent returning an empty set is a failure, not a success."""
     with pytest.raises(ValidationError):
         GeneratedCriteriaSet(user_story_summary="A summary.", criteria=[])
 
@@ -225,14 +227,14 @@ def test_criteria_set_caps_the_number_of_criteria() -> None:
 
 
 def test_as_sentence_renders_clauses_in_gherkin_order() -> None:
-    """The linearised form the voting layer scores must stay Given/When/Then."""
+    """The voting layer's linearised form stays Given/When/Then."""
     sentence = _criterion(1).as_sentence()
 
     assert sentence == "Given precondition 1, when action 1, then outcome 1."
 
 
 async def test_generated_criteria_survive_a_full_ensemble_run() -> None:
-    """End to end against TestModel: every pooled criterion is valid Gherkin."""
+    """On TestModel, every pooled criterion is valid Gherkin."""
     ensemble = await run_ensemble(
         GenerationDeps(user_story="As a user I want to log in"),
         agents=[_test_agent("a"), _test_agent("b")],
@@ -246,9 +248,7 @@ async def test_generated_criteria_survive_a_full_ensemble_run() -> None:
         assert criterion.as_sentence().startswith("Given ")
 
 
-# ---------------------------------------------------------------------------
-# R8 - the agent pool is declared in a config file, not in code
-# ---------------------------------------------------------------------------
+"""R8: the agent pool is declared in a config file, not in code."""
 
 
 QWEN = {"id": "qwen", "provider": "ollama", "model": "qwen2.5:7b"}
@@ -284,7 +284,7 @@ def test_models_config_loads_every_section_from_one_file(tmp_path) -> None:
 
 
 def test_models_config_returns_only_enabled_agents_and_judges(tmp_path) -> None:
-    """Adding or retiring a model is a config edit, not a code change."""
+    """Adding or retiring a model is a config edit, not code."""
     path = _write_config(
         tmp_path,
         [QWEN, {"id": "gemini", "provider": "google",
@@ -300,7 +300,7 @@ def test_models_config_returns_only_enabled_agents_and_judges(tmp_path) -> None:
 
 
 def test_temperature_is_omitted_unless_set(tmp_path) -> None:
-    """Newer Claude and OpenAI reasoning models reject a non-default value."""
+    """Newer Claude and OpenAI reasoning models reject non-defaults."""
     config = load_models_config(_write_config(tmp_path, [QWEN]))
 
     assert config.generation_agents[0].temperature is None
@@ -323,8 +323,11 @@ def test_output_mode_defaults_to_native_and_is_read_per_entry(tmp_path) -> None:
 
 
 def test_output_mode_wraps_the_output_type() -> None:
-    """Native output is how Sonnet 5.5 gets structured output: it rejects the
-    forced tool call that "tool" mode sends."""
+    """Wrap the output type to match each output mode.
+
+    Native output is how Sonnet 5.5 gets structured output: it rejects
+    the forced tool call that "tool" mode sends.
+    """
     assert with_output_mode(GeneratedCriteriaSet,
                             "tool") is GeneratedCriteriaSet
     assert isinstance(with_output_mode(
@@ -350,7 +353,7 @@ def test_models_config_rejects_malformed_json(tmp_path) -> None:
 
 
 def test_models_config_rejects_unknown_keys(tmp_path) -> None:
-    """The old roster's `agents` key is a mistake to report, not to ignore."""
+    """The old roster's `agents` key is reported, not ignored."""
     path = _write_config(tmp_path, [QWEN], agents=[QWEN])
 
     with pytest.raises(ModelsConfigError, match="invalid"):
@@ -358,7 +361,7 @@ def test_models_config_rejects_unknown_keys(tmp_path) -> None:
 
 
 def test_models_config_rejects_duplicate_agent_ids(tmp_path) -> None:
-    """Ids attribute votes back to a generator, so they have to be unique."""
+    """Ids attribute votes to a generator, so they must be unique."""
     path = _write_config(tmp_path, [QWEN, {**QWEN, "model": "qwen2.5:14b"}])
 
     with pytest.raises(ModelsConfigError, match="Duplicate agent ids"):
@@ -386,7 +389,7 @@ def test_models_config_rejects_nothing_enabled(tmp_path) -> None:
 def test_api_keys_are_read_from_the_environment_not_the_roster(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The file names the variable; the value is resolved at call time."""
+    """The file names the variable; its value is read at call time."""
     config = GenerationAgentConfig(
         id="gemini",
         provider="google",
@@ -416,10 +419,10 @@ def test_agent_without_its_key_fails_to_build_and_names_the_variable(
         build_agent(config)
 
 
-# ---------------------------------------------------------------------------
-# R10 - agents run concurrently, and one bad agent degrades the ensemble
-#       rather than failing the request
-# ---------------------------------------------------------------------------
+"""R10: agents run concurrently.
+
+One bad agent degrades the ensemble rather than failing the request.
+"""
 
 
 class _ExplodingAgent:
@@ -479,7 +482,7 @@ async def test_a_hanging_agent_is_cut_off_at_the_timeout(
 async def test_every_agent_failing_is_reported_as_a_failed_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The service turns a total wipeout into a 502, not an empty success."""
+    """The service turns a total wipeout into a 502, not a success."""
     monkeypatch.setattr(orchestrator, "build_agent",
                         lambda config: _ExplodingAgent())
 
@@ -539,9 +542,7 @@ def test_dedupe_ignores_case_and_punctuation_differences() -> None:
     assert loud.dedupe_key() == quiet.dedupe_key()
 
 
-# ---------------------------------------------------------------------------
-# R11 - top-K retrieved context is injected into every agent's prompt
-# ---------------------------------------------------------------------------
+"""R11: top-K retrieved context reaches every agent's prompt."""
 
 
 async def test_retrieval_asks_for_exactly_top_k_chunks() -> None:
@@ -569,7 +570,7 @@ async def test_retrieval_without_a_vector_store_returns_no_context() -> None:
 
 
 async def test_a_broken_vector_store_does_not_fail_generation() -> None:
-    """Retrieval is best-effort: no context is better than no criteria."""
+    """Retrieval is best-effort: no context beats no criteria."""
 
     class _BrokenIngest:
         def search(self, query: str, k: int = 5):
@@ -621,13 +622,11 @@ def test_user_prompt_carries_the_story_and_the_criteria_budget() -> None:
     assert "As a user I want X" in prompt
 
 
-# ---------------------------------------------------------------------------
-# Conversation -> story composition
-# ---------------------------------------------------------------------------
+"""Composing the conversation into a user story."""
 
 
 def test_only_user_turns_reach_the_agents() -> None:
-    """Assistant replies are the system talking to itself; they would bias it."""
+    """Assistant turns are the system talking to itself; skip them."""
     story = compose_user_story(
         [
             ConversationMessage(
@@ -675,21 +674,22 @@ def test_attachment_text_is_included_in_the_story() -> None:
     ],
 )
 def test_an_empty_conversation_is_refused_rather_than_invented(messages) -> None:
-    """Asked to work from nothing, a model invents a feature. Fail instead."""
+    """Given nothing, a model invents a feature. Fail instead."""
     with pytest.raises(NoUserStoryError):
         compose_user_story(messages)
 
 
-# ---------------------------------------------------------------------------
-# Scoring seam - delegated to app.services.scoring, which is shared with
-# AC regeneration and UAT generation. That module owns the voting-layer
-# contract (text matching, 0-5 clamping); these cover only this layer's use
-# of it.
-# ---------------------------------------------------------------------------
+"""The scoring seam.
+
+Scoring is delegated to `app.services.scoring`, which is shared with AC
+regeneration and UAT generation. That module owns the voting-layer
+contract (text matching, 0-5 clamping); these tests cover only this
+layer's use of it.
+"""
 
 
 def test_every_criterion_is_scored_exactly_once() -> None:
-    """A miscount here would silently shift scores onto the wrong criteria."""
+    """A miscount would shift scores onto the wrong criteria."""
     criteria = [_criterion(n) for n in range(1, 6)]
     scores = _fake_scorer([1.0, 2.0, 3.0, 4.0, 5.0])(
         prompt='p', candidates=['a', 'b', 'c', 'd', 'e']
@@ -702,7 +702,7 @@ def test_every_criterion_is_scored_exactly_once() -> None:
 
 
 def test_scores_stay_within_the_apps_zero_to_five_scale() -> None:
-    """The app model rejects anything above 5, so no rescaling may sneak in."""
+    """The app model rejects values above 5, so nothing may rescale."""
     criteria = [_criterion(1)]
     scores = _fake_scorer([5.0])(prompt='p', candidates=['a'])
 
@@ -712,12 +712,13 @@ def test_scores_stay_within_the_apps_zero_to_five_scale() -> None:
     assert ranked[0].scores.correctness == 5.0
 
 
-# --- Title-anchored generation -------------------------------------------
-#
-# The review finding these cover: pooling independent per-agent criteria left
-# nothing to group equivalent candidates by, so near-duplicates survived and
-# the voting layer compared unrelated items. Anchoring on one agent's titles
-# gives every candidate a join key.
+"""Title-anchored generation.
+
+Pooling independent per-agent criteria leaves nothing to group
+equivalent candidates by, so near-duplicates survive and the voting
+layer compares unrelated items. Anchoring on one agent's titles gives
+every candidate a join key.
+"""
 
 
 def _agent_result(agent_id: str, titles: list[str]) -> AgentResult:
@@ -800,7 +801,7 @@ def test_candidate_group_ranks_best_first():
 
 
 def test_candidate_group_tie_break_is_deterministic():
-    """Equal scores must not resolve by whichever agent finished first."""
+    """Equal scores must not resolve by which agent finished first."""
     def build(order: list[str]) -> CandidateGroup:
         group = CandidateGroup(
             title="Log in",
@@ -841,7 +842,7 @@ def test_grouped_wire_models_expose_winner_with_alternatives_behind_it():
 
 
 def test_grouped_wire_models_stay_backwards_compatible():
-    """A client ignoring the new fields must see exactly one row per behaviour."""
+    """A client ignoring `alternatives` sees one row per behaviour."""
     groups = [
         CandidateGroup(
             title=f"Title {n}",
@@ -877,11 +878,12 @@ def test_group_by_title_with_no_followers_still_produces_groups():
 
 
 def test_unrated_candidate_ranks_below_a_genuinely_bad_one():
-    """A scoring failure is an absence of a verdict, not a verdict of zero.
+    """A scoring failure is no verdict, not a verdict of zero.
 
-    Both sit at 0.0 once the -1 sentinel is clamped, so without the explicit
-    flag an outage would be indistinguishable from a model rating something
-    worthless — and could hand the win to an unrated candidate.
+    Both sit at 0.0 once the -1 sentinel is clamped, so without the
+    explicit flag an outage would be indistinguishable from a model
+    rating something worthless — and could hand the win to an unrated
+    candidate.
     """
     group = CandidateGroup(
         title="Log in",
@@ -903,7 +905,8 @@ def test_unrated_candidate_ranks_below_a_genuinely_bad_one():
 
     group.rank()
 
-    # Alphabetically "aaa" would win the tie-break; being unrated outranks it.
+    # Alphabetically "aaa" would win the tie-break, but the unrated flag
+    # is checked first and sends it last.
     assert group.winner.agent_id == "zzz-rated-badly"
     assert [c.agent_id for c in group.unrated] == ["aaa-unrated"]
 
@@ -928,11 +931,12 @@ def test_unrated_candidate_never_beats_a_rated_one():
     assert group.winner.agent_id == "b"
 
 
-# --- Pass 2 answers by title number ----------------------------------------
-#
-# Followers used to copy each title back and were joined on its text. A live
-# run had a follower reword all five titles, so 0 of 5 matched and every one
-# of its candidates was dropped. They now answer by number instead.
+"""Pass 2 answers by title number.
+
+Followers answer by number rather than copying each title back: a
+follower that rewords its titles would otherwise match none of them
+(one live run matched 0 of 5) and lose every candidate.
+"""
 
 
 def _numbered(*numbers: int) -> NumberedCriteriaSet:
@@ -984,8 +988,9 @@ async def test_title_anchored_ensemble_groups_every_follower_answer():
     )
 
     assert all(result.ok for result in ensemble.results)
-    # The follower answers all three anchor titles by number, including the
-    # one whose wording is unique to the anchor — text matching would miss it.
+    # The follower answers all three anchor titles by number, including
+    # the one whose wording is unique to the anchor — text matching
+    # would miss it.
     assert [group.title for group in groups] == [
         "Successful login redirects home",
         "Invalid password shows an error",

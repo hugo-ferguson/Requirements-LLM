@@ -1,3 +1,5 @@
+"""Combined-style judging: one request scores all four rubrics."""
+
 from __future__ import annotations
 
 import asyncio
@@ -22,17 +24,17 @@ PROMPT_DIR = Path(__file__).resolve().parent.parent / \
 COMBINED_PROMPT = PROMPT_DIR / "combined.txt"
 COMBINED_INPUT_PROMPT = PROMPT_DIR / "combined_input.txt"
 
-# One retry of a reply that came back without a usable vote: empty, or not
-# matching the schema. Network and rate-limit errors are retried separately,
-# by the provider's SDK.
+# One retry of a reply that came back without a usable vote: empty, or
+# not matching the schema. Network and rate-limit errors are retried
+# separately, by the provider's SDK.
 INVALID_REPLY_RETRIES = 1
 
 
 def default_timeout() -> float:
-    """Per-request timeout, overridable for slow local hardware.
+    """Return the per-request timeout; slow hardware can raise it.
 
-    120s is generous for a cloud model and marginal for a 7B model running on
-    CPU, so it has to be tunable without a code change.
+    120s is generous for a cloud model and marginal for a 7B model
+    running on CPU, so it has to be tunable without a code change.
     """
     try:
         return max(1.0, float(os.getenv("VOTING_TIMEOUT_SECONDS", "120")))
@@ -41,19 +43,20 @@ def default_timeout() -> float:
 
 
 def max_parallel_requests(judge: JudgeConfig) -> int:
-    """How many scoring requests may be in flight against `judge` at once.
+    """Return how many requests `judge` may have in flight at once.
 
-    `VOTING_MAX_PARALLEL` overrides the judge's `max_parallel`. Ollama serves
-    one request per model at a time, so firing N candidates concurrently does
-    not make them run in parallel — it queues them, and the per-request
-    timeout counts that queue time. Later candidates then expire before they
-    ever start, which reads downstream as an unrated candidate rather than as
-    a capacity problem. Observed directly: 3 of 5 candidates timing out at
-    exactly 120.0s while the first two scored fine.
+    `VOTING_MAX_PARALLEL` overrides the judge's `max_parallel`. Ollama
+    serves one request per model at a time, so firing N candidates
+    concurrently does not make them run in parallel — it queues them,
+    and the per-request timeout counts that queue time. Later candidates
+    then expire before they ever start, which reads downstream as an
+    unrated candidate rather than as a capacity problem. Observed
+    directly: 3 of 5 candidates timing out at exactly 120.0s while the
+    first two scored fine.
 
-    Serialising costs nothing in wall-clock terms, because Ollama was going to
-    run them one at a time regardless. It just means each timeout covers real
-    work instead of waiting in line.
+    Serialising costs nothing in wall-clock terms, because Ollama was
+    going to run them one at a time regardless. It just means each
+    timeout covers real work instead of waiting in line.
     """
     raw = os.getenv("VOTING_MAX_PARALLEL")
     if raw:
@@ -64,20 +67,21 @@ def max_parallel_requests(judge: JudgeConfig) -> int:
     return judge.max_parallel
 
 
-# One gate per judge per event loop. The app runs every scoring call on one
-# long-lived loop (see app/services/scoring.py), so a judge's `max_parallel`
-# caps its requests across all concurrent scoring runs, not just within one.
-# Without that, UAT generation scored every accepted AC at once and multiplied
-# the cap by the number of ACs, tripping Anthropic's org-wide concurrency
-# limit. Keyed by loop because an asyncio primitive binds to the loop that
-# first uses it, and tests start a fresh loop each time.
+# One gate per judge per event loop. The app runs every scoring call on
+# one long-lived loop (see app/services/scoring.py), so a judge's
+# `max_parallel` caps its requests across all concurrent scoring runs,
+# not just within one. Without that, UAT generation, which scores every
+# accepted AC at once, would multiply the cap by the number of ACs and
+# trip Anthropic's org-wide concurrency limit. Keyed by loop because
+# an asyncio primitive binds to the loop that first uses it, and tests
+# start a fresh loop each time.
 _gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]] = (
     weakref.WeakKeyDictionary()
 )
 
 
 def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
-    """The running loop's shared concurrency gate for `judge`."""
+    """Return the running loop's shared concurrency gate for `judge`."""
     gates = _gates.setdefault(asyncio.get_running_loop(), {})
     if judge.id not in gates:
         gates[judge.id] = asyncio.Semaphore(max_parallel_requests(judge))
@@ -85,10 +89,10 @@ def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
 
 
 def judge_settings(judge: JudgeConfig) -> ModelSettings:
-    """Request settings for every call `judge` makes.
+    """Return the request settings for every call `judge` makes.
 
-    `anthropic_cache_instructions` marks the system prompt for caching. Only
-    Anthropic reads it; every other provider ignores it.
+    `anthropic_cache_instructions` marks the system prompt for caching.
+    Only Anthropic reads it; every other provider ignores it.
     """
     return judge.model_settings(
         timeout=default_timeout(),
@@ -97,11 +101,12 @@ def judge_settings(judge: JudgeConfig) -> ModelSettings:
 
 
 def _system_prompt() -> str:
-    """The evaluator role and rubrics, all fixed text.
+    """Return the evaluator role and rubrics, all fixed text.
 
-    Every vote across every story shares this exact prefix. Byte-for-byte
-    stability is what lets the cache hit, so nothing per-request belongs here.
-    The response schema isn't in it either: the judge's output mode sends it.
+    Every vote across every story shares this exact prefix.
+    Byte-for-byte stability is what lets the cache hit, so nothing
+    per-request belongs here. The response schema isn't in it either:
+    the judge's output mode sends it.
     """
     return (
         "You are an acceptance-criteria evaluator.\n\n"
@@ -110,7 +115,7 @@ def _system_prompt() -> str:
 
 
 def log_cache_usage(judge: JudgeConfig, usage: RunUsage) -> None:
-    """Debug-log cache reads and writes, the only proof the cache is hitting."""
+    """Log cache reads and writes, the only proof of cache hits."""
     if not judge.cache_prompt:
         return
     logger.debug(
@@ -123,9 +128,13 @@ def log_cache_usage(judge: JudgeConfig, usage: RunUsage) -> None:
 
 
 class CombinedJudgeClient:
-    """Scores all four rubrics in one request, for judges with `style: "combined"`."""
+    """Scores all four rubrics in one request.
+
+    Used for judges with `style: "combined"`.
+    """
 
     def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
+        """Build the judge's agent; tests may pass their own `model`."""
         self.judge = judge
         self.provider_name = judge.display_name
         self.model = judge.model
@@ -138,6 +147,7 @@ class CombinedJudgeClient:
         )
 
     async def evaluate(self, *, instruction: str, response: str) -> CombinedVote:
+        """Return the judge's four rubric votes for `response`."""
         prompt = COMBINED_INPUT_PROMPT.read_text(encoding="utf-8")
         prompt = prompt.replace("{orig_instruction}", instruction)
         prompt = prompt.replace("{orig_response}", response)
@@ -148,6 +158,7 @@ class CombinedJudgeClient:
 
 
 def _error_output(output: str, provider_name: str, model: str, message: str) -> EvaluatedOutput:
+    # An output whose every rubric is the -1 error sentinel.
     feedback = [RubricFeedback(rubric=name, value=-1, feedback=message)
                 for name in RUBRIC_NAMES]
     provider_feedback = ProviderFeedback(
@@ -166,6 +177,11 @@ def _error_output(output: str, provider_name: str, model: str, message: str) -> 
 
 
 async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: CombinedJudgeClient) -> VotingResult:
+    """Score every output with one combined judge, one request each.
+
+    A failed request degrades its output to the -1 sentinel rather than
+    failing the batch; a cancellation still propagates.
+    """
     gate = judge_gate(client.judge)
 
     async def evaluate_output(output: str) -> EvaluatedOutput:
@@ -199,9 +215,10 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
     results: list[EvaluatedOutput | BaseException] = []
     if client.judge.cache_prompt and len(outputs) > 1:
         # A cache entry only exists once the first request has started
-        # responding, so a cold batch fired all at once would pay the write
-        # premium on every vote and read nothing. Score one candidate first to
-        # write the shared rubric prefix, then the rest read it.
+        # responding, so a cold batch fired all at once would pay the
+        # write premium on every vote and read nothing. Score one
+        # candidate first to write the shared rubric prefix, then the
+        # rest read it.
         results.extend(await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True))
         outputs = outputs[1:]
     results.extend(

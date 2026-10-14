@@ -1,3 +1,5 @@
+"""The batch voting entry point and how it merges judges' votes."""
+
 import asyncio
 import json
 

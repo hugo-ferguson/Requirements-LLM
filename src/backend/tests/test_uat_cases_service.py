@@ -1,3 +1,5 @@
+"""UatCaseService generation and regeneration, against stub models."""
+
 import asyncio
 
 import pytest
@@ -24,6 +26,7 @@ from app.services.uat_cases import GeneratedUatCase, UatCaseService
 
 @pytest.fixture(name="db_session")
 def db_session_fixture():
+    """Yield a session on a fresh in-memory SQLite database."""
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -33,7 +36,7 @@ def db_session_fixture():
 
 
 def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
-    """Creates a session with one accepted AC record; returns (session_id, ac_id)."""
+    """Seed one accepted AC; return (session_id, ac_id)."""
     sessions = SessionRepository(db_session)
     ac_repo = AcceptanceCriteriaRepository(db_session)
 
@@ -86,7 +89,8 @@ def _tool_response(info: AgentInfo, **fields) -> ModelResponse:
 async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
     db_session: Session,
 ) -> None:
-    # The autouse fixture points the roster at two offline `test` agents.
+    # The autouse fixture points the roster at two offline `test`
+    # agents.
     session_id, ac_id = _seed_accepted_ac(db_session)
     service = _service(db_session)
 
@@ -103,7 +107,8 @@ async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
         assert case.scores.relevance == 3
         assert case.overall_score == 3.75
         assert case.status == "pending"
-        # Equal scores tie-break on agent id, so test-a's version is shown.
+        # Equal scores tie-break on agent id, so test-a's version is
+        # shown.
         assert case.source_agent == "test-a"
         [alt] = case.alternatives
         assert alt.source_agent == "test-b"
@@ -137,9 +142,9 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
 ) -> None:
     session_id, ac_id = _seed_accepted_ac(db_session)
 
-    # Seeded from the offline `test` roster the autouse fixture configures.
-    # Kept synchronous: regenerate_selected uses run_sync, which can't run
-    # inside an already-running event loop.
+    # Seeded from the offline `test` roster the autouse fixture
+    # configures. Kept synchronous: regenerate_selected uses run_sync,
+    # which can't run inside an already-running event loop.
     seed_service = _service(db_session)
     asyncio.run(seed_service.generate(session_id))
     listed = seed_service.list_items(session_id)

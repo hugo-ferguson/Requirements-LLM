@@ -1,9 +1,10 @@
 """Builds one PydanticAI agent per roster entry.
 
-Every agent shares the same `deps_type` and system prompt, and every agent in a
-given pass shares the same `output_type`. Only the underlying model changes.
-That shared contract is what makes the ensemble outputs comparable, and it is
-why adding a model is a config edit rather than a code change.
+Every agent shares the same `deps_type` and system prompt, and every
+agent in a given pass shares the same `output_type`. Only the underlying
+model changes. That shared contract is what makes the ensemble outputs
+comparable, and it is why adding a model is a config edit rather than a
+code change.
 """
 
 from __future__ import annotations
@@ -35,13 +36,14 @@ GenerationOutput = (
 
 
 def _stub_output(config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet):
-    """Deterministic output for the `test` provider.
+    """Return deterministic output for the `test` provider.
 
-    Two criteria are identical across every test agent and one is seeded with
-    the agent id, so a two-agent test roster yields three distinct pooled
-    candidates and still exercises the cross-agent dedupe path. As a pass-2
-    follower it answers titles 1-3 with the same text, by number. UAT output
-    follows the same pattern with two cases.
+    Two criteria are identical across every test agent and one is seeded
+    with the agent id, so a two-agent test roster pools four distinct
+    candidates (the two shared ones once each, plus one per agent) and
+    still exercises the cross-agent dedupe path.
+    As a pass-2 follower it answers titles 1-3 with the same text, by
+    number. UAT output follows the same pattern with two cases.
     """
     if output_type in (GeneratedUatCaseSet, NumberedUatCaseSet):
         return _stub_uat_output(config, output_type)
@@ -60,6 +62,8 @@ def _stub_output(config: GenerationAgentConfig, output_type: GenerationOutput = 
 def _stub_uat_output(
     config: GenerationAgentConfig, output_type: GenerationOutput
 ) -> GeneratedUatCaseSet | NumberedUatCaseSet:
+    # The UAT counterpart of `_stub_output`: two cases, tagged with the
+    # agent id so each agent's version is distinguishable.
     cases = [
         GeneratedUatCase(
             title="Log in with valid credentials",
@@ -81,6 +85,7 @@ def _stub_uat_output(
 
 
 def _stub_criteria(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
+    # Two criteria shared by every agent, and one unique to `config`.
     return GeneratedCriteriaSet(
         user_story_summary="Stubbed summary for offline tests.",
         criteria=[
@@ -111,8 +116,8 @@ def _build_model(
 ) -> Model:
     """Translate a roster entry into a concrete PydanticAI model object.
 
-    The `test` provider answers with `_stub_output`; every real provider goes
-    through the one generic builder.
+    The `test` provider answers with `_stub_output`; every real provider
+    goes through the one generic builder.
     """
     if config.provider == "test":
         from pydantic_ai.models.test import TestModel
@@ -132,10 +137,10 @@ def build_agent(
     """Construct a generation agent for one roster entry.
 
     `output_type` is `NumberedCriteriaSet` for pass-2 followers in
-    title-anchored generation, and the full criteria set everywhere else.
-    UAT generation passes its own output types and system prompt, and
-    `with_context=False`: it works from one AC, not the user story and its
-    retrieved documents.
+    title-anchored generation, and the full criteria set everywhere
+    else. UAT generation passes its own output types and system prompt,
+    and `with_context=False`: it works from one AC, not the user story
+    and its retrieved documents.
     """
     agent: GenerationAgent = Agent(
         _build_model(config, output_type),
@@ -151,12 +156,12 @@ def build_agent(
 
     @agent.system_prompt
     def inject_project_context(ctx: RunContext[GenerationDeps]) -> str:
-        """Appended to the base system prompt at call time (backlog R11)."""
+        """Append the retrieved project context (backlog R11)."""
         return ctx.deps.context_block()
 
     @agent.system_prompt
     def inject_reviewer_feedback(ctx: RunContext[GenerationDeps]) -> str:
-        """Appended only on a regeneration pass (backlog R20)."""
+        """Append reviewer feedback when regenerating (backlog R20)."""
         return ctx.deps.feedback_block() or ""
 
     return agent

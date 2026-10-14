@@ -25,6 +25,7 @@ from app.services.acceptance_criteria import AcceptanceCriteriaService
 
 @pytest.fixture(name="db_session")
 def db_session_fixture():
+    """Yield a session on a fresh in-memory SQLite database."""
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -40,7 +41,10 @@ def _scores(value: float) -> AcceptanceCriterionScores:
 
 
 def _criterion(n: int) -> AcceptanceCriterion:
-    """AC `n`, written by agent-a (score 4), with agent-b's version as an alternative (score 3)."""
+    """Return AC `n`, written by agent-a with agent-b's as alternative.
+
+    Agent-a's version scores 4 and agent-b's scores 3.
+    """
     return AcceptanceCriterion(
         id=0,
         title=f"Title {n}",
@@ -64,7 +68,7 @@ def _criterion(n: int) -> AcceptanceCriterion:
 
 
 def _id(value: int | None) -> int:
-    """A persisted row's id, which the database has always assigned by now."""
+    """Return a persisted row's id, which the database has assigned."""
     assert value is not None
     return value
 
@@ -239,7 +243,8 @@ def test_apply_approved_keeps_other_acs_alternatives_on_the_right_ac(db_session:
     extra = replacement.model_copy(
         update={"title": "Extra", "given": "extra given"})
 
-    # Both replacements take the first AC's slot, shifting every later AC down.
+    # Both replacements take the first AC's slot, shifting every later
+    # AC down.
     items = service.apply_approved(
         session_id, ac_ids[0], ApplyApprovedRequest(
             candidates=[replacement, extra])

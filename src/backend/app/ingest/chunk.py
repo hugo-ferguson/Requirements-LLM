@@ -1,15 +1,16 @@
+"""Split extracted document text into overlapping chunks."""
+
 from __future__ import annotations
 
 
 def chunk_text(
     text: str, chunk_size: int = 1000, overlap: int = 150
 ) -> list[str]:
-    """
-    Splits text into overlapping chunks of at most `chunk_size` characters.
+    """Split text into overlapping chunks of at most `chunk_size` chars.
 
-    Chunks end on a paragraph break where one is available, and otherwise on a
-    space, so that words are not cut in half. The overlap carries context
-    across the boundary for retrieval.
+    Chunks end on a paragraph break where one is available, and
+    otherwise on a space, so that words are not cut in half. The overlap
+    carries context across the boundary for retrieval.
     """
     if overlap >= chunk_size:
         raise ValueError("overlap must be smaller than chunk_size")
@@ -25,10 +26,11 @@ def chunk_text(
         end = min(start + chunk_size, len(text))
 
         if end < len(text):
-            # Strictly after start + overlap: a break exactly there would make
-            # the next start (end - overlap) equal this one, and the loop would
-            # append the same chunk forever. A real PDF hit this and grew the
-            # backend until Docker's VM ran out of memory.
+            # Strictly after start + overlap: a break exactly there
+            # would make the next start (end - overlap) equal this one,
+            # and the loop would append the same chunk forever. A real
+            # PDF hit this and grew the backend until Docker's VM ran
+            # out of memory.
             boundary = _boundary_before(text, start + overlap + 1, end)
             if boundary is not None:
                 end = boundary
@@ -46,9 +48,10 @@ def chunk_text(
 
 
 def _boundary_before(text: str, lower: int, upper: int) -> int | None:
-    """
-    Finds the last paragraph break, or failing that the last space, in
-    `text[lower:upper]`. Returns None when the window holds neither.
+    """Find the last line break or space in `text[lower:upper]`.
+
+    Paragraph breaks are preferred, then single line breaks, then
+    spaces. Return None when the window holds none of them.
     """
     for separator in ("\n\n", "\n", " "):
         position = text.rfind(separator, lower, upper)
