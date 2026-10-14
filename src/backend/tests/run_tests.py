@@ -1,22 +1,19 @@
-"""Runs the backend test suite and records the results.
+"""Runs the backend test suite and writes a results CSV and a Markdown summary.
 
-Writes one row per test to `test_results.csv`, then rebuilds
-`test_summary.md` from that CSV: the success rate, a per-file breakdown and
-the reason for every test that did not pass. Both files land next to this
-script.
+Pytest records each test in a JUnit XML report, which is flattened into
+`test_results.csv`; `test_summary.md` is then built from that CSV. Both files
+are written next to this script.
 
 	python tests/run_tests.py                    # whole suite
-	python tests/run_tests.py tests -k voting    # extra args go to pytest
-	python tests/run_tests.py --summary-only     # rebuild the summary from the last CSV
+	python tests/run_tests.py tests -k voting    # any arguments go to pytest
 
-Exits with pytest's exit code, so it can stand in for `pytest` in CI.
+Exits with pytest's exit code.
 """
 
-from __future__ import annotations
-
-import argparse
 import csv
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -27,145 +24,117 @@ TESTS_DIR = Path(__file__).resolve().parent
 RESULTS_CSV = TESTS_DIR / "test_results.csv"
 SUMMARY_MD = TESTS_DIR / "test_summary.md"
 
-FIELDS = ["test_id", "file", "test", "outcome", "duration_s", "message"]
-# Outcomes that count towards the success rate. Skipped and xfailed tests
-# were never expected to pass, so they are reported but left out of it.
-COUNTED = ("passed", "xpassed", "failed", "error")
-OUTCOMES = ("passed", "failed", "error", "skipped", "xfailed", "xpassed")
+FIELDS = ["test_id", "file", "outcome", "duration_s", "message"]
+OUTCOMES = ["passed", "failed", "error", "skipped"]
+# The JUnit element a testcase holds for each outcome other than passed.
+JUNIT_OUTCOMES = {"failure": "failed", "error": "error", "skipped": "skipped"}
 
 
-class ResultCollector:
-	"""Pytest plugin that folds each test's setup/call/teardown into one row."""
-
-	def __init__(self) -> None:
-		self.rows: dict[str, dict] = {}
-
-	def pytest_collectreport(self, report: pytest.CollectReport) -> None:
-		if report.failed:
-			row = self._row(report.nodeid)
-			row["outcome"] = "error"
-			row["message"] = _message(report)
-
-	def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-		row = self._row(report.nodeid)
-		row["duration_s"] += report.duration
-		if report.when == "call":
-			if hasattr(report, "wasxfail"):
-				row["outcome"] = "xfailed" if report.skipped else "xpassed"
-			else:
-				row["outcome"] = report.outcome
-		elif report.failed:
-			row["outcome"] = "error"
-		elif report.skipped:
-			row["outcome"] = "skipped"
-		if not report.passed and not row["message"]:
-			row["message"] = _message(report)
-
-	def _row(self, nodeid: str) -> dict:
-		if nodeid not in self.rows:
-			file, _, test = nodeid.partition("::")
-			self.rows[nodeid] = {
-				"test_id": nodeid,
-				"file": file,
-				"test": test,
-				"outcome": "passed",
-				"duration_s": 0.0,
-				"message": "",
-			}
-		return self.rows[nodeid]
+def run_pytest(args: list[str], report: Path) -> int:
+	"""Run pytest with `args`, writing a JUnit XML report to `report`."""
+	# xunit1 is the JUnit flavour that records each test's file path.
+	return pytest.main([*args, f"--junitxml={report}", "-o", "junit_family=xunit1"])
 
 
-def _message(report: pytest.CollectReport | pytest.TestReport) -> str:
-	if hasattr(report, "wasxfail"):
-		return report.wasxfail
-	longrepr = report.longrepr
-	if isinstance(longrepr, tuple):
-		return longrepr[2].removeprefix("Skipped: ")
-	crash = getattr(longrepr, "reprcrash", None)
-	if crash is not None:
-		return crash.message.splitlines()[0]
-	text = report.longreprtext.strip()
-	return text.splitlines()[-1] if text else ""
+def read_junit(report: Path) -> list[dict]:
+	"""Turn each <testcase> in a JUnit XML report into a CSV row."""
+	rows = []
+	for case in ET.parse(report).iter("testcase"):
+		result = next((child for child in case if child.tag in JUNIT_OUTCOMES), None)
+		message = result.get("message", "") if result is not None else ""
+		rows.append({
+			"test_id": f"{case.get('file')}::{case.get('name')}",
+			"file": case.get("file"),
+			"outcome": "passed" if result is None else JUNIT_OUTCOMES[result.tag],
+			"duration_s": case.get("time"),
+			"message": message.splitlines()[0] if message else "",
+		})
+	return rows
 
 
-def write_results(rows: list[dict], path: Path = RESULTS_CSV) -> None:
+def write_csv(rows: list[dict], path: Path) -> None:
+	"""Write one row per test to `path`."""
 	with path.open("w", newline="") as f:
 		writer = csv.DictWriter(f, fieldnames=FIELDS)
 		writer.writeheader()
-		for row in rows:
-			writer.writerow({**row, "duration_s": f"{row['duration_s']:.3f}"})
-
-
-def read_results(path: Path = RESULTS_CSV) -> list[dict]:
-	with path.open(newline="") as f:
-		return list(csv.DictReader(f))
+		writer.writerows(rows)
 
 
 def success_rate(counts: Counter) -> str:
-	counted = sum(counts[o] for o in COUNTED)
-	if not counted:
-		return "n/a"
-	return f"{(counts['passed'] + counts['xpassed']) / counted:.1%}"
+	"""Passed tests as a percentage of the tests that ran, so skips don't count."""
+	ran = counts.total() - counts["skipped"]
+	return f"{counts['passed'] / ran:.1%}" if ran else "n/a"
 
 
-def write_summary(rows: list[dict], path: Path = SUMMARY_MD) -> None:
-	counts = Counter(row["outcome"] for row in rows)
-	duration = sum(float(row["duration_s"]) for row in rows)
-	by_file: dict[str, Counter] = defaultdict(Counter)
+def table(headers: list[str], rows: list[list]) -> list[str]:
+	"""Format `rows` as the lines of a Markdown table."""
+	return [
+		"| " + " | ".join(headers) + " |",
+		"|" + "---|" * len(headers),
+		*("| " + " | ".join(str(cell) for cell in row) + " |" for row in rows),
+	]
+
+
+def write_summary(csv_path: Path, path: Path) -> None:
+	"""Build a Markdown summary of the results in `csv_path` and write it to `path`."""
+	with csv_path.open(newline="") as f:
+		rows = list(csv.DictReader(f))
+
+	totals = Counter(row["outcome"] for row in rows)
+	by_file = defaultdict(Counter)
 	for row in rows:
 		by_file[row["file"]][row["outcome"]] += 1
-	present = [o for o in OUTCOMES if counts[o]]
+	duration = sum(float(row["duration_s"]) for row in rows)
 
 	lines = [
 		"# Test Summary",
 		"",
-		f"Generated {datetime.now():%Y-%m-%d %H:%M} from `{RESULTS_CSV.name}`.",
+		f"Generated {datetime.now():%Y-%m-%d %H:%M} from `{csv_path.name}`.",
 		"",
-		f"**Success rate: {success_rate(counts)}** "
-		f"({counts['passed'] + counts['xpassed']} of {sum(counts[o] for o in COUNTED)} tests passed; "
-		"skipped and xfailed tests are not counted)",
+		f"**Success rate: {success_rate(totals)}** "
+		f"({totals['passed']} of {totals.total() - totals['skipped']} tests passed, skipped tests not counted)",
 		"",
-		"| Total | " + " | ".join(o.capitalize() for o in present) + " | Duration |",
-		"|---:|" + "---:|" * len(present) + "---:|",
-		f"| {len(rows)} | " + " | ".join(str(counts[o]) for o in present) + f" | {duration:.1f}s |",
+		*table(
+			["Total", *(o.capitalize() for o in OUTCOMES), "Duration"],
+			[[totals.total(), *(totals[o] for o in OUTCOMES), f"{duration:.1f}s"]],
+		),
 		"",
 		"## By file",
 		"",
-		"| File | Tests | " + " | ".join(o.capitalize() for o in present) + " | Success rate |",
-		"|---|---:|" + "---:|" * len(present) + "---:|",
+		*table(
+			["File", "Tests", *(o.capitalize() for o in OUTCOMES), "Success rate"],
+			[
+				[f"`{file}`", counts.total(), *(counts[o] for o in OUTCOMES), success_rate(counts)]
+				for file, counts in sorted(by_file.items())
+			],
+		),
 	]
-	for file, file_counts in sorted(by_file.items()):
-		lines.append(
-			f"| `{file}` | {file_counts.total()} | "
-			+ " | ".join(str(file_counts[o]) for o in present)
-			+ f" | {success_rate(file_counts)} |"
-		)
 
-	not_passed = [row for row in rows if row["outcome"] not in ("passed", "xpassed")]
+	not_passed = [row for row in rows if row["outcome"] != "passed"]
 	if not_passed:
-		lines += ["", "## Tests that did not pass", "", "| Outcome | Test | Message |", "|---|---|---|"]
-		for row in sorted(not_passed, key=lambda r: (OUTCOMES.index(r["outcome"]), r["test_id"])):
-			message = row["message"].replace("|", "\\|")
-			lines.append(f"| {row['outcome']} | `{row['test_id']}` | {message} |")
+		lines += [
+			"",
+			"## Tests that did not pass",
+			"",
+			*table(
+				["Outcome", "Test", "Message"],
+				[[row["outcome"], f"`{row['test_id']}`", row["message"].replace("|", "\\|")] for row in not_passed],
+			),
+		]
 
 	path.write_text("\n".join(lines) + "\n")
 
 
 def main() -> int:
-	parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-	parser.add_argument("--summary-only", action="store_true", help=f"rebuild {SUMMARY_MD.name} from the existing CSV")
-	args, pytest_args = parser.parse_known_args()
+	"""Run the tests, then write the CSV and the summary built from it."""
+	with tempfile.TemporaryDirectory() as tmp:
+		report = Path(tmp) / "junit.xml"
+		exit_code = run_pytest(sys.argv[1:] or [str(TESTS_DIR)], report)
+		write_csv(read_junit(report), RESULTS_CSV)
 
-	exit_code = 0
-	if not args.summary_only:
-		collector = ResultCollector()
-		exit_code = int(pytest.main(pytest_args or [str(TESTS_DIR)], plugins=[collector]))
-		write_results(list(collector.rows.values()))
-		print(f"Wrote {RESULTS_CSV}")
-
-	write_summary(read_results())
-	print(f"Wrote {SUMMARY_MD}")
-	return exit_code
+	write_summary(RESULTS_CSV, SUMMARY_MD)
+	print(f"Wrote {RESULTS_CSV} and {SUMMARY_MD}")
+	return int(exit_code)
 
 
 if __name__ == "__main__":
