@@ -1,8 +1,8 @@
 import pytest
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from app.config import settings
-from app.db import engine
 from app.vector_store.embeddings import EmbeddingProvider, build_embedding_provider
 from app.vector_store.models import Document, DocumentChunk, Tag
 from app.vector_store.vector_store import VectorStore
@@ -13,7 +13,9 @@ def provider() -> EmbeddingProvider:
 	return build_embedding_provider(settings)
 
 
-def test_create_document_and_embed_chunk(provider: EmbeddingProvider) -> None:
+def test_create_document_and_embed_chunk(
+	engine: Engine, provider: EmbeddingProvider
+) -> None:
 	with Session(engine) as session:
 		store = VectorStore(session)
 
@@ -57,7 +59,7 @@ def test_create_document_and_embed_chunk(provider: EmbeddingProvider) -> None:
 
 
 def test_delete_document_removes_its_chunks_but_keeps_shared_tags(
-	provider: EmbeddingProvider,
+	engine: Engine, provider: EmbeddingProvider,
 ) -> None:
 	with Session(engine) as session:
 		store = VectorStore(session)
