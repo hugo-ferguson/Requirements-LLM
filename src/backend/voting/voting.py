@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
 
+
 def _provider_error_outputs(evaluation_input: EvaluationInput, provider: str, model: str, error: Exception) -> list[EvaluatedOutput]:
     return [
         EvaluatedOutput(
@@ -102,7 +103,8 @@ async def _evaluate_with_judge(judge: JudgeConfig, evaluation_input: EvaluationI
 
 async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
     judge_results = await asyncio.gather(
-        *(_evaluate_with_judge(judge, evaluation_input) for judge in evaluation_input.judges),
+        *(_evaluate_with_judge(judge, evaluation_input)
+          for judge in evaluation_input.judges),
         return_exceptions=True,
     )
 

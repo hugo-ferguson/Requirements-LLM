@@ -44,7 +44,8 @@ def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
         given="a registered user",
         when="they submit valid credentials",
         then="they land on the dashboard",
-        scores=AcceptanceCriterionScores(relevance=1, correctness=1, understandability=1, coverage=1),
+        scores=AcceptanceCriterionScores(
+            relevance=1, correctness=1, understandability=1, coverage=1),
         overall_score=1,
     )
     [record] = ac_repo.persist_batch(chat_session.id, [seeded])
@@ -52,7 +53,8 @@ def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
     return chat_session.id, record.id
 
 
-_FAKE_SCORE = CandidateScore(relevance=3, correctness=3.5, understandability=4, coverage=4.5, overall=3.75)
+_FAKE_SCORE = CandidateScore(
+    relevance=3, correctness=3.5, understandability=4, coverage=4.5, overall=3.75)
 
 
 def _fake_scorer(prompt, candidates, *, reference_answer="", settings=None):
@@ -114,7 +116,8 @@ async def test_generate_raises_generation_error_and_persists_nothing_when_every_
 
     async def all_failed(prompt, *, timeout_seconds):
         return [
-            UatAgentResult(agent_id="a", provider="test", model="test", error="upstream is down")
+            UatAgentResult(agent_id="a", provider="test",
+                           model="test", error="upstream is down")
         ], []
 
     service = _service(db_session, uat_ensemble=all_failed)
@@ -144,7 +147,8 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
 
     service = _service(
         db_session,
-        regen_agent=Agent(FunctionModel(refine), output_type=GeneratedUatCase, system_prompt="test"),
+        regen_agent=Agent(FunctionModel(refine),
+                          output_type=GeneratedUatCase, system_prompt="test"),
     )
 
     response = service.regenerate_selected(
@@ -173,7 +177,8 @@ def test_regenerate_selected_returns_none_for_a_missing_uat_case(db_session: Ses
 
     service = _service(
         db_session,
-        regen_agent=Agent(FunctionModel(explode), output_type=GeneratedUatCase, system_prompt="test"),
+        regen_agent=Agent(FunctionModel(explode),
+                          output_type=GeneratedUatCase, system_prompt="test"),
     )
 
     result = service.regenerate_selected(

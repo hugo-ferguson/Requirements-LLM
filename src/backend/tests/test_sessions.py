@@ -43,7 +43,8 @@ def test_get_session_404_for_missing_session(client: TestClient) -> None:
 
 def test_rename_session(client: TestClient) -> None:
     session = _create_session(client, name="Old name")
-    response = client.patch(f"/sessions/{session['id']}", json={"name": "New name"})
+    response = client.patch(
+        f"/sessions/{session['id']}", json={"name": "New name"})
     assert response.status_code == 200
     assert response.json()["name"] == "New name"
 
@@ -77,7 +78,8 @@ def test_post_message_returns_canned_assistant_reply(client: TestClient) -> None
 
 
 def test_post_message_404_for_missing_session(client: TestClient) -> None:
-    response = client.post("/sessions/9999/messages", json={"text": "Hello", "attachments": []})
+    response = client.post("/sessions/9999/messages",
+                           json={"text": "Hello", "attachments": []})
     assert response.status_code == 404
 
 
@@ -85,7 +87,8 @@ def test_message_history_persists_user_and_assistant_messages_in_order(
     client: TestClient,
 ) -> None:
     session = _create_session(client)
-    client.post(f"/sessions/{session['id']}/messages", json={"text": "Hello", "attachments": []})
+    client.post(f"/sessions/{session['id']}/messages",
+                json={"text": "Hello", "attachments": []})
 
     detail = client.get(f"/sessions/{session['id']}").json()
     roles = [m["role"] for m in detail["messages"]]

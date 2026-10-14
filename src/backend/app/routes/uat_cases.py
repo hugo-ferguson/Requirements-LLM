@@ -18,7 +18,8 @@ from app.repositories.uat_cases import UatCaseRepository
 from app.services.agents import GenerationError
 from app.services.uat_cases import UatCaseService
 
-router = APIRouter(prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
+router = APIRouter(
+    prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
 
 
 def get_uat_case_service(session: Session = Depends(get_session)) -> UatCaseService:
@@ -119,5 +120,6 @@ def select_uat_alternative(
 ) -> UatCase:
     result = service.select_alternative(session_id, uat_id, candidate_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="UAT case or alternative not found")
+        raise HTTPException(
+            status_code=404, detail="UAT case or alternative not found")
     return result

@@ -9,7 +9,8 @@ class ItemBase(SQLModel):
 
 class Item(ItemBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ItemCreate(ItemBase):

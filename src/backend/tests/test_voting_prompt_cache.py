@@ -26,7 +26,8 @@ VOTE_JSON = json.dumps(
     }
 )
 
-CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5", cache_prompt=True)
+CLAUDE = JudgeConfig(id="claude", provider="anthropic",
+                     model="claude-sonnet-5-5", cache_prompt=True)
 LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
@@ -111,8 +112,11 @@ def _input(candidates: list[str]) -> EvaluationInput:
 def test_a_caching_judge_scores_one_candidate_before_the_rest() -> None:
     client = _RecordingClient(CLAUDE)
 
-    result = asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c", "d"]), client))
+    result = asyncio.run(evaluate_with_combined_model(
+        _input(["a", "b", "c", "d"]), client))
 
     assert [item.output for item in result.output] == ["a", "b", "c", "d"]
-    assert client.overlaps["a"] == set(), "the first vote must finish before others start"
-    assert client.overlaps["b"] >= {"c", "d"}, "the rest still run concurrently"
+    assert client.overlaps["a"] == set(
+    ), "the first vote must finish before others start"
+    assert client.overlaps["b"] >= {
+        "c", "d"}, "the rest still run concurrently"

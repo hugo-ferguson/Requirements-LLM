@@ -180,7 +180,8 @@ class ConversationService:
             # Chat is conversational, not the pipeline's critical path — a
             # failed call falls back to a generic reply rather than
             # breaking the conversation.
-            logger.warning("Chat agent call failed; falling back to canned reply", exc_info=True)
+            logger.warning(
+                "Chat agent call failed; falling back to canned reply", exc_info=True)
             text = _CANNED_ASSISTANT_REPLY
         return ConversationMessage(role="assistant", text=text)
 
@@ -210,7 +211,8 @@ class ConversationService:
         candidate_texts = [
             render_ac_candidate(c.title, c.given, c.when, c.then) for c in criteria
         ]
-        scores = self.scorer(prompt=prompt, candidates=candidate_texts, settings=self.settings)
+        scores = self.scorer(
+            prompt=prompt, candidates=candidate_texts, settings=self.settings)
 
         return GenerateResult(
             acceptance_criteria=[

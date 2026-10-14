@@ -39,7 +39,8 @@ def upload_document(
     tags: str | None = Form(None, description="Comma-separated tag names"),
     service: IngestService = Depends(get_ingest_service),
 ) -> UploadRead:
-    tag_names = [name.strip() for name in (tags or "").split(",") if name.strip()]
+    tag_names = [name.strip()
+                 for name in (tags or "").split(",") if name.strip()]
 
     try:
         result = service.ingest_file(
@@ -60,7 +61,8 @@ def upload_document(
         document_id=document.id if document else None,
         title=document.title if document else (title or filename),
         filename=document.filename if document else filename,
-        extension=document.extension if document else Path(filename).suffix.lower() or None,
+        extension=document.extension if document else Path(
+            filename).suffix.lower() or None,
         chunk_count=result.chunk_count,
         text=result.text,
     )

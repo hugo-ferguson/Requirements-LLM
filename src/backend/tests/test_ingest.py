@@ -245,7 +245,8 @@ def test_upload_of_an_unstored_file_reports_a_null_document_id():
 
 
 def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
-    stub = StubIngestService(ImageExtractionError("vision model returned no text"))
+    stub = StubIngestService(ImageExtractionError(
+        "vision model returned no text"))
 
     response = _upload(stub)
 
@@ -254,7 +255,8 @@ def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
 
 
 def test_upload_rejects_an_unsupported_file():
-    stub = StubIngestService(UnsupportedFileError("Cannot extract text from 'a.zip'"))
+    stub = StubIngestService(UnsupportedFileError(
+        "Cannot extract text from 'a.zip'"))
 
     response = _upload(stub, filename="a.zip")
 

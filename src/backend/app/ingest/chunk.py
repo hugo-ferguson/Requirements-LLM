@@ -2,57 +2,57 @@ from __future__ import annotations
 
 
 def chunk_text(
-		text: str, chunk_size: int = 1000, overlap: int = 150
-	) -> list[str]:
-	"""
-	Splits text into overlapping chunks of at most `chunk_size` characters.
+    text: str, chunk_size: int = 1000, overlap: int = 150
+) -> list[str]:
+    """
+    Splits text into overlapping chunks of at most `chunk_size` characters.
 
-	Chunks end on a paragraph break where one is available, and otherwise on a
-	space, so that words are not cut in half. The overlap carries context
-	across the boundary for retrieval.
-	"""
-	if overlap >= chunk_size:
-		raise ValueError("overlap must be smaller than chunk_size")
+    Chunks end on a paragraph break where one is available, and otherwise on a
+    space, so that words are not cut in half. The overlap carries context
+    across the boundary for retrieval.
+    """
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be smaller than chunk_size")
 
-	text = text.strip()
-	if not text:
-		return []
+    text = text.strip()
+    if not text:
+        return []
 
-	chunks: list[str] = []
-	start = 0
+    chunks: list[str] = []
+    start = 0
 
-	while start < len(text):
-		end = min(start + chunk_size, len(text))
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
 
-		if end < len(text):
-			# Strictly after start + overlap: a break exactly there would make
-			# the next start (end - overlap) equal this one, and the loop would
-			# append the same chunk forever. A real PDF hit this and grew the
-			# backend until Docker's VM ran out of memory.
-			boundary = _boundary_before(text, start + overlap + 1, end)
-			if boundary is not None:
-				end = boundary
+        if end < len(text):
+            # Strictly after start + overlap: a break exactly there would make
+            # the next start (end - overlap) equal this one, and the loop would
+            # append the same chunk forever. A real PDF hit this and grew the
+            # backend until Docker's VM ran out of memory.
+            boundary = _boundary_before(text, start + overlap + 1, end)
+            if boundary is not None:
+                end = boundary
 
-		chunk = text[start:end].strip()
-		if chunk:
-			chunks.append(chunk)
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
 
-		if end >= len(text):
-			break
+        if end >= len(text):
+            break
 
-		start = end - overlap
+        start = end - overlap
 
-	return chunks
+    return chunks
 
 
 def _boundary_before(text: str, lower: int, upper: int) -> int | None:
-	"""
-	Finds the last paragraph break, or failing that the last space, in
-	`text[lower:upper]`. Returns None when the window holds neither.
-	"""
-	for separator in ("\n\n", "\n", " "):
-		position = text.rfind(separator, lower, upper)
-		if position != -1:
-			return position
+    """
+    Finds the last paragraph break, or failing that the last space, in
+    `text[lower:upper]`. Returns None when the window holds neither.
+    """
+    for separator in ("\n\n", "\n", " "):
+        position = text.rfind(separator, lower, upper)
+        if position != -1:
+            return position
 
-	return None
+    return None

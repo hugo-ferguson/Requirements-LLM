@@ -22,7 +22,8 @@ from voting.provider import (
 )
 
 
-OLLAMA = JudgeConfig(id="qwen", provider="ollama", model="qwen2.5:7b", max_parallel=1)
+OLLAMA = JudgeConfig(id="qwen", provider="ollama",
+                     model="qwen2.5:7b", max_parallel=1)
 CLOUD = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
@@ -84,7 +85,8 @@ def test_cloud_judges_still_run_concurrently():
     """The bound is set per judge for local single-model servers, not as a blanket cap."""
     client = _RecordingClient(CLOUD)
 
-    asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c", "d"]), client))
+    asyncio.run(evaluate_with_combined_model(
+        _input(["a", "b", "c", "d"]), client))
 
     assert client.peak_in_flight > 1
 
@@ -92,7 +94,8 @@ def test_cloud_judges_still_run_concurrently():
 def test_every_candidate_is_still_scored_when_serialised():
     client = _RecordingClient(OLLAMA)
 
-    result = asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c"]), client))
+    result = asyncio.run(evaluate_with_combined_model(
+        _input(["a", "b", "c"]), client))
 
     assert [item.output for item in result.output] == ["a", "b", "c"]
     assert all(item.overall_score == 4 for item in result.output)
@@ -123,7 +126,8 @@ def test_one_judge_limit_covers_concurrent_scoring_runs():
     """UAT generation scores every accepted AC at once. The judge's limit has
     to hold across those runs, not apply separately to each, or the total
     trips the provider's org-wide concurrency limit."""
-    judge = JudgeConfig(id="claude-limited", provider="anthropic", model="claude-sonnet-5-5", max_parallel=2)
+    judge = JudgeConfig(id="claude-limited", provider="anthropic",
+                        model="claude-sonnet-5-5", max_parallel=2)
     client = _RecordingClient(judge)
 
     async def three_runs_at_once():

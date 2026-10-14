@@ -46,7 +46,8 @@ def _build_regeneration_prompt(
 ) -> str:
     parts = [
         "Current acceptance criterion:",
-        render_ac_candidate(target.title, target.given, target.when, target.then),
+        render_ac_candidate(target.title, target.given,
+                            target.when, target.then),
     ]
     if data.messages:
         parts += [
@@ -165,7 +166,8 @@ class AcceptanceCriteriaService:
         record = self.ac.get(session_id, ac_id)
         if record is None:
             return None
-        updated = self.ac.update_text(record, data.title, data.given, data.when, data.then)
+        updated = self.ac.update_text(
+            record, data.title, data.given, data.when, data.then)
         return self._with_alternatives(updated)
 
     def update_status(
@@ -178,7 +180,8 @@ class AcceptanceCriteriaService:
         return self._with_alternatives(updated)
 
     def _with_alternatives(self, record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
-        [criterion] = to_acceptance_criteria(self.ac, record.session_id, [record])
+        [criterion] = to_acceptance_criteria(
+            self.ac, record.session_id, [record])
         return criterion
 
     def select_alternative(
@@ -225,7 +228,8 @@ class AcceptanceCriteriaService:
         candidate_text = render_ac_candidate(
             criterion.title, criterion.given, criterion.when, criterion.then
         )
-        [score] = self.scorer(prompt=prompt, candidates=[candidate_text], settings=self.settings)
+        [score] = self.scorer(prompt=prompt, candidates=[
+                              candidate_text], settings=self.settings)
 
         refined = AcceptanceCriterion(
             id=-1,
@@ -256,7 +260,8 @@ class AcceptanceCriteriaService:
         if self.ac.get(session_id, ac_id) is None:
             return None
         if not data.candidates:
-            raise ValueError("Must approve at least one candidate; use Cancel to discard instead.")
+            raise ValueError(
+                "Must approve at least one candidate; use Cancel to discard instead.")
 
         # The AC row being replaced may already have UAT cases generated
         # against it (via "Generate test cases..."). Those FK to this exact

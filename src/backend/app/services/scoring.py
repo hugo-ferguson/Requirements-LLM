@@ -79,7 +79,8 @@ def _voting_loop() -> asyncio.AbstractEventLoop:
     with _loop_lock:
         if _loop is None:
             _loop = asyncio.new_event_loop()
-            threading.Thread(target=_loop.run_forever, name="voting-loop", daemon=True).start()
+            threading.Thread(target=_loop.run_forever,
+                             name="voting-loop", daemon=True).start()
         return _loop
 
 
@@ -153,7 +154,8 @@ def score_candidates(
         os.environ["GEMINI_API_KEY"] = resolved_settings.gemini_api_key
 
     try:
-        selected = list(judges) if judges is not None else get_models_config().enabled_judges()
+        selected = list(
+            judges) if judges is not None else get_models_config().enabled_judges()
         evaluation_input = EvaluationInput(
             ai="requirements-llm",
             model="+".join(judge.id for judge in selected),
@@ -219,7 +221,8 @@ def _match_to_candidates(
     for candidate in candidates:
         bucket = queued.get(candidate)
         if not bucket:
-            raise LookupError(f"voting layer returned no result for candidate: {candidate!r}")
+            raise LookupError(
+                f"voting layer returned no result for candidate: {candidate!r}")
         scores.append(_to_candidate_score(bucket.popleft()))
     return scores
 
@@ -235,7 +238,8 @@ def _to_candidate_score(output: "EvaluatedOutput") -> CandidateScore:
     # Detected BEFORE _scale, which clamps the -1 sentinel to 0.0 and makes a
     # scoring failure indistinguishable from a genuine zero.
     failed = output.overall_score < 0 or any(value < 0 for value in raw)
-    relevance, correctness, understandability, coverage = (_scale(v) for v in raw)
+    relevance, correctness, understandability, coverage = (
+        _scale(v) for v in raw)
     return CandidateScore(
         relevance=relevance,
         correctness=correctness,

@@ -49,7 +49,8 @@ def _stub_output(config: GenerationAgentConfig, output_type: GenerationOutput = 
     if output_type is NumberedCriteriaSet:
         return NumberedCriteriaSet(
             criteria=[
-                NumberedCriterion(title_number=n, given=c.given, when=c.when, then=c.then)
+                NumberedCriterion(title_number=n, given=c.given,
+                                  when=c.when, then=c.then)
                 for n, c in enumerate(full.criteria, start=1)
             ]
         )

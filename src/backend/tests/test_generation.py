@@ -116,7 +116,8 @@ def _fake_scorer(overalls: list[float]):
     """
 
     def scorer(prompt, candidates, *, reference_answer='', settings=None):
-        assert len(candidates) == len(overalls), 'scorer got the wrong candidate count'
+        assert len(candidates) == len(
+            overalls), 'scorer got the wrong candidate count'
         return [
             CandidateScore(relevance=o, correctness=o, understandability=o,
                            coverage=o, overall=o)
@@ -156,7 +157,8 @@ def test_scores_land_on_their_own_criterion_and_rank_highest_first() -> None:
     repository uses list order for `position` (backlog R14, R17).
     """
     criteria = [_criterion(1), _criterion(2), _criterion(3)]
-    scores = _fake_scorer([2.0, 5.0, 1.0])(prompt='p', candidates=['a', 'b', 'c'])
+    scores = _fake_scorer([2.0, 5.0, 1.0])(
+        prompt='p', candidates=['a', 'b', 'c'])
 
     ranked = _to_wire_models(criteria, scores=scores)
 
@@ -284,8 +286,10 @@ def test_models_config_returns_only_enabled_agents_and_judges(tmp_path) -> None:
     """Adding or retiring a model is a config edit, not a code change."""
     path = _write_config(
         tmp_path,
-        [QWEN, {"id": "gemini", "provider": "google", "model": "gemini-2.0-flash", "enabled": False}],
-        judges=[JUDGE, {"id": "luna", "provider": "openai", "model": "gpt-6-luna", "enabled": False}],
+        [QWEN, {"id": "gemini", "provider": "google",
+                "model": "gemini-2.0-flash", "enabled": False}],
+        judges=[JUDGE, {"id": "luna", "provider": "openai",
+                        "model": "gpt-6-luna", "enabled": False}],
     )
 
     config = load_models_config(path)
@@ -311,7 +315,8 @@ def test_output_mode_defaults_to_native_and_is_read_per_entry(tmp_path) -> None:
         )
     )
 
-    assert [agent.output_mode for agent in config.generation_agents] == ["native", "prompted"]
+    assert [agent.output_mode for agent in config.generation_agents] == [
+        "native", "prompted"]
     assert config.chat_model.output_mode == "native"
     assert config.judges[0].output_mode == "tool"
 
@@ -319,9 +324,12 @@ def test_output_mode_defaults_to_native_and_is_read_per_entry(tmp_path) -> None:
 def test_output_mode_wraps_the_output_type() -> None:
     """Native output is how Sonnet 5.5 gets structured output: it rejects the
     forced tool call that "tool" mode sends."""
-    assert with_output_mode(GeneratedCriteriaSet, "tool") is GeneratedCriteriaSet
-    assert isinstance(with_output_mode(GeneratedCriteriaSet, "native"), NativeOutput)
-    assert isinstance(with_output_mode(GeneratedCriteriaSet, "prompted"), PromptedOutput)
+    assert with_output_mode(GeneratedCriteriaSet,
+                            "tool") is GeneratedCriteriaSet
+    assert isinstance(with_output_mode(
+        GeneratedCriteriaSet, "native"), NativeOutput)
+    assert isinstance(with_output_mode(
+        GeneratedCriteriaSet, "prompted"), PromptedOutput)
     assert with_output_mode(str, "native") is str
 
 
@@ -368,7 +376,8 @@ def test_models_config_rejects_nothing_enabled(tmp_path) -> None:
     with pytest.raises(ModelsConfigError, match="No enabled generation_agents"):
         load_models_config(no_agents)
 
-    no_judges = _write_config(tmp_path, [QWEN], judges=[{**JUDGE, "enabled": False}])
+    no_judges = _write_config(tmp_path, [QWEN], judges=[
+                              {**JUDGE, "enabled": False}])
     with pytest.raises(ModelsConfigError, match="No enabled judges"):
         load_models_config(no_judges)
 
@@ -449,7 +458,8 @@ async def test_a_hanging_agent_is_cut_off_at_the_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One slow model must not eat the whole R6 budget."""
-    monkeypatch.setattr(orchestrator, "build_agent", lambda config: _HangingAgent())
+    monkeypatch.setattr(orchestrator, "build_agent",
+                        lambda config: _HangingAgent())
 
     ensemble = await run_ensemble(
         GenerationDeps(user_story="story"),
@@ -465,10 +475,12 @@ async def test_every_agent_failing_is_reported_as_a_failed_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The service turns a total wipeout into a 502, not an empty success."""
-    monkeypatch.setattr(orchestrator, "build_agent", lambda config: _ExplodingAgent())
+    monkeypatch.setattr(orchestrator, "build_agent",
+                        lambda config: _ExplodingAgent())
 
     service = GenerationService(_settings())
-    messages = [ConversationMessage(role="user", text="As a user I want to log in")]
+    messages = [ConversationMessage(
+        role="user", text="As a user I want to log in")]
 
     with pytest.raises(RuntimeError, match="Every generation agent failed"):
         await service.generate(messages)
@@ -566,7 +578,8 @@ async def test_a_broken_vector_store_does_not_fail_generation() -> None:
 def test_retrieved_chunks_are_rendered_into_the_prompt() -> None:
     deps = GenerationDeps(
         user_story="story",
-        context_chunks=["Passwords expire after 90 days.", "Reset links last 1 hour."],
+        context_chunks=["Passwords expire after 90 days.",
+                        "Reset links last 1 hour."],
     )
 
     block = deps.context_block()
@@ -596,7 +609,8 @@ def test_reviewer_feedback_is_only_added_on_a_regeneration_pass() -> None:
 
 
 def test_user_prompt_carries_the_story_and_the_criteria_budget() -> None:
-    prompt = build_user_prompt(GenerationDeps(user_story="As a user I want X"), 6)
+    prompt = build_user_prompt(GenerationDeps(
+        user_story="As a user I want X"), 6)
 
     assert "up to 6 acceptance criteria" in prompt
     assert "As a user I want X" in prompt
@@ -614,8 +628,10 @@ def test_only_user_turns_reach_the_agents() -> None:
             ConversationMessage(
                 role="user", text="As a user I want to reset my password"
             ),
-            ConversationMessage(role="assistant", text="Sure, that sounds clear."),
-            ConversationMessage(role="user", text="It must expire after one hour."),
+            ConversationMessage(
+                role="assistant", text="Sure, that sounds clear."),
+            ConversationMessage(
+                role="user", text="It must expire after one hour."),
         ]
     )
 
@@ -649,7 +665,8 @@ def test_attachment_text_is_included_in_the_story() -> None:
     [
         [],
         [ConversationMessage(role="user", text="   ")],
-        [ConversationMessage(role="assistant", text="Only an assistant reply")],
+        [ConversationMessage(
+            role="assistant", text="Only an assistant reply")],
     ],
 )
 def test_an_empty_conversation_is_refused_rather_than_invented(messages) -> None:
@@ -721,7 +738,8 @@ def test_group_by_title_collects_one_candidate_per_agent():
 
     groups = orchestrator.group_by_title(anchor, [follower])
 
-    assert [group.title for group in groups] == ["Log in", "Reject bad password"]
+    assert [group.title for group in groups] == [
+        "Log in", "Reject bad password"]
     assert all(len(group.candidates) == 2 for group in groups)
     assert [c.agent_id for c in groups[0].candidates] == ["anchor", "follower"]
 
@@ -763,8 +781,10 @@ def test_candidate_group_ranks_best_first():
     group = CandidateGroup(
         title="Log in",
         candidates=[
-            Candidate(agent_id="a", criterion=_criterion(1), overall_score=2.0),
-            Candidate(agent_id="b", criterion=_criterion(2), overall_score=4.5),
+            Candidate(agent_id="a", criterion=_criterion(
+                1), overall_score=2.0),
+            Candidate(agent_id="b", criterion=_criterion(
+                2), overall_score=4.5),
         ],
     )
 
@@ -780,7 +800,8 @@ def test_candidate_group_tie_break_is_deterministic():
         group = CandidateGroup(
             title="Log in",
             candidates=[
-                Candidate(agent_id=agent, criterion=_criterion(1), overall_score=3.0)
+                Candidate(agent_id=agent, criterion=_criterion(
+                    1), overall_score=3.0)
                 for agent in order
             ],
         )
@@ -795,8 +816,10 @@ def test_grouped_wire_models_expose_winner_with_alternatives_behind_it():
     group = CandidateGroup(
         title="Log in",
         candidates=[
-            Candidate(agent_id="weak", criterion=_criterion(1), overall_score=1.0),
-            Candidate(agent_id="strong", criterion=_criterion(2), overall_score=4.0),
+            Candidate(agent_id="weak", criterion=_criterion(
+                1), overall_score=1.0),
+            Candidate(agent_id="strong", criterion=_criterion(
+                2), overall_score=4.0),
         ],
     )
     group.rank()
@@ -818,8 +841,10 @@ def test_grouped_wire_models_stay_backwards_compatible():
         CandidateGroup(
             title=f"Title {n}",
             candidates=[
-                Candidate(agent_id="a", criterion=_criterion(n), overall_score=3.0),
-                Candidate(agent_id="b", criterion=_criterion(n), overall_score=1.0),
+                Candidate(agent_id="a", criterion=_criterion(
+                    n), overall_score=3.0),
+                Candidate(agent_id="b", criterion=_criterion(
+                    n), overall_score=1.0),
             ],
         )
         for n in (1, 2)
@@ -919,7 +944,8 @@ def _numbered(*numbers: int) -> NumberedCriteriaSet:
 def test_numbered_answers_carry_the_anchors_exact_titles():
     titles = ["Log in", "Reject bad password"]
 
-    criteria = orchestrator._attach_anchor_titles("follower", _numbered(2, 1), titles)
+    criteria = orchestrator._attach_anchor_titles(
+        "follower", _numbered(2, 1), titles)
 
     assert [(c.title, c.given) for c in criteria] == [
         ("Reject bad password", "given 2"),
@@ -930,14 +956,16 @@ def test_numbered_answers_carry_the_anchors_exact_titles():
 def test_unknown_and_repeated_title_numbers_are_dropped():
     titles = ["Log in", "Reject bad password"]
 
-    criteria = orchestrator._attach_anchor_titles("follower", _numbered(1, 3, 1, 2), titles)
+    criteria = orchestrator._attach_anchor_titles(
+        "follower", _numbered(1, 3, 1, 2), titles)
 
     assert [c.title for c in criteria] == ["Log in", "Reject bad password"]
     assert criteria[0].given == "given 1"
 
 
 def test_descriptions_prompt_asks_for_numbers_not_copied_titles():
-    prompt = build_descriptions_prompt(GenerationDeps(user_story="story"), ["Log in", "Log out"])
+    prompt = build_descriptions_prompt(GenerationDeps(
+        user_story="story"), ["Log in", "Log out"])
 
     assert "1. Log in" in prompt and "2. Log out" in prompt
     assert "title_number" in prompt
@@ -959,6 +987,7 @@ async def test_title_anchored_ensemble_groups_every_follower_answer():
         "Unique candidate from anchor",
     ]
     for group in groups:
-        assert sorted(c.agent_id for c in group.candidates) == ["anchor", "follower"]
+        assert sorted(c.agent_id for c in group.candidates) == [
+            "anchor", "follower"]
     third = next(c for c in groups[2].candidates if c.agent_id == "follower")
     assert third.criterion.given == "the follower agent produced this candidate"

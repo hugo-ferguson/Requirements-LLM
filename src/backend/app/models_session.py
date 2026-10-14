@@ -31,7 +31,8 @@ class Message(SQLModel, table=True):
     session_id: int = Field(foreign_key="chatsession.id", index=True)
     role: str
     text: str
-    attachments: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    attachments: list[dict] = Field(
+        default_factory=list, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=_utcnow)
 
 

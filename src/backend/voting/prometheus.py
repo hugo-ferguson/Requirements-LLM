@@ -21,7 +21,8 @@ from voting.models import (
 
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
-RUBRIC_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer"
+RUBRIC_DIR = Path(__file__).resolve().parent.parent / \
+    "ai_prompts" / "voting_layer"
 SYSTEM_PROMPT = "You are the Prometheus voting evaluator. Follow the supplied rubric exactly."
 
 
@@ -40,7 +41,8 @@ class PrometheusJudgeClient:
         )
 
     async def evaluate(self, *, instruction: str, response: str, rubric_name: str) -> PrometheusVote:
-        rubric = (RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
+        rubric = (
+            RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
         prompt = rubric.replace("{orig_instruction}", instruction)
         prompt = prompt.replace("{orig_response}", response)
 
@@ -75,17 +77,21 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
         for rubric_name, res in zip(RUBRIC_NAMES, results, strict=True):
             if isinstance(res, Exception):
                 error_message = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
-                rubric_feedback.append(RubricFeedback(rubric=rubric_name, value=-1, feedback=error_message))
+                rubric_feedback.append(RubricFeedback(
+                    rubric=rubric_name, value=-1, feedback=error_message))
             else:
-                rubric_feedback.append(RubricFeedback(rubric=rubric_name, value=res.score, feedback=res.feedback))
+                rubric_feedback.append(RubricFeedback(
+                    rubric=rubric_name, value=res.score, feedback=res.feedback))
 
         provider_feedback = ProviderFeedback(
             ai=judge.display_name,
             model=evaluator.model,
             feedback=rubric_feedback,
-            overall_score=sum(item.value for item in rubric_feedback) / len(rubric_feedback),
+            overall_score=sum(
+                item.value for item in rubric_feedback) / len(rubric_feedback),
         )
-        rubric_averages = [RubricAverage(rubric=item.rubric, value=float(item.value)) for item in rubric_feedback]
+        rubric_averages = [RubricAverage(rubric=item.rubric, value=float(
+            item.value)) for item in rubric_feedback]
         return EvaluatedOutput(
             output=output,
             feedback=[provider_feedback],
@@ -119,7 +125,8 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
                 EvaluatedOutput(
                     output=evaluation_input.output[idx],
                     feedback=[provider_feedback],
-                    rubric_averages=[RubricAverage(rubric=name, value=-1.0) for name in RUBRIC_NAMES],
+                    rubric_averages=[RubricAverage(
+                        rubric=name, value=-1.0) for name in RUBRIC_NAMES],
                     overall_score=-1.0,
                 )
             )

@@ -10,7 +10,8 @@ class MessageRepository:
         self.session = session
 
     def create(self, session_id: int, role: str, text: str, attachments: list[dict]) -> Message:
-        message = Message(session_id=session_id, role=role, text=text, attachments=attachments)
+        message = Message(session_id=session_id, role=role,
+                          text=text, attachments=attachments)
         self.session.add(message)
         self.session.commit()
         self.session.refresh(message)
@@ -18,7 +19,8 @@ class MessageRepository:
 
     def list_for_session(self, session_id: int) -> list[Message]:
         statement = (
-            select(Message).where(Message.session_id == session_id).order_by(Message.id.asc())
+            select(Message).where(Message.session_id ==
+                                  session_id).order_by(Message.id.asc())
         )
         return list(self.session.exec(statement).all())
 

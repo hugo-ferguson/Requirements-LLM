@@ -68,13 +68,14 @@ async def _run_one(
     number and the anchor's exact titles are attached here.
     """
     if anchor_titles is None:
-        make_agent = lambda: build_agent(config)  # noqa: E731
+        def make_agent(): return build_agent(config)  # noqa: E731
     else:
-        make_agent = lambda: build_agent(config, output_type=NumberedCriteriaSet)  # noqa: E731
+        def make_agent(): return build_agent(config, output_type=NumberedCriteriaSet)  # noqa: E731
     run = await _run_agent(
         config,
         make_agent,
-        prompt if prompt is not None else build_user_prompt(deps, max_criteria),
+        prompt if prompt is not None else build_user_prompt(
+            deps, max_criteria),
         deps,
         timeout_seconds,
     )
@@ -125,10 +126,12 @@ async def _run_agent(
         agent = make_agent()
         run = await asyncio.wait_for(agent.run(prompt, deps=deps), timeout=timeout_seconds)
     except ModelBuildError as error:
-        logger.warning("Generation agent %s not available: %s", config.id, error)
+        logger.warning("Generation agent %s not available: %s",
+                       config.id, error)
         return _AgentRun(error=str(error), duration_ms=elapsed_ms())
     except asyncio.TimeoutError:
-        logger.warning("Generation agent %s timed out after %ss", config.id, timeout_seconds)
+        logger.warning("Generation agent %s timed out after %ss",
+                       config.id, timeout_seconds)
         return _AgentRun(error=f"Timed out after {timeout_seconds}s", duration_ms=elapsed_ms())
     except Exception as error:  # noqa: BLE001 - one bad agent must not fail the run
         logger.exception("Generation agent %s failed", config.id)
@@ -156,7 +159,8 @@ def _attach_anchor_titles(
         answered.add(number)
         criteria.append(
             GeneratedCriterion(
-                title=titles[number - 1], given=item.given, when=item.when, then=item.then
+                title=titles[number -
+                             1], given=item.given, when=item.when, then=item.then
             )
         )
 
@@ -296,7 +300,8 @@ def group_by_title(
             continue
         groups[key] = CandidateGroup(
             title=criterion.title,
-            candidates=[Candidate(agent_id=anchor.agent_id, criterion=criterion)],
+            candidates=[
+                Candidate(agent_id=anchor.agent_id, criterion=criterion)],
         )
 
     for follower in followers:
@@ -398,7 +403,8 @@ async def run_uat_ensemble(
             deps,
             timeout_seconds,
         )
-        result = _uat_result(config, run, list(run.output.cases) if run.output else None)
+        result = _uat_result(config, run, list(
+            run.output.cases) if run.output else None)
         results.append(result)
         if result.ok and result.cases:
             anchor = result
@@ -423,7 +429,8 @@ async def run_uat_ensemble(
         _uat_result(
             config,
             run,
-            _attach_uat_titles(config.id, run.output, titles) if run.output else None,
+            _attach_uat_titles(config.id, run.output,
+                               titles) if run.output else None,
         )
         for config, run in zip(remaining, follower_runs, strict=True)
     ]
@@ -434,13 +441,15 @@ async def run_uat_ensemble(
         key = title_key(case.title)
         if key not in groups:
             groups[key] = UatCandidateGroup(
-                title=case.title, candidates=[UatCandidate(agent_id=anchor.agent_id, case=case)]
+                title=case.title, candidates=[UatCandidate(
+                    agent_id=anchor.agent_id, case=case)]
             )
     for follower in followers:
         for case in follower.cases:
             group = groups.get(title_key(case.title))
             if group is not None and all(c.agent_id != follower.agent_id for c in group.candidates):
-                group.candidates.append(UatCandidate(agent_id=follower.agent_id, case=case))
+                group.candidates.append(UatCandidate(
+                    agent_id=follower.agent_id, case=case))
 
     return results, list(groups.values())
 
@@ -456,7 +465,8 @@ def _attach_uat_titles(
         if not 1 <= number <= len(titles) or number in answered:
             continue
         answered.add(number)
-        cases.append(GeneratedUatCase(title=titles[number - 1], description=item.description))
+        cases.append(GeneratedUatCase(
+            title=titles[number - 1], description=item.description))
 
     dropped = len(output.cases) - len(cases)
     if dropped:

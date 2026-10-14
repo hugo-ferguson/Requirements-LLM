@@ -75,7 +75,8 @@ def load_models_config(path: str | Path) -> ModelsConfig:
     try:
         config = ModelsConfig.model_validate(payload)
     except ValidationError as error:
-        raise ModelsConfigError(f"Model config {config_path} is invalid: {error}") from error
+        raise ModelsConfigError(
+            f"Model config {config_path} is invalid: {error}") from error
 
     for section, ids in (
         ("agent", [agent.id for agent in config.generation_agents]),
@@ -87,7 +88,8 @@ def load_models_config(path: str | Path) -> ModelsConfig:
                 f"Duplicate {section} ids in {config_path}: {sorted(duplicates)}")
 
     if not config.enabled_agents():
-        raise ModelsConfigError(f"No enabled generation_agents in {config_path}.")
+        raise ModelsConfigError(
+            f"No enabled generation_agents in {config_path}.")
     if not config.enabled_judges():
         raise ModelsConfigError(f"No enabled judges in {config_path}.")
 

@@ -94,10 +94,12 @@ def test_select_alternative_swaps_text_and_scores_but_keeps_title_and_status(
     service.ac.update_status(service.ac.get(session_id, ac_ids[1]), "accepted")
     [alt] = service.list_items(session_id)[1].alternatives
 
-    result = service.select_alternative(session_id, ac_ids[1], alt.candidate_id)
+    result = service.select_alternative(
+        session_id, ac_ids[1], alt.candidate_id)
 
     swapped = result.acceptance_criterion
-    assert (swapped.given, swapped.when, swapped.then) == ("b given 1", "b when 1", "b then 1")
+    assert (swapped.given, swapped.when, swapped.then) == (
+        "b given 1", "b when 1", "b then 1")
     assert swapped.overall_score == 3
     assert swapped.scores == _scores(3)
     assert swapped.title == "Title 1"
@@ -117,10 +119,12 @@ def test_select_alternative_swaps_text_and_scores_but_keeps_title_and_status(
 def test_swapping_back_restores_the_original(db_session: Session) -> None:
     service, session_id, ac_ids = _seed(db_session)
     [alt] = service.list_items(session_id)[0].alternatives
-    swapped = service.select_alternative(session_id, ac_ids[0], alt.candidate_id)
+    swapped = service.select_alternative(
+        session_id, ac_ids[0], alt.candidate_id)
     [back] = swapped.acceptance_criterion.alternatives
 
-    restored = service.select_alternative(session_id, ac_ids[0], back.candidate_id)
+    restored = service.select_alternative(
+        session_id, ac_ids[0], back.candidate_id)
 
     criterion = restored.acceptance_criterion
     assert (criterion.given, criterion.overall_score, criterion.source_agent) == (
@@ -142,7 +146,8 @@ def test_manual_edit_survives_as_the_alternative(db_session: Session) -> None:
     )
     [alt] = service.list_items(session_id)[0].alternatives
 
-    result = service.select_alternative(session_id, ac_ids[0], alt.candidate_id)
+    result = service.select_alternative(
+        session_id, ac_ids[0], alt.candidate_id)
 
     [demoted] = result.acceptance_criterion.alternatives
     assert (demoted.given, demoted.when, demoted.then) == (
@@ -173,10 +178,13 @@ def test_select_alternative_rejects_a_candidate_from_another_ac_or_session(
     _, other_session_id, _ = _seed(db_session)
     other_session_alt = service.list_items(other_session_id)[0].alternatives[0]
 
-    assert service.select_alternative(session_id, ac_ids[0], other_ac_alt.candidate_id) is None
-    assert service.select_alternative(session_id, ac_ids[0], other_session_alt.candidate_id) is None
+    assert service.select_alternative(
+        session_id, ac_ids[0], other_ac_alt.candidate_id) is None
+    assert service.select_alternative(
+        session_id, ac_ids[0], other_session_alt.candidate_id) is None
     assert service.select_alternative(session_id, ac_ids[0], 999_999) is None
-    assert service.select_alternative(session_id, 999_999, other_ac_alt.candidate_id) is None
+    assert service.select_alternative(
+        session_id, 999_999, other_ac_alt.candidate_id) is None
     # Nothing changed.
     assert service.list_items(session_id)[0].given == "a given 0"
 
@@ -190,7 +198,8 @@ def test_select_alternative_reports_uat_cases_written_against_the_old_version(
     )
     [alt] = service.list_items(session_id)[0].alternatives
 
-    result = service.select_alternative(session_id, ac_ids[0], alt.candidate_id)
+    result = service.select_alternative(
+        session_id, ac_ids[0], alt.candidate_id)
 
     assert result.uat_cases_affected == 2
 
@@ -206,20 +215,24 @@ def test_apply_approved_keeps_other_acs_alternatives_on_the_right_ac(db_session:
         scores=_scores(5),
         overall_score=5,
     )
-    extra = replacement.model_copy(update={"title": "Extra", "given": "extra given"})
+    extra = replacement.model_copy(
+        update={"title": "Extra", "given": "extra given"})
 
     # Both replacements take the first AC's slot, shifting every later AC down.
     items = service.apply_approved(
-        session_id, ac_ids[0], ApplyApprovedRequest(candidates=[replacement, extra])
+        session_id, ac_ids[0], ApplyApprovedRequest(
+            candidates=[replacement, extra])
     )
 
-    assert [item.title for item in items] == ["Replacement", "Extra", "Title 1", "Title 2"]
+    assert [item.title for item in items] == [
+        "Replacement", "Extra", "Title 1", "Title 2"]
     assert items[0].alternatives == []
     assert items[1].alternatives == []
     assert items[2].alternatives[0].given == "b given 1"
     assert items[3].alternatives[0].given == "b given 2"
     # The replaced AC's candidates are gone, not left behind.
-    positions = {c.criterion_position for c in service.ac.candidates_for_session(session_id)}
+    positions = {
+        c.criterion_position for c in service.ac.candidates_for_session(session_id)}
     assert positions == {2, 3}
 
 
@@ -227,9 +240,11 @@ def test_select_alternative_route(client: TestClient) -> None:
     session = client.post("/sessions", json={}).json()
     client.post(
         f"/sessions/{session['id']}/messages",
-        json={"text": "As a user, I want to log in with my email and password.", "attachments": []},
+        json={"text": "As a user, I want to log in with my email and password.",
+              "attachments": []},
     )
-    generated = client.post(f"/sessions/{session['id']}/generate").json()["acceptance_criteria"]
+    generated = client.post(
+        f"/sessions/{session['id']}/generate").json()["acceptance_criteria"]
     # The two-agent test roster answers the shared titles twice.
     target = next(item for item in generated if item["alternatives"])
     alt = target["alternatives"][0]
@@ -257,8 +272,8 @@ def _uat_case(ac_id: int):
         ac_id=ac_id,
         title="case",
         description="description",
-        scores=UatCaseScores(relevance=1, correctness=1, understandability=1, coverage=1),
+        scores=UatCaseScores(relevance=1, correctness=1,
+                             understandability=1, coverage=1),
         overall_score=1,
         status="pending",
     )
-

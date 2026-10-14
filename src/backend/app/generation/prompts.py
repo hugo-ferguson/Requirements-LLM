@@ -113,7 +113,8 @@ def build_descriptions_prompt(
     the title back: the number is the join key, and the orchestrator attaches
     the anchor's exact title itself.
     """
-    numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    numbered = "\n".join(f"{index}. {title}" for index,
+                         title in enumerate(titles, start=1))
     return (
         "Below is a fixed, numbered list of acceptance criteria titles for a user "
         "story. Write your own given / when / then for EVERY title in the list.\n\n"
@@ -155,7 +156,8 @@ def build_uat_descriptions_prompt(acceptance_criterion: str, titles: list[str]) 
     Answers are identified by number, like `build_descriptions_prompt`, so a
     reworded title can't drop an agent's answer.
     """
-    numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    numbered = "\n".join(f"{index}. {title}" for index,
+                         title in enumerate(titles, start=1))
     return (
         "Below is a fixed, numbered list of UAT test case titles for an "
         "acceptance criterion. Write your own description for EVERY title.\n\n"

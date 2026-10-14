@@ -38,7 +38,6 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 150
 
-
     # --- Ensemble generation layer ---
     # Per-agent wall-clock limit. Keeps one slow model from eating the whole
     # 60s budget in R6.

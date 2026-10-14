@@ -63,7 +63,8 @@ async def test_the_next_agent_anchors_when_the_first_one_fails(monkeypatch):
 
     assert [r.agent_id for r in results] == ["broken", "healthy"]
     assert not results[0].ok
-    assert groups and all(g.candidates[0].agent_id == "healthy" for g in groups)
+    assert groups and all(
+        g.candidates[0].agent_id == "healthy" for g in groups)
 
 
 async def test_every_agent_failing_yields_no_groups(monkeypatch):
@@ -86,7 +87,8 @@ def test_unknown_and_repeated_case_numbers_are_dropped():
         ]
     )
 
-    cases = orchestrator._attach_uat_titles("follower", output, ["First", "Second"])
+    cases = orchestrator._attach_uat_titles(
+        "follower", output, ["First", "Second"])
 
     assert [(c.title, c.description) for c in cases] == [
         ("Second", "description 2"),
@@ -153,9 +155,11 @@ def _seed(db_session: Session, count: int = 3) -> tuple[UatCaseService, int, lis
         ],
     )
     uat_repo = UatCaseRepository(db_session)
-    uat_repo.persist_generated(chat_session.id, {ac.id: [_case(ac.id, n) for n in range(count)]})
+    uat_repo.persist_generated(
+        chat_session.id, {ac.id: [_case(ac.id, n) for n in range(count)]})
     service = UatCaseService(
-        SessionRepository(db_session), uat_repo, AcceptanceCriteriaRepository(db_session)
+        SessionRepository(
+            db_session), uat_repo, AcceptanceCriteriaRepository(db_session)
     )
     return service, chat_session.id, [r.id for r in uat_repo.list_for_ac(ac.id)]
 
@@ -180,10 +184,12 @@ def test_list_includes_alternatives_and_source_agent(db_session: Session) -> Non
 
 def test_select_alternative_swaps_and_swapping_back_restores(db_session: Session) -> None:
     service, session_id, uat_ids = _seed(db_session)
-    service.uat.update_status(service.uat.get(session_id, uat_ids[1]), "accepted")
+    service.uat.update_status(service.uat.get(
+        session_id, uat_ids[1]), "accepted")
     [alt] = _cases(service, session_id)[1].alternatives
 
-    swapped = service.select_alternative(session_id, uat_ids[1], alt.candidate_id)
+    swapped = service.select_alternative(
+        session_id, uat_ids[1], alt.candidate_id)
 
     assert (swapped.description, swapped.overall_score, swapped.source_agent) == (
         "b description 1",
@@ -195,18 +201,22 @@ def test_select_alternative_swaps_and_swapping_back_restores(db_session: Session
     assert back.description == "a description 1"
     assert _cases(service, session_id)[0].description == "a description 0"
 
-    restored = service.select_alternative(session_id, uat_ids[1], back.candidate_id)
-    assert (restored.description, restored.source_agent) == ("a description 1", "agent-a")
+    restored = service.select_alternative(
+        session_id, uat_ids[1], back.candidate_id)
+    assert (restored.description, restored.source_agent) == (
+        "a description 1", "agent-a")
 
 
 def test_manual_edit_survives_as_the_alternative(db_session: Session) -> None:
     service, session_id, uat_ids = _seed(db_session)
     service.update_text(
-        session_id, uat_ids[0], UatCaseTextUpdate(title="Case 0", description="edited")
+        session_id, uat_ids[0], UatCaseTextUpdate(
+            title="Case 0", description="edited")
     )
     [alt] = _cases(service, session_id)[0].alternatives
 
-    swapped = service.select_alternative(session_id, uat_ids[0], alt.candidate_id)
+    swapped = service.select_alternative(
+        session_id, uat_ids[0], alt.candidate_id)
 
     assert swapped.alternatives[0].description == "edited"
 
@@ -215,7 +225,8 @@ def test_select_alternative_rejects_a_candidate_from_another_case(db_session: Se
     service, session_id, uat_ids = _seed(db_session)
     other_case_alt = _cases(service, session_id)[1].alternatives[0]
 
-    assert service.select_alternative(session_id, uat_ids[0], other_case_alt.candidate_id) is None
+    assert service.select_alternative(
+        session_id, uat_ids[0], other_case_alt.candidate_id) is None
     assert service.select_alternative(session_id, uat_ids[0], 999_999) is None
     assert _cases(service, session_id)[0].description == "a description 0"
 
@@ -237,12 +248,14 @@ def test_apply_approved_keeps_other_cases_alternatives_on_the_right_case(
         session_id,
         uat_ids[0],
         UatApplyApprovedRequest(
-            candidates=[replacement, replacement.model_copy(update={"title": "Extra"})]
+            candidates=[replacement, replacement.model_copy(
+                update={"title": "Extra"})]
         ),
     )
 
     cases = group.uat_cases
-    assert [c.title for c in cases] == ["Replacement", "Extra", "Case 1", "Case 2"]
+    assert [c.title for c in cases] == [
+        "Replacement", "Extra", "Case 1", "Case 2"]
     assert cases[0].alternatives == [] and cases[1].alternatives == []
     assert cases[2].alternatives[0].description == "b description 1"
     assert cases[3].alternatives[0].description == "b description 2"
@@ -255,15 +268,18 @@ def test_generate_and_select_alternative_routes(client: TestClient) -> None:
     session = client.post("/sessions", json={}).json()
     client.post(
         f"/sessions/{session['id']}/messages",
-        json={"text": "As a user, I want to log in with my email and password.", "attachments": []},
+        json={"text": "As a user, I want to log in with my email and password.",
+              "attachments": []},
     )
-    [ac, *_] = client.post(f"/sessions/{session['id']}/generate").json()["acceptance_criteria"]
+    [ac, *_] = client.post(f"/sessions/{session['id']}/generate").json()[
+        "acceptance_criteria"]
     client.patch(
         f"/sessions/{session['id']}/acceptance-criteria/{ac['id']}/status",
         json={"status": "accepted"},
     )
 
-    groups = client.post(f"/sessions/{session['id']}/uat-cases/generate").json()["groups"]
+    groups = client.post(
+        f"/sessions/{session['id']}/uat-cases/generate").json()["groups"]
     target = groups[0]["uat_cases"][0]
     [alt] = target["alternatives"]
 

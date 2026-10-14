@@ -12,7 +12,8 @@ def _generate(client: TestClient, session_id: int) -> list[dict]:
     # (see EmptyConversationError), so every test needs real content first.
     client.post(
         f"/sessions/{session_id}/messages",
-        json={"text": "As a user, I want to log in with my email and password.", "attachments": []},
+        json={"text": "As a user, I want to log in with my email and password.",
+              "attachments": []},
     )
     response = client.post(f"/sessions/{session_id}/generate")
     assert response.status_code == 200
@@ -39,7 +40,8 @@ def test_generate_replaces_existing_batch(client: TestClient) -> None:
     # The second generate call should replace the first batch, not append to
     # it — confirm the persisted list matches the second call exactly rather
     # than containing both batches' worth of items.
-    listed = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
+    listed = client.get(
+        f"/sessions/{session['id']}/acceptance-criteria").json()
     assert listed["acceptance_criteria"] == second
 
 
@@ -77,10 +79,12 @@ def test_update_text_404_for_missing_ac_or_session(client: TestClient) -> None:
     body = {"title": "t", "given": "g", "when": "w", "then": "t"}
 
     assert (
-        client.patch(f"/sessions/{session['id']}/acceptance-criteria/9999", json=body).status_code
+        client.patch(
+            f"/sessions/{session['id']}/acceptance-criteria/9999", json=body).status_code
         == 404
     )
-    assert client.patch("/sessions/9999/acceptance-criteria/1", json=body).status_code == 404
+    assert client.patch("/sessions/9999/acceptance-criteria/1",
+                        json=body).status_code == 404
 
 
 def test_update_status_toggle(client: TestClient) -> None:
@@ -113,7 +117,8 @@ def test_update_status_404_for_missing_ac_or_session(client: TestClient) -> None
         ).status_code
         == 404
     )
-    assert client.patch("/sessions/9999/acceptance-criteria/1/status", json=body).status_code == 404
+    assert client.patch(
+        "/sessions/9999/acceptance-criteria/1/status", json=body).status_code == 404
 
 
 def test_regenerate_selected_returns_candidates_without_mutating_persisted_list(
@@ -122,11 +127,13 @@ def test_regenerate_selected_returns_candidates_without_mutating_persisted_list(
     session = _create_session(client)
     items = _generate(client, session["id"])
     target = items[0]
-    before = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
+    before = client.get(
+        f"/sessions/{session['id']}/acceptance-criteria").json()
 
     response = client.post(
         f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/regenerate",
-        json={"messages": [{"role": "user", "text": "more context please", "attachments": []}]},
+        json={"messages": [
+            {"role": "user", "text": "more context please", "attachments": []}]},
     )
     assert response.status_code == 200
     body = response.json()
@@ -227,7 +234,8 @@ def test_apply_approved_404_for_missing_ac(client: TestClient) -> None:
     _generate(client, session["id"])
     response = client.post(
         f"/sessions/{session['id']}/acceptance-criteria/9999/apply-approved",
-        json={"candidates": [{"id": -1, "title": "t", "given": "g", "when": "w", "then": "t", "scores": {"relevance": 5, "correctness": 5, "understandability": 5, "coverage": 5}, "overall_score": 5}]},
+        json={"candidates": [{"id": -1, "title": "t", "given": "g", "when": "w", "then": "t", "scores": {
+            "relevance": 5, "correctness": 5, "understandability": 5, "coverage": 5}, "overall_score": 5}]},
     )
     assert response.status_code == 404
 
@@ -241,7 +249,8 @@ def test_regenerate_all_kickoff_message_references_rejected_titles(client: TestC
         json={"status": "rejected"},
     )
 
-    response = client.post(f"/sessions/{session['id']}/acceptance-criteria/regenerate-all-kickoff")
+    response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/regenerate-all-kickoff")
     assert response.status_code == 201
     body = response.json()
     assert body["role"] == "assistant"
@@ -258,7 +267,8 @@ def test_regenerate_all_kickoff_message_references_rejected_titles(client: TestC
 
 
 def test_regenerate_all_kickoff_404_for_missing_session(client: TestClient) -> None:
-    response = client.post("/sessions/9999/acceptance-criteria/regenerate-all-kickoff")
+    response = client.post(
+        "/sessions/9999/acceptance-criteria/regenerate-all-kickoff")
     assert response.status_code == 404
 
 
@@ -268,4 +278,5 @@ def test_delete_session_with_acceptance_criteria(client: TestClient) -> None:
 
     response = client.delete(f"/sessions/{session['id']}")
     assert response.status_code == 204
-    assert client.get(f"/sessions/{session['id']}/acceptance-criteria").status_code == 404
+    assert client.get(
+        f"/sessions/{session['id']}/acceptance-criteria").status_code == 404

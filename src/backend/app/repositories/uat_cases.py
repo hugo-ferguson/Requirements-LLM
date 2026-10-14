@@ -81,7 +81,8 @@ class UatCaseRepository:
             for item in new_items
         ]
 
-        merged = remaining[:target_position] + new_records + remaining[target_position:]
+        merged = remaining[:target_position] + \
+            new_records + remaining[target_position:]
         new_position_by_old = {
             record.position: index
             for index, record in enumerate(merged)
@@ -186,7 +187,8 @@ class UatCaseRepository:
         )
         grouped: dict[tuple[int, int], list[UatCaseCandidateRecord]] = {}
         for candidate in self.session.exec(statement).all():
-            grouped.setdefault((candidate.ac_id, candidate.case_position), []).append(candidate)
+            grouped.setdefault(
+                (candidate.ac_id, candidate.case_position), []).append(candidate)
         return grouped
 
     def get_candidate(self, session_id: int, candidate_id: int) -> UatCaseCandidateRecord | None:

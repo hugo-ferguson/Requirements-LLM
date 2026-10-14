@@ -12,7 +12,8 @@ from llm.spec import ModelSpec
 # The app's model config. The voting package reads its `judges` section only
 # when run standalone (the scripts here, the MCP server); the app passes
 # judges in explicitly.
-DEFAULT_MODELS_CONFIG = Path(__file__).resolve().parent.parent / "config" / "models.json"
+DEFAULT_MODELS_CONFIG = Path(__file__).resolve(
+).parent.parent / "config" / "models.json"
 
 
 class JudgeConfig(ModelSpec):
@@ -23,7 +24,8 @@ class JudgeConfig(ModelSpec):
     judge votes.
     """
 
-    id: str = Field(description="Label used in logs and results, e.g. 'claude'")
+    id: str = Field(
+        description="Label used in logs and results, e.g. 'claude'")
     enabled: bool = True
     # One call scoring all four rubrics, or Prometheus-style, one call each.
     style: Literal["combined", "per_rubric"] = "combined"
@@ -43,7 +45,8 @@ class JudgeConfig(ModelSpec):
 def load_judges(path: Path = DEFAULT_MODELS_CONFIG) -> list[JudgeConfig]:
     """The enabled judges from a models config file."""
     payload = json.loads(path.read_text(encoding="utf-8"))
-    judges = [JudgeConfig.model_validate(item) for item in payload.get("judges", [])]
+    judges = [JudgeConfig.model_validate(item)
+              for item in payload.get("judges", [])]
     return [judge for judge in judges if judge.enabled]
 
 
@@ -53,7 +56,8 @@ class EvaluationInput(BaseModel):
     prompt: str
     output: list[str] = Field(min_length=1)
     reference_answer: str = ""
-    judges: list[JudgeConfig] = Field(default_factory=load_judges, min_length=1)
+    judges: list[JudgeConfig] = Field(
+        default_factory=load_judges, min_length=1)
 
 
 class PrometheusVote(BaseModel):

@@ -26,7 +26,8 @@ def _to_conversation_message(message: Message) -> ConversationMessage:
     return ConversationMessage(
         role=message.role,
         text=message.text,
-        attachments=[ConversationAttachment(**attachment) for attachment in message.attachments],
+        attachments=[ConversationAttachment(
+            **attachment) for attachment in message.attachments],
     )
 
 
@@ -35,7 +36,8 @@ def _to_message_read(message: Message) -> MessageRead:
         id=message.id,
         role=message.role,
         text=message.text,
-        attachments=[ConversationAttachment(**attachment) for attachment in message.attachments],
+        attachments=[ConversationAttachment(
+            **attachment) for attachment in message.attachments],
         created_at=message.created_at,
     )
 
@@ -107,11 +109,13 @@ class SessionService:
             session_id=session_id,
             role="user",
             text=data.text,
-            attachments=[attachment.model_dump() for attachment in data.attachments],
+            attachments=[attachment.model_dump()
+                         for attachment in data.attachments],
         )
 
         history = self.messages.list_for_session(session_id)
-        request = ConversationRequest(messages=[_to_conversation_message(m) for m in history])
+        request = ConversationRequest(
+            messages=[_to_conversation_message(m) for m in history])
         reply = self.conversation.send_message(request)
 
         reply_message = self.messages.create(
@@ -138,7 +142,8 @@ class SessionService:
         # against the old ids would otherwise be left as orphaned rows (or
         # violate the FK, in a database that enforces it) — clear them too.
         self.uat_cases.delete_for_session(session_id)
-        persisted = self.acceptance_criteria.persist_batch(session_id, criteria)
+        persisted = self.acceptance_criteria.persist_batch(
+            session_id, criteria)
         return GenerateResult(
             acceptance_criteria=to_acceptance_criteria(
                 self.acceptance_criteria, session_id, persisted

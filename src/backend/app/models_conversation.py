@@ -59,7 +59,8 @@ class AcceptanceCriterion(SQLModel):
     # nothing about them keeps working unchanged — the frontend can adopt the
     # alternatives UI whenever it is ready rather than in lockstep with this.
     source_agent: str | None = None
-    alternatives: list[AcceptanceCriterionAlternative] = Field(default_factory=list)
+    alternatives: list[AcceptanceCriterionAlternative] = Field(
+        default_factory=list)
 
 
 class GenerateResult(SQLModel):

@@ -229,7 +229,8 @@ class EnsembleResult(BaseModel):
 class GeneratedUatCase(BaseModel):
     """One UAT test case, as written by a model."""
 
-    title: str = Field(description="Short label for the scenario under test", min_length=3)
+    title: str = Field(
+        description="Short label for the scenario under test", min_length=3)
     description: str = Field(
         description="Concrete steps/data a tester follows and the expected result",
         min_length=3,

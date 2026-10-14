@@ -116,7 +116,8 @@ def test_score_candidates_falls_back_to_zero_when_the_provider_call_raises(monke
 
     scores = score_candidates("prompt", ["a", "b"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
+    assert scores == [CandidateScore(
+        0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_falls_back_to_zero_when_results_dont_cover_all_candidates(monkeypatch):
@@ -124,14 +125,16 @@ def test_score_candidates_falls_back_to_zero_when_results_dont_cover_all_candida
         # Only one result for two candidates submitted.
         return _voting_result(
             evaluation_input.prompt,
-            [_evaluated_output("a", overall=5, relevance=5, correctness=5, understandability=5, coverage=5)],
+            [_evaluated_output("a", overall=5, relevance=5,
+                               correctness=5, understandability=5, coverage=5)],
         )
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
 
     scores = score_candidates("prompt", ["a", "b"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
+    assert scores == [CandidateScore(
+        0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_falls_back_to_zero_when_voting_failed_to_import(monkeypatch):
@@ -148,7 +151,8 @@ def test_score_candidates_bridges_gemini_api_key_into_environment(monkeypatch):
     async def fake_evaluate_input(evaluation_input):
         return _voting_result(
             evaluation_input.prompt,
-            [_evaluated_output("a", overall=5, relevance=5, correctness=5, understandability=5, coverage=5)],
+            [_evaluated_output("a", overall=5, relevance=5,
+                               correctness=5, understandability=5, coverage=5)],
         )
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
@@ -165,7 +169,8 @@ def test_score_candidates_does_not_overwrite_an_already_set_gemini_api_key(monke
     async def fake_evaluate_input(evaluation_input):
         return _voting_result(
             evaluation_input.prompt,
-            [_evaluated_output("a", overall=5, relevance=5, correctness=5, understandability=5, coverage=5)],
+            [_evaluated_output("a", overall=5, relevance=5,
+                               correctness=5, understandability=5, coverage=5)],
         )
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)

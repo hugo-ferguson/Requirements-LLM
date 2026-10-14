@@ -122,13 +122,15 @@ class AcceptanceCriteriaRepository:
     ) -> dict[int, list[AcceptanceCriterionCandidateRecord]]:
         grouped: dict[int, list[AcceptanceCriterionCandidateRecord]] = {}
         for candidate in self.candidates_for_session(session_id):
-            grouped.setdefault(candidate.criterion_position, []).append(candidate)
+            grouped.setdefault(candidate.criterion_position,
+                               []).append(candidate)
         return grouped
 
     def get_candidate(
         self, session_id: int, candidate_id: int
     ) -> AcceptanceCriterionCandidateRecord | None:
-        candidate = self.session.get(AcceptanceCriterionCandidateRecord, candidate_id)
+        candidate = self.session.get(
+            AcceptanceCriterionCandidateRecord, candidate_id)
         if candidate is None or candidate.session_id != session_id:
             return None
         return candidate
@@ -146,7 +148,8 @@ class AcceptanceCriteriaRepository:
         status are left alone: the title belongs to the group, not to a
         candidate, and swapping wording is not a review decision.
         """
-        position_rows = self.candidates_by_position(record.session_id).get(record.position, [])
+        position_rows = self.candidates_by_position(
+            record.session_id).get(record.position, [])
         outgoing = next((row for row in position_rows if row.is_winner), None)
         if outgoing is None:
             # An AC from regenerate-selected has no candidate rows of its own.
@@ -260,7 +263,8 @@ class AcceptanceCriteriaRepository:
             for item in new_items
         ]
 
-        merged = remaining[:target_position] + new_records + remaining[target_position:]
+        merged = remaining[:target_position] + \
+            new_records + remaining[target_position:]
         new_position_by_old = {
             record.position: index
             for index, record in enumerate(merged)
@@ -274,7 +278,8 @@ class AcceptanceCriteriaRepository:
         # above or alternatives end up attached to a neighbouring criterion.
         # The replaced criterion's own candidates go with it.
         for candidate in self.candidates_for_session(session_id):
-            new_position = new_position_by_old.get(candidate.criterion_position)
+            new_position = new_position_by_old.get(
+                candidate.criterion_position)
             if new_position is None:
                 self.session.delete(candidate)
             else:
