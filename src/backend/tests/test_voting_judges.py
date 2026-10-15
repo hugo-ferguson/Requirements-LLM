@@ -1,4 +1,4 @@
-"""Several judges score every candidate and their scores are averaged."""
+"""Several judges score every candidate; their scores are averaged."""
 
 from __future__ import annotations
 
@@ -17,12 +17,13 @@ from voting.models import (
 )
 
 RUBRICS = ("correctness", "coverage", "relevance", "understandability")
-CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5")
+CLAUDE = JudgeConfig(id="claude", provider="anthropic",
+                     model="claude-sonnet-5-5")
 LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> VotingResult:
-    """What one judge returns: every rubric of every candidate at `score`."""
+    """Return one judge's result, with every rubric at `score`."""
     return VotingResult(
         ai=evaluation_input.ai,
         model=evaluation_input.model,
@@ -40,7 +41,8 @@ def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> Voting
                         overall_score=float(score),
                     )
                 ],
-                rubric_averages=[RubricAverage(rubric=r, value=float(score)) for r in RUBRICS],
+                rubric_averages=[RubricAverage(
+                    rubric=r, value=float(score)) for r in RUBRICS],
                 overall_score=float(score),
             )
             for output in evaluation_input.output
@@ -91,7 +93,8 @@ def test_two_judges_are_averaged(monkeypatch) -> None:
     [result] = asyncio.run(voting.evaluate_input(evaluation_input)).output
 
     assert result.overall_score == 3.0
-    assert {avg.rubric: avg.value for avg in result.rubric_averages}["coverage"] == 3.0
+    assert {avg.rubric: avg.value for avg in result.rubric_averages}[
+        "coverage"] == 3.0
 
 
 def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(monkeypatch) -> None:
@@ -110,7 +113,7 @@ def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(monkey
 
 
 def test_every_scoring_call_runs_on_one_long_lived_loop(monkeypatch) -> None:
-    """A loop per call multiplied each judge's concurrency limit."""
+    """Share one loop so judge concurrency limits aren't multiplied."""
     import threading
 
     loops = []

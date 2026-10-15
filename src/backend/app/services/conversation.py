@@ -1,3 +1,5 @@
+"""The chat assistant and single-agent AC generation."""
+
 from __future__ import annotations
 
 import logging
@@ -30,8 +32,8 @@ __all__ = [
     "render_conversation",
 ]
 
-# Fallback only — used when the real chat agent call fails, so chat never
-# hard-crashes the conversation.
+# Fallback only — used when the real chat agent call fails, so chat
+# never hard-crashes the conversation.
 _CANNED_ASSISTANT_REPLY = (
     "From viewing the user stories there seems to be enough context, "
     "feel free to generate the acceptance criteria."
@@ -67,12 +69,11 @@ here — that only happens through the dedicated Generate step.
 
 
 class EmptyConversationError(ValueError):
-    """
-    Raised when there is nothing to generate acceptance criteria from.
+    """Raised when there is nothing to generate criteria from.
 
-    Worth guarding explicitly: asked to work from an empty conversation, the
-    model does not refuse — it invents a plausible feature and writes criteria
-    for it, which is far worse than an error.
+    Worth guarding explicitly: asked to work from an empty conversation,
+    the model does not refuse — it invents a plausible feature and
+    writes criteria for it, which is far worse than an error.
     """
 
 
@@ -88,6 +89,8 @@ class GeneratedCriterion(BaseModel):
 
 
 class GeneratedCriteria(BaseModel):
+    """The model's full answer: one or more acceptance criteria."""
+
     criteria: list[GeneratedCriterion] = Field(
         description="Gherkin-style acceptance criteria, one per testable behaviour",
         min_length=1,
@@ -95,28 +98,27 @@ class GeneratedCriteria(BaseModel):
 
 
 def build_agent(settings: Settings) -> Agent[None, GeneratedCriteria]:
-    """Returns the acceptance-criteria agent for the configured model."""
+    """Return the acceptance-criteria agent for the configured model."""
     return _build_shared_agent(settings, GeneratedCriteria, SYSTEM_PROMPT)
 
 
 def build_chat_agent(settings: Settings) -> Agent[None, str]:
-    """Returns the conversational chat-reply agent for the configured model."""
+    """Return the chat-reply agent for the configured model."""
     return _build_shared_agent(settings, str, CHAT_SYSTEM_PROMPT)
 
 
 def render_conversation(request: ConversationRequest) -> str:
-    """
-    Flattens the conversation into the plain text handed to the model.
+    """Flatten the conversation into the plain text handed to the model.
 
     Attachments are inlined as plain transcripts under the message that
-    carried them, so the model reads a screenshot's text in the context of
-    whatever the user said about it.
+    carried them, so the model reads a screenshot's text in the context
+    of whatever the user said about it.
     """
     return "\n\n".join(_render_message(message) for message in request.messages)
 
 
 def _has_content(request: ConversationRequest) -> bool:
-    """True when any message carries text or an attachment worth reading."""
+    """Return True if any message has text or a non-empty attachment."""
     return any(
         message.text.strip()
         or any(a.content.strip() for a in message.attachments)
@@ -125,6 +127,7 @@ def _has_content(request: ConversationRequest) -> bool:
 
 
 def _render_message(message: ConversationMessage) -> str:
+    # One "ROLE: text" line, followed by each attachment fenced off.
     parts = [f"{message.role.upper()}: {message.text}".rstrip()]
 
     for attachment in message.attachments:
@@ -138,11 +141,11 @@ def _render_message(message: ConversationMessage) -> str:
 
 
 class ConversationService:
-    """
-    Conversation logic, independent of HTTP concerns.
+    """Conversation logic, independent of HTTP concerns.
 
-    Both `generate` and `send_message` are wired to real models; `generate`
-    also scores its output via the voting layer (through `scorer`).
+    Both `generate` and `send_message` are wired to real models;
+    `generate` also scores its output via the voting layer (through
+    `scorer`).
     """
 
     def __init__(
@@ -152,39 +155,50 @@ class ConversationService:
         chat_agent: Agent[None, str] | None = None,
         scorer: Scorer = score_candidates,
     ):
+        """Store settings; the agents and `scorer` are injectable."""
         self.settings = settings or default_settings
         # Built on first use so that a missing API key breaks generation
-        # rather than every request that happens to construct this service.
+        # rather than every request that happens to construct this
+        # service.
         self._agent = agent
         self._chat_agent = chat_agent
         self.scorer = scorer
 
     @property
     def agent(self) -> Agent[None, GeneratedCriteria]:
+        """Return the generation agent, building it on first use."""
         if self._agent is None:
             self._agent = build_agent(self.settings)
         return self._agent
 
     @property
     def chat_agent(self) -> Agent[None, str]:
+        """Return the chat agent, building it on first use."""
         if self._chat_agent is None:
             self._chat_agent = build_chat_agent(self.settings)
         return self._chat_agent
 
     def send_message(self, data: ConversationRequest) -> ConversationMessage:
+        """Return the assistant's reply, or a canned one on failure."""
         prompt = render_conversation(data)
         try:
             result = self.chat_agent.run_sync(prompt)
             text = result.output
         except Exception:
-            # Chat is conversational, not the pipeline's critical path — a
-            # failed call falls back to a generic reply rather than
+            # Chat is conversational, not the pipeline's critical path —
+            # a failed call falls back to a generic reply rather than
             # breaking the conversation.
-            logger.warning("Chat agent call failed; falling back to canned reply", exc_info=True)
+            logger.warning(
+                "Chat agent call failed; falling back to canned reply", exc_info=True)
             text = _CANNED_ASSISTANT_REPLY
         return ConversationMessage(role="assistant", text=text)
 
     def generate(self, data: ConversationRequest) -> GenerateResult:
+        """Write and score ACs using the chat model alone.
+
+        Raise `EmptyConversationError` when there is nothing to work
+        from, and `GenerationError` when the model call fails.
+        """
         if not _has_content(data):
             raise EmptyConversationError(
                 "Add a user story or attach a document before generating "
@@ -210,13 +224,14 @@ class ConversationService:
         candidate_texts = [
             render_ac_candidate(c.title, c.given, c.when, c.then) for c in criteria
         ]
-        scores = self.scorer(prompt=prompt, candidates=candidate_texts, settings=self.settings)
+        scores = self.scorer(
+            prompt=prompt, candidates=candidate_texts, settings=self.settings)
 
         return GenerateResult(
             acceptance_criteria=[
                 AcceptanceCriterion(
-                    # Positional only — the repository assigns real ids when
-                    # it persists the batch.
+                    # Positional only — the repository assigns real ids
+                    # when it persists the batch.
                     id=index,
                     title=criterion.title,
                     given=criterion.given,

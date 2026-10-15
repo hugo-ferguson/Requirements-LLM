@@ -1,3 +1,5 @@
+"""API tests for generating and reviewing UAT test cases."""
+
 from fastapi.testclient import TestClient
 
 
@@ -8,11 +10,12 @@ def _create_session(client: TestClient) -> dict:
 
 
 def _generate_ac(client: TestClient, session_id: int) -> list[dict]:
-    # Generation now calls a real model and refuses an empty conversation
-    # (see EmptyConversationError), so every test needs real content first.
+    # Generation refuses an empty conversation (see NoUserStoryError),
+    # so every test needs a user story first.
     client.post(
         f"/sessions/{session_id}/messages",
-        json={"text": "As a user, I want to log in with my email and password.", "attachments": []},
+        json={"text": "As a user, I want to log in with my email and password.",
+              "attachments": []},
     )
     response = client.post(f"/sessions/{session_id}/generate")
     assert response.status_code == 200
@@ -74,7 +77,8 @@ def test_generate_replaces_existing_batch(client: TestClient) -> None:
     _generate_uat(client, session["id"])
     second = _generate_uat(client, session["id"])
 
-    listed = client.get(f"/sessions/{session['id']}/uat-cases").json()["groups"]
+    listed = client.get(
+        f"/sessions/{session['id']}/uat-cases").json()["groups"]
     assert listed == second
 
 
@@ -102,7 +106,8 @@ def test_list_uat_cases_survives_ac_status_change_after_generate(client: TestCli
     )
     assert response.status_code == 200
 
-    listed = client.get(f"/sessions/{session['id']}/uat-cases").json()["groups"]
+    listed = client.get(
+        f"/sessions/{session['id']}/uat-cases").json()["groups"]
     assert any(g["ac"]["id"] == ac_id for g in listed)
 
 
@@ -112,10 +117,11 @@ def test_generate_ac_clears_existing_uat_cases(client: TestClient) -> None:
     _accept(client, session["id"], ac_items[0]["id"])
     _generate_uat(client, session["id"])
 
-    # Regenerating ACs replaces their ids, so previously generated UAT cases
-    # (tied to the old ids) must be cleared, not left orphaned.
+    # Regenerating ACs replaces their ids, so previously generated UAT
+    # cases (tied to the old ids) must be cleared, not left orphaned.
     _generate_ac(client, session["id"])
-    listed = client.get(f"/sessions/{session['id']}/uat-cases").json()["groups"]
+    listed = client.get(
+        f"/sessions/{session['id']}/uat-cases").json()["groups"]
     assert listed == []
 
 
@@ -149,9 +155,11 @@ def test_update_text_404_for_missing_uat_or_session(client: TestClient) -> None:
     session = _create_session(client)
     body = {"title": "t", "description": "d"}
     assert (
-        client.patch(f"/sessions/{session['id']}/uat-cases/9999", json=body).status_code == 404
+        client.patch(
+            f"/sessions/{session['id']}/uat-cases/9999", json=body).status_code == 404
     )
-    assert client.patch("/sessions/9999/uat-cases/1", json=body).status_code == 404
+    assert client.patch("/sessions/9999/uat-cases/1",
+                        json=body).status_code == 404
 
 
 def test_update_status_toggle(client: TestClient) -> None:
@@ -177,10 +185,12 @@ def test_update_status_404_for_missing_uat_or_session(client: TestClient) -> Non
     session = _create_session(client)
     body = {"status": "rejected"}
     assert (
-        client.patch(f"/sessions/{session['id']}/uat-cases/9999/status", json=body).status_code
+        client.patch(
+            f"/sessions/{session['id']}/uat-cases/9999/status", json=body).status_code
         == 404
     )
-    assert client.patch("/sessions/9999/uat-cases/1/status", json=body).status_code == 404
+    assert client.patch("/sessions/9999/uat-cases/1/status",
+                        json=body).status_code == 404
 
 
 def test_regenerate_selected_returns_candidates_without_mutating_persisted_data(
@@ -195,13 +205,15 @@ def test_regenerate_selected_returns_candidates_without_mutating_persisted_data(
 
     response = client.post(
         f"/sessions/{session['id']}/uat-cases/{uat_id}/regenerate",
-        json={"messages": [{"role": "user", "text": "more detail please", "attachments": []}]},
+        json={"messages": [
+            {"role": "user", "text": "more detail please", "attachments": []}]},
     )
     assert response.status_code == 200
     body = response.json()
     assert body["reply"]["role"] == "assistant"
-    # Regeneration is a select-one-candidate-add-context-regenerate flow: it
-    # always returns exactly one refined candidate, not several alternatives.
+    # Regeneration is a select-one-candidate-add-context-regenerate
+    # flow: it always returns exactly one refined candidate, not several
+    # alternatives.
     assert len(body["candidates"]) == 1
 
     after = client.get(f"/sessions/{session['id']}/uat-cases").json()
@@ -226,7 +238,8 @@ def test_apply_approved_merges_in_place_within_correct_ac_group(client: TestClie
     group_a = next(g for g in groups if g["ac"]["id"] == ac_items[0]["id"])
     group_b = next(g for g in groups if g["ac"]["id"] == ac_items[1]["id"])
     target = group_a["uat_cases"][0]
-    other_cases_in_a = [c for c in group_a["uat_cases"] if c["id"] != target["id"]]
+    other_cases_in_a = [c for c in group_a["uat_cases"]
+                        if c["id"] != target["id"]]
 
     regen = client.post(
         f"/sessions/{session['id']}/uat-cases/{target['id']}/regenerate", json={"messages": []}
@@ -244,11 +257,14 @@ def test_apply_approved_merges_in_place_within_correct_ac_group(client: TestClie
     assert target["id"] not in updated_ids
     for other in other_cases_in_a:
         assert other["id"] in updated_ids
-    assert len(updated_group["uat_cases"]) == len(other_cases_in_a) + len(candidates)
+    assert len(updated_group["uat_cases"]) == len(
+        other_cases_in_a) + len(candidates)
 
     # Group B (a different AC) must be completely unaffected.
-    listed = client.get(f"/sessions/{session['id']}/uat-cases").json()["groups"]
-    listed_group_b = next(g for g in listed if g["ac"]["id"] == ac_items[1]["id"])
+    listed = client.get(
+        f"/sessions/{session['id']}/uat-cases").json()["groups"]
+    listed_group_b = next(
+        g for g in listed if g["ac"]["id"] == ac_items[1]["id"])
     assert listed_group_b["uat_cases"] == group_b["uat_cases"]
 
 
@@ -290,4 +306,5 @@ def test_delete_session_with_uat_cases(client: TestClient) -> None:
 
     response = client.delete(f"/sessions/{session['id']}")
     assert response.status_code == 204
-    assert client.get(f"/sessions/{session['id']}/uat-cases").status_code == 404
+    assert client.get(
+        f"/sessions/{session['id']}/uat-cases").status_code == 404

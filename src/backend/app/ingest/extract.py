@@ -1,3 +1,5 @@
+"""Extract searchable text from uploaded text, PDF and image files."""
+
 from __future__ import annotations
 
 import logging
@@ -41,11 +43,11 @@ class UnsupportedFileError(ValueError):
 
 
 class ImageExtractionError(RuntimeError):
-    """Raised when the vision model could not be reached or returned no usable text."""
+    """Raised when the vision model fails or returns no usable text."""
 
 
 def extract_text(data: bytes, filename: str, settings: Settings) -> str:
-    """Returns the searchable text of an uploaded file, chosen by its extension."""
+    """Return the searchable text of an uploaded file, by extension."""
     extension = Path(filename).suffix.lower()
 
     if extension in TEXT_EXTENSIONS:
@@ -65,7 +67,7 @@ def extract_text(data: bytes, filename: str, settings: Settings) -> str:
 
 
 def _extract_pdf(data: bytes) -> str:
-    """Concatenates the embedded text layer of every page."""
+    """Concatenate the embedded text layer of every page."""
     from pypdf import PdfReader
 
     reader = PdfReader(BytesIO(data))
@@ -75,10 +77,9 @@ def _extract_pdf(data: bytes) -> str:
 
 
 def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
-    """Transcribes and describes an image via a vision-capable model."""
+    """Transcribe and describe an image with a vision-capable model."""
     vision_model = get_models_config().vision_model
-    image_bytes = _prepare_image(data, extension)
-    mime = MIME_TYPES.get(extension, "image/png")
+    image_bytes, mime = _prepare_image(data, extension)
 
     try:
         agent = Agent(
@@ -103,36 +104,42 @@ def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
     return content.strip()
 
 
-def _prepare_image(data: bytes, extension: str) -> bytes:
-    """
-    Shrinks oversized images before upload.
+def _prepare_image(data: bytes, extension: str) -> tuple[bytes, str]:
+    """Shrink oversized images before sending them to the model.
 
-    Images already within MAX_IMAGE_DIMENSION are sent untouched, so the common
-    case pays nothing and loses no detail. Anything Pillow cannot read falls
-    back to the original bytes and lets the model decide.
+    Return the bytes to send and their media type. Images already within
+    MAX_IMAGE_DIMENSION are sent untouched, so the common case pays
+    nothing and loses no detail. Anything Pillow cannot read falls back
+    to the original bytes and lets the model decide. A resized image is
+    re-encoded as JPEG if it was one, and as PNG otherwise, so its media
+    type changes with it.
     """
     from PIL import Image
+
+    original_mime = MIME_TYPES.get(extension, "image/png")
 
     try:
         image = Image.open(BytesIO(data))
         image.load()
     except Exception as error:
         logger.warning("Could not open image for resizing: %s", error)
-        return data
+        return data, original_mime
 
     if max(image.size) <= MAX_IMAGE_DIMENSION:
-        return data
+        return data, original_mime
 
     original_size = image.size
     image.thumbnail(
-        (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS
+        (MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS
     )
 
     buffer = BytesIO()
     if extension in JPEG_EXTENSIONS:
         image.convert("RGB").save(buffer, "JPEG", quality=JPEG_QUALITY)
+        mime = "image/jpeg"
     else:
         image.convert("RGBA").save(buffer, "PNG")
+        mime = "image/png"
 
     resized = buffer.getvalue()
     logger.info(
@@ -143,4 +150,4 @@ def _prepare_image(data: bytes, extension: str) -> bytes:
         len(resized) // 1024,
     )
 
-    return resized
+    return resized, mime

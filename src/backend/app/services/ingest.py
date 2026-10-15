@@ -1,3 +1,5 @@
+"""Turn uploaded files into embedded, searchable documents."""
+
 import logging
 import time
 from dataclasses import dataclass
@@ -28,11 +30,10 @@ def _megabytes(size: int) -> str:
 
 @dataclass
 class IngestResult:
-    """
-    The text extracted from an upload, and the Document it was stored as.
+    """The text extracted from an upload, and the document it became.
 
-    `document` is None for files that are read but deliberately not stored —
-    see IngestService.ingest_file.
+    `document` is None for files that are read but deliberately not
+    stored; see `IngestService.ingest_file`.
     """
 
     document: Document | None
@@ -49,6 +50,7 @@ class IngestService:
         embedding_provider: EmbeddingProvider,
         settings: Settings,
     ):
+        """Wire up storage, embeddings and chunking settings."""
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
         self.settings = settings
@@ -61,8 +63,7 @@ class IngestService:
         title: str | None = None,
         tags: list[str] | None = None,
     ) -> IngestResult:
-        """
-        Extracts, chunks and embeds a file, then stores it as one Document.
+        """Extracts, chunks and embeds a file, then stores it as one Document.
 
         Images are the exception: their text goes straight back to the caller
         and is never stored. A screenshot transcribes to a few hundred tokens
@@ -157,16 +158,15 @@ class IngestService:
         return IngestResult(document=document, chunk_count=len(chunks), text=text)
 
     def delete_document(self, document_id: int) -> bool:
-        """
-        Removes an ingested document. Returns False if it doesn't exist.
+        """Remove an ingested document; False if it doesn't exist.
 
-        Used when an attachment is discarded before it's sent, so abandoned
-        uploads don't linger in the search index.
+        Used when an attachment is discarded before it's sent, so
+        abandoned uploads don't linger in the search index.
         """
         return self.vector_store.delete_document(document_id)
 
     def search(self, query: str, k: int = 5) -> list[DocumentChunk]:
-        """Finds the k chunks most similar to a natural-language query."""
+        """Find the `k` stored chunks most similar to a text query."""
         return self.vector_store.similarity_search(
             self.embedding_provider.embed_query(query), k
         )

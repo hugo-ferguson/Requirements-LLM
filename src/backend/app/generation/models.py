@@ -1,8 +1,8 @@
 """Schemas for the ensemble generation layer.
 
-`GeneratedCriteriaSet` is the contract every generation agent must satisfy.
-PydanticAI validates the LLM's response against it and retries on failure, so
-malformed Gherkin never leaves an agent (backlog R7).
+`GeneratedCriteriaSet` is the contract every generation agent must
+satisfy. PydanticAI validates the LLM's response against it and retries
+on failure, so malformed Gherkin never leaves an agent (backlog R7).
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 class GeneratedCriterion(BaseModel):
     """One Gherkin acceptance criterion produced by a generation agent.
 
-    Field descriptions are sent to the LLM as part of the schema, so they do
-    double duty as prompt guidance.
+    Field descriptions are sent to the LLM as part of the schema, so
+    they do double duty as prompt guidance.
     """
 
     title: str = Field(
@@ -39,22 +39,24 @@ class GeneratedCriterion(BaseModel):
     def as_sentence(self) -> str:
         """Flatten to the single string the voting layer scores.
 
-        Aaron's `EvaluationInput.output` is a `list[str]`, so the structured
-        criterion has to be linearised before it crosses that boundary.
+        The voting layer's `EvaluationInput.output` is a `list[str]`, so
+        the structured criterion has to be linearised before it crosses
+        that boundary.
         """
         return f"Given {self.given}, when {self.when}, then {self.then}."
 
     def dedupe_key(self) -> str:
-        """Normalised key used to drop near-identical criteria across agents.
+        """Return the key that spots duplicate criteria across agents.
 
-        Each clause is lowercased, stripped of punctuation and collapsed to
-        single spaces independently, then rejoined. Normalising per-clause
-        rather than across the whole string stops punctuation next to a
-        separator from leaving stray whitespace in the key.
+        Each clause is lowercased, stripped of punctuation and collapsed
+        to single spaces independently, then rejoined. Normalising
+        per-clause rather than across the whole string stops punctuation
+        next to a separator from leaving stray whitespace in the key.
 
-        This only catches textually identical criteria — two agents phrasing
-        the same behaviour differently will both survive, which is intentional
-        for now (semantic dedupe is a separate piece of work).
+        This only catches textually identical criteria — two agents
+        phrasing the same behaviour differently will both survive, which
+        is intentional for now (semantic dedupe is a separate piece of
+        work).
         """
         clauses = (self.given, self.when, self.then)
         return "|".join(
@@ -76,11 +78,11 @@ class GeneratedCriteriaSet(BaseModel):
 
 
 class NumberedCriterion(BaseModel):
-    """A pass-2 answer: given/when/then for one of the anchor's numbered titles.
+    """A pass-2 answer: given/when/then for one numbered anchor title.
 
-    There is deliberately no `title` field. Followers used to copy the title
-    back and were joined on its text, and a model that reworded every title
-    (observed: 0 of 5 matched) lost all its candidates. A number can't be
+    There is deliberately no `title` field. A title copied back can be
+    reworded so that nothing joins on it (one model matched 0 of 5),
+    losing all of that model's candidates. A number can't be
     paraphrased, and the anchor's exact title is attached in code.
     """
 
@@ -112,22 +114,23 @@ class NumberedCriteriaSet(BaseModel):
 
 
 def title_key(title: str) -> str:
-    """Join key for title-anchored grouping.
+    """Return the join key for title-anchored grouping.
 
-    Pass-2 answers arrive carrying the anchor's exact titles (they answer by
-    number), so this mainly catches the anchor listing near-identical titles
-    twice. Normalising the same way `dedupe_key` does means "Rate a finished
-    book" and "Rate a finished book." land in the same group.
+    Pass-2 answers arrive carrying the anchor's exact titles (they
+    answer by number), so this mainly catches the anchor listing
+    near-identical titles twice. Normalising the same way `dedupe_key`
+    does means "Rate a finished book" and "Rate a finished book." land
+    in the same group.
     """
     return re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
 
 
 class Candidate(BaseModel):
-    """One agent's attempt at a single criterion, with its score once voted.
+    """One agent's attempt at one criterion, with its score once voted.
 
-    Distinct from `GeneratedCriterion` because it carries the two things the
-    criterion itself has no business knowing: which agent produced it, and how
-    the voting layer rated it.
+    Distinct from `GeneratedCriterion` because it carries the two things
+    the criterion itself has no business knowing: which agent produced
+    it, and how the voting layer rated it.
     """
 
     agent_id: str
@@ -145,9 +148,10 @@ class Candidate(BaseModel):
 class CandidateGroup(BaseModel):
     """Every agent's take on one title, best first.
 
-    The winner is `candidates[0]` after `rank()`; the rest are the alternatives
-    the UI can offer behind it. A group with a single candidate is normal — it
-    just means only one agent answered that title.
+    The winner is `candidates[0]` after `rank()`; the rest are the
+    alternatives the UI can offer behind it. A group with a single
+    candidate is normal — it just means only one agent answered that
+    title.
     """
 
     title: str
@@ -156,15 +160,16 @@ class CandidateGroup(BaseModel):
     def rank(self) -> None:
         """Sort best-first, breaking ties deterministically.
 
-        Unrated candidates sort last regardless of their nominal 0.0. That is
-        already where a 0.0 lands, but making it explicit means a group whose
-        scoring failed entirely still ranks by agent_id rather than appearing
-        to have been judged.
+        Unrated candidates sort last regardless of their nominal 0.0.
+        That is already where a 0.0 lands, but making it explicit means
+        a group whose scoring failed entirely still ranks by agent_id
+        rather than appearing to have been judged.
 
-        Without the final key, equally-scored candidates resolve by whatever
-        order the agents happened to finish in, so the "winner" shown to a
-        reviewer could change between identical runs. Falling back to agent_id
-        is arbitrary but stable, which is the property that matters.
+        Without the final key, equally-scored candidates resolve by
+        whatever order the agents happened to finish in, so the "winner"
+        shown to a reviewer could change between identical runs. Falling
+        back to agent_id is arbitrary but stable, which is the property
+        that matters.
         """
         self.candidates.sort(
             key=lambda c: (c.scoring_failed, -c.overall_score, c.agent_id)
@@ -177,19 +182,22 @@ class CandidateGroup(BaseModel):
 
     @property
     def winner(self) -> Candidate:
+        """The best candidate, once `rank()` has run."""
         return self.candidates[0]
 
     @property
     def alternatives(self) -> list[Candidate]:
+        """Every candidate except the winner."""
         return self.candidates[1:]
 
 
 class AgentResult(BaseModel):
     """One agent's outcome, including the failure case.
 
-    A failed agent returns a result with `error` set rather than raising, so a
-    missing API key or a rate limit degrades the ensemble instead of killing
-    the request. This mirrors the convention already used in the voting layer.
+    A failed agent returns a result with `error` set rather than
+    raising, so a missing API key or a rate limit degrades the ensemble
+    instead of killing the request. This mirrors the convention already
+    used in the voting layer.
     """
 
     agent_id: str
@@ -201,6 +209,7 @@ class AgentResult(BaseModel):
 
     @property
     def ok(self) -> bool:
+        """Whether the agent finished without an error."""
         return self.error is None
 
 
@@ -212,24 +221,29 @@ class EnsembleResult(BaseModel):
 
     @property
     def successful(self) -> list[AgentResult]:
+        """The results that finished without an error."""
         return [result for result in self.results if result.ok]
 
     @property
     def failed(self) -> list[AgentResult]:
+        """The results that ended in an error."""
         return [result for result in self.results if not result.ok]
 
 
-# --- UAT test cases ---------------------------------------------------------
-#
-# Same two-pass shape as acceptance criteria, one level down: per accepted AC,
-# the anchor writes the test cases (title + description) and every other agent
-# writes its own description for each, answering by case number.
+"""UAT test cases.
+
+Same two-pass shape as acceptance criteria, one level down: per
+accepted AC, the anchor writes the test cases (title and description)
+and every other agent writes its own description for each, answering
+by case number.
+"""
 
 
 class GeneratedUatCase(BaseModel):
     """One UAT test case, as written by a model."""
 
-    title: str = Field(description="Short label for the scenario under test", min_length=3)
+    title: str = Field(
+        description="Short label for the scenario under test", min_length=3)
     description: str = Field(
         description="Concrete steps/data a tester follows and the expected result",
         min_length=3,
@@ -247,7 +261,7 @@ class GeneratedUatCaseSet(BaseModel):
 
 
 class NumberedUatCase(BaseModel):
-    """Pass-2 answer: a description for one of the anchor's numbered case titles."""
+    """A pass-2 answer: the description for one numbered case title."""
 
     title_number: int = Field(
         description="The number of the test case title this answers, as given in the list", ge=1
@@ -269,7 +283,7 @@ class NumberedUatCaseSet(BaseModel):
 
 
 class UatAgentResult(BaseModel):
-    """One agent's UAT outcome for one AC, including the failure case."""
+    """One agent's UAT outcome for one AC, including failure."""
 
     agent_id: str
     provider: str
@@ -280,11 +294,12 @@ class UatAgentResult(BaseModel):
 
     @property
     def ok(self) -> bool:
+        """Whether the agent finished without an error."""
         return self.error is None
 
 
 class UatCandidate(BaseModel):
-    """One agent's version of one test case, with its score once voted."""
+    """One agent's version of one test case, scored once voted."""
 
     agent_id: str
     case: GeneratedUatCase
@@ -297,22 +312,28 @@ class UatCandidate(BaseModel):
 
 
 class UatCandidateGroup(BaseModel):
-    """Every agent's version of one test case title, best first after `rank()`."""
+    """Every agent's version of one test case title, best first."""
 
     title: str
     candidates: list[UatCandidate] = Field(default_factory=list)
 
     def rank(self) -> None:
-        # Same rule as CandidateGroup.rank: unrated last, then best score,
-        # then agent id so equal scores resolve the same way every run.
+        """Sort best-first, the same way as `CandidateGroup.rank`.
+
+        Unrated candidates go last, then the best score wins, then
+        agent id breaks ties so equal scores resolve the same way every
+        run.
+        """
         self.candidates.sort(
             key=lambda c: (c.scoring_failed, -c.overall_score, c.agent_id)
         )
 
     @property
     def winner(self) -> UatCandidate:
+        """The best candidate, once `rank()` has run."""
         return self.candidates[0]
 
     @property
     def alternatives(self) -> list[UatCandidate]:
+        """Every candidate except the winner."""
         return self.candidates[1:]

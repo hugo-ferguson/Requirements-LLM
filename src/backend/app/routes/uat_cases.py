@@ -1,3 +1,5 @@
+"""HTTP routes for a session's UAT test cases."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
@@ -18,10 +20,12 @@ from app.repositories.uat_cases import UatCaseRepository
 from app.services.agents import GenerationError
 from app.services.uat_cases import UatCaseService
 
-router = APIRouter(prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
+router = APIRouter(
+    prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
 
 
 def get_uat_case_service(session: Session = Depends(get_session)) -> UatCaseService:
+    """Build the UAT case service for one request."""
     return UatCaseService(
         SessionRepository(session),
         UatCaseRepository(session),
@@ -33,6 +37,7 @@ def get_uat_case_service(session: Session = Depends(get_session)) -> UatCaseServ
 def list_uat_cases(
     session_id: int, service: UatCaseService = Depends(get_uat_case_service)
 ) -> UatCaseGroupsResult:
+    """Return the session's test cases, grouped by AC."""
     result = service.list_items(session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -43,6 +48,7 @@ def list_uat_cases(
 async def generate_uat_cases(
     session_id: int, service: UatCaseService = Depends(get_uat_case_service)
 ) -> UatCaseGroupsResult:
+    """Generate test cases for each accepted AC, replacing old ones."""
     try:
         result = await service.generate(session_id)
     except GenerationError as error:
@@ -59,6 +65,7 @@ def update_uat_case_text(
     data: UatCaseTextUpdate,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatCase:
+    """Save a reviewer's edit to a test case's text."""
     updated = service.update_text(session_id, uat_id, data)
     if updated is None:
         raise HTTPException(status_code=404, detail="UAT case not found")
@@ -72,6 +79,7 @@ def update_uat_case_status(
     data: UatCaseStatusUpdate,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatCase:
+    """Set a test case's review status."""
     updated = service.update_status(session_id, uat_id, data)
     if updated is None:
         raise HTTPException(status_code=404, detail="UAT case not found")
@@ -85,6 +93,7 @@ def regenerate_selected(
     data: UatRegenerateSelectedRequest,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatRegenerateSelectedResponse:
+    """Propose replacements for one test case without saving them."""
     try:
         result = service.regenerate_selected(session_id, uat_id, data)
     except GenerationError as error:
@@ -101,6 +110,7 @@ def apply_approved(
     data: UatApplyApprovedRequest,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatCaseGroup:
+    """Replace a test case with the candidates the reviewer approved."""
     try:
         group = service.apply_approved(session_id, uat_id, data)
     except ValueError as exc:
@@ -117,7 +127,9 @@ def select_uat_alternative(
     candidate_id: int,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatCase:
+    """Show another model's version of a test case in its place."""
     result = service.select_alternative(session_id, uat_id, candidate_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="UAT case or alternative not found")
+        raise HTTPException(
+            status_code=404, detail="UAT case or alternative not found")
     return result

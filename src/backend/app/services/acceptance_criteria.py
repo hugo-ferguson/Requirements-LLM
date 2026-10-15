@@ -1,3 +1,5 @@
+"""Business logic for reviewing and regenerating acceptance criteria."""
+
 from pydantic_ai import Agent
 
 from app.config import Settings, settings as default_settings
@@ -44,9 +46,12 @@ feedback; it is the more recent and more specific instruction.
 def _build_regeneration_prompt(
     target: AcceptanceCriterionRecord, data: RegenerateSelectedRequest
 ) -> str:
+    # Show the model the criterion as it stands, then the reviewer's
+    # feedback, or a nudge to tighten it when there is none.
     parts = [
         "Current acceptance criterion:",
-        render_ac_candidate(target.title, target.given, target.when, target.then),
+        render_ac_candidate(target.title, target.given,
+                            target.when, target.then),
     ]
     if data.messages:
         parts += [
@@ -67,15 +72,16 @@ def to_acceptance_criterion(
     candidates: list[AcceptanceCriterionCandidateRecord] | None = None,
     uat_case_count: int = 0,
 ) -> AcceptanceCriterion:
-    """Wire model for one AC, with the other models' versions attached.
+    """Build the wire model for one AC, with its alternatives attached.
 
-    `candidates` are the stored candidate rows at the record's position; the
-    winner row supplies `source_agent`, the rest become `alternatives`.
+    `candidates` are the stored candidate rows at the record's position;
+    the winner row supplies `source_agent`, the rest become
+    `alternatives`.
     """
     candidates = candidates or []
     winner = next((c for c in candidates if c.is_winner), None)
     return AcceptanceCriterion(
-        id=record.id,
+        id=record.id,  # type: ignore[arg-type]
         title=record.title,
         given=record.given,
         when=record.when,
@@ -87,7 +93,7 @@ def to_acceptance_criterion(
             coverage=record.coverage,
         ),
         overall_score=record.overall_score,
-        status=record.status,
+        status=record.status,  # type: ignore[arg-type]
         source_agent=winner.source_agent if winner else None,
         alternatives=[
             AcceptanceCriterionAlternative(
@@ -117,7 +123,7 @@ def to_acceptance_criteria(
     records: list[AcceptanceCriterionRecord],
     uat_counts: dict[int, int] | None = None,
 ) -> list[AcceptanceCriterion]:
-    """`uat_counts` maps ac_id to its number of UAT cases; omitted means none."""
+    """Build wire models for several ACs from one candidate query."""
     by_position = ac_repository.candidates_by_position(session_id)
     uat_counts = uat_counts or {}
     return [
@@ -127,11 +133,12 @@ def to_acceptance_criteria(
 
 
 class AcceptanceCriteriaService:
-    """Business logic for reviewing/regenerating acceptance criteria.
+    """Business logic for reviewing and regenerating ACs.
 
-    `regenerate_selected` is wired to a real model: it refines the target
-    criterion using the reviewer's added context and returns exactly one
-    candidate, scored via the voting layer (through `scorer`).
+    `regenerate_selected` is wired to a real model: it refines the
+    target criterion using the reviewer's added context and returns
+    exactly one candidate, scored via the voting layer (through
+    `scorer`).
     """
 
     def __init__(
@@ -144,18 +151,21 @@ class AcceptanceCriteriaService:
         regen_agent: Agent[None, GeneratedCriterion] | None = None,
         scorer: Scorer = score_candidates,
     ):
+        """Wire up storage; `regen_agent` and `scorer` are for tests."""
         self.sessions = session_repository
         self.ac = ac_repository
         self.messages = message_repository
         self.uat_cases = uat_case_repository
         self.settings = settings or default_settings
-        # Built on first use so that a missing API key breaks regeneration
-        # rather than every request that happens to construct this service.
+        # Built on first use so that a missing API key breaks
+        # regeneration rather than every request that happens to
+        # construct this service.
         self._regen_agent = regen_agent
         self.scorer = scorer
 
     @property
     def regen_agent(self) -> Agent[None, GeneratedCriterion]:
+        """Return the regeneration agent, building it on first use."""
         if self._regen_agent is None:
             self._regen_agent = build_agent(
                 self.settings, GeneratedCriterion, AC_REGENERATION_SYSTEM_PROMPT
@@ -163,6 +173,7 @@ class AcceptanceCriteriaService:
         return self._regen_agent
 
     def list_items(self, session_id: int) -> list[AcceptanceCriterion] | None:
+        """Return a session's ACs, or None if the session is missing."""
         if self.sessions.get(session_id) is None:
             return None
         return to_acceptance_criteria(
@@ -175,15 +186,18 @@ class AcceptanceCriteriaService:
     def update_text(
         self, session_id: int, ac_id: int, data: AcceptanceCriterionTextUpdate
     ) -> AcceptanceCriterion | None:
+        """Save a reviewer's edit; return None if the AC is missing."""
         record = self.ac.get(session_id, ac_id)
         if record is None:
             return None
-        updated = self.ac.update_text(record, data.title, data.given, data.when, data.then)
+        updated = self.ac.update_text(
+            record, data.title, data.given, data.when, data.then)
         return self._with_alternatives(updated)
 
     def update_status(
         self, session_id: int, ac_id: int, data: AcceptanceCriterionStatusUpdate
     ) -> AcceptanceCriterion | None:
+        """Set an AC's status; return None if the AC is missing."""
         record = self.ac.get(session_id, ac_id)
         if record is None:
             return None
@@ -201,8 +215,9 @@ class AcceptanceCriteriaService:
     ) -> SelectAlternativeResponse | None:
         """Swap another model's version in as the displayed one.
 
-        Returns None when the AC or candidate doesn't exist, or the candidate
-        belongs to a different criterion — all of which the route maps to 404.
+        Returns None when the AC or candidate doesn't exist, or the
+        candidate belongs to a different criterion — all of which the
+        route maps to 404.
         """
         record = self.ac.get(session_id, ac_id)
         candidate = self.ac.get_candidate(session_id, candidate_id)
@@ -222,12 +237,15 @@ class AcceptanceCriteriaService:
     def regenerate_selected(
         self, session_id: int, ac_id: int, data: RegenerateSelectedRequest
     ) -> RegenerateSelectedResponse | None:
+        """Propose one refined version of an AC, scored but not saved.
+
+        Return None when the AC doesn't exist. Raise `GenerationError`
+        when the model can't be reached.
+        """
         target = self.ac.get(session_id, ac_id)
         if target is None:
             return None
 
-        # Candidate `id` here is a throwaway placeholder — it's not
-        # persisted until/unless the caller approves it via apply_approved.
         prompt = _build_regeneration_prompt(target, data)
         try:
             result = self.regen_agent.run_sync(prompt)
@@ -240,8 +258,11 @@ class AcceptanceCriteriaService:
         candidate_text = render_ac_candidate(
             criterion.title, criterion.given, criterion.when, criterion.then
         )
-        [score] = self.scorer(prompt=prompt, candidates=[candidate_text], settings=self.settings)
+        [score] = self.scorer(prompt=prompt, candidates=[
+                              candidate_text], settings=self.settings)
 
+        # The id is a throwaway placeholder: nothing is persisted until
+        # the caller approves the candidate through `apply_approved`.
         refined = AcceptanceCriterion(
             id=-1,
             title=criterion.title,
@@ -266,17 +287,25 @@ class AcceptanceCriteriaService:
     def apply_approved(
         self, session_id: int, ac_id: int, data: ApplyApprovedRequest
     ) -> list[AcceptanceCriterion] | None:
+        """Replace one AC with the approved candidates, in its place.
+
+        Return the session's updated AC list, or None when the session
+        or AC doesn't exist. Raise `ValueError` when no candidates were
+        approved.
+        """
         if self.sessions.get(session_id) is None:
             return None
         if self.ac.get(session_id, ac_id) is None:
             return None
         if not data.candidates:
-            raise ValueError("Must approve at least one candidate; use Cancel to discard instead.")
+            raise ValueError(
+                "Must approve at least one candidate; use Cancel to discard instead.")
 
         # The AC row being replaced may already have UAT cases generated
-        # against it (via "Generate test cases..."). Those FK to this exact
-        # ac_id, so they must be cleared before the row is deleted+replaced —
-        # otherwise this would violate the FK in a database that enforces it.
+        # against it (via "Generate test cases..."). Those FK to this
+        # exact ac_id, so they must be cleared before the row is
+        # deleted+replaced — otherwise this would violate the FK in a
+        # database that enforces it.
         self.uat_cases.delete_for_ac(ac_id)
         updated = self.ac.replace_one(session_id, ac_id, data.candidates)
         return to_acceptance_criteria(
@@ -284,6 +313,11 @@ class AcceptanceCriteriaService:
         )
 
     def regenerate_all_kickoff(self, session_id: int) -> MessageRead | None:
+        """Post an assistant message asking for context to regenerate.
+
+        Rejected ACs are named in the message so the reviewer knows what
+        to explain. Return None when the session doesn't exist.
+        """
         chat_session = self.sessions.get(session_id)
         if chat_session is None:
             return None
@@ -308,8 +342,8 @@ class AcceptanceCriteriaService:
         )
         self.sessions.touch(chat_session)
         return MessageRead(
-            id=message.id,
-            role=message.role,
+            id=message.id,  # type: ignore[arg-type]
+            role=message.role,  # type: ignore[arg-type]
             text=message.text,
             attachments=[],
             created_at=message.created_at,

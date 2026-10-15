@@ -1,10 +1,15 @@
+"""Run every judge over an input and merge their votes.
+
+Run as a script to serve `evaluate_acceptance_criteria` as an MCP tool
+over stdio:
+
+    python voting/voting.py
+"""
+
 from __future__ import annotations
 
-import argparse
 import asyncio
-import json
 import logging
-from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -25,7 +30,10 @@ logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
 
+
 def _provider_error_outputs(evaluation_input: EvaluationInput, provider: str, model: str, error: Exception) -> list[EvaluatedOutput]:
+    # Stand-in results for a judge that failed outright: every output
+    # gets the -1 sentinel on every rubric, with the error as feedback.
     return [
         EvaluatedOutput(
             output=output,
@@ -53,6 +61,9 @@ def _provider_error_outputs(evaluation_input: EvaluationInput, provider: str, mo
 
 
 def _merge_provider_outputs(evaluation_input: EvaluationInput, provider_outputs: list[list[EvaluatedOutput]]) -> VotingResult:
+    # Combine every judge's verdict on each output, averaging only the
+    # scores that aren't the -1 sentinel, then rank outputs best-first.
+    # Each judge's list must be in the same order as the input outputs.
     evaluated_outputs: list[EvaluatedOutput] = []
     for output_index, output in enumerate(evaluation_input.output):
         feedback = [outputs[output_index].feedback[0]
@@ -94,6 +105,7 @@ def _merge_provider_outputs(evaluation_input: EvaluationInput, provider_outputs:
 
 
 async def _evaluate_with_judge(judge: JudgeConfig, evaluation_input: EvaluationInput) -> VotingResult:
+    # Dispatch to the judge's voting style.
     if judge.style == "per_rubric":
         return await evaluate_with_prometheus(evaluation_input, judge)
     client = CombinedJudgeClient(judge)
@@ -101,8 +113,14 @@ async def _evaluate_with_judge(judge: JudgeConfig, evaluation_input: EvaluationI
 
 
 async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
+    """Score one input with every judge at once and merge the votes.
+
+    A judge that fails outright scores -1 on every rubric instead of
+    failing the input; a cancellation still propagates.
+    """
     judge_results = await asyncio.gather(
-        *(_evaluate_with_judge(judge, evaluation_input) for judge in evaluation_input.judges),
+        *(_evaluate_with_judge(judge, evaluation_input)
+          for judge in evaluation_input.judges),
         return_exceptions=True,
     )
 
@@ -111,10 +129,10 @@ async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
         if isinstance(result, VotingResult):
             provider_outputs.append(result.output)
         elif isinstance(result, Exception):
-            # Degrading to the -1 sentinel is deliberate — a voter outage must
-            # not fail generation. But it used to happen silently, so a total
-            # misconfiguration returned a successful-looking response full of
-            # zeros with nothing logged anywhere. Always say why.
+            # Degrading to the -1 sentinel is deliberate: a voter
+            # outage must not fail generation. Done silently, though, a
+            # total misconfiguration would return a successful-looking
+            # response full of zeros, so always log why.
             logger.warning(
                 "voting judge %r (model=%s) failed; its rubrics degrade to the "
                 "-1 error sentinel, which scores as 0.0: %s: %s",
@@ -126,15 +144,16 @@ async def evaluate_input(evaluation_input: EvaluationInput) -> VotingResult:
             provider_outputs.append(_provider_error_outputs(
                 evaluation_input, judge.display_name, judge.model, result))
         else:
-            # A BaseException that isn't an Exception (e.g. cancellation) must
-            # propagate rather than be scored as a failed judge.
+            # A BaseException that isn't an Exception (e.g.
+            # cancellation) must propagate rather than be scored as a
+            # failed judge.
             raise result
 
     return _merge_provider_outputs(evaluation_input, provider_outputs)
 
 
 async def evaluate_inputs(evaluation_inputs: list[EvaluationInput]) -> list[VotingResult]:
-    """Evaluate every input independently and return them ranked by AI overall score."""
+    """Evaluate each input on its own; return them ranked by score."""
     results = await asyncio.gather(*(evaluate_input(item) for item in evaluation_inputs))
     results.sort(key=lambda item: item.overall_score, reverse=True)
     for rank, result in enumerate(results, start=1):
@@ -147,29 +166,9 @@ mcp = FastMCP("requirements-voting")
 
 @mcp.tool()
 async def evaluate_acceptance_criteria(evaluation_inputs: list[EvaluationInput]) -> list[VotingResult]:
-    """Score every input's acceptance criteria against all four voting rubrics."""
+    """Score each input's acceptance criteria on all four rubrics."""
     return await evaluate_inputs(evaluation_inputs)
 
 
-async def main(input_path: str) -> None:
-    payload = json.loads(Path(input_path).read_text(encoding="utf-8"))
-    if isinstance(payload, list):
-        inputs = [EvaluationInput.model_validate(item) for item in payload]
-    else:
-        inputs = [EvaluationInput.model_validate(payload)]
-    results = await evaluate_inputs(inputs)
-    print(json.dumps([result.model_dump() for result in results], indent=2))
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate generated criteria with the voting layer")
-    parser.add_argument("input", nargs="?", default=str(
-        Path(__file__).with_name("exampleInput.json")))
-    parser.add_argument("--mcp", action="store_true",
-                        help="Run the MCP server over stdio")
-    args = parser.parse_args()
-    if args.mcp:
-        mcp.run()
-    else:
-        asyncio.run(main(args.input))
+    mcp.run()

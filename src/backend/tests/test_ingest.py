@@ -1,9 +1,20 @@
+"""Text extraction, chunking, ingest and the document upload route."""
+
+from io import BytesIO
+from typing import cast
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.ingest.chunk import chunk_text
-from app.ingest.extract import ImageExtractionError, UnsupportedFileError, extract_text
+from app.ingest.extract import (
+    MAX_IMAGE_DIMENSION,
+    ImageExtractionError,
+    UnsupportedFileError,
+    _prepare_image,
+    extract_text,
+)
 from app.main import app
 from app.routes.documents import get_ingest_service
 from app.services.ingest import (
@@ -13,16 +24,19 @@ from app.services.ingest import (
     IngestService,
 )
 from app.vector_store.models import Document, DocumentChunk
+from app.vector_store.vector_store import VectorStore
 
 
 class FakeVectorStore:
     """Stands in for VectorStore so the tests need no database."""
 
     def __init__(self):
+        """Start with no document and no chunks."""
         self.created_with: dict = {}
         self.chunks: list[DocumentChunk] = []
 
     def create_document(self, **kwargs):
+        """Record the arguments and return document 1."""
         self.created_with = kwargs
         return Document(
             id=1,
@@ -33,36 +47,50 @@ class FakeVectorStore:
         )
 
     def add_chunks(self, chunks):
+        """Keep the chunks for the test to inspect."""
         self.chunks = chunks
         return chunks
 
     def similarity_search(self, query_embedding, k=5):
+        """Return the first `k` stored chunks."""
         return self.chunks[:k]
 
 
 class FakeEmbeddingProvider:
+    """Returns tiny length-based vectors and counts embed calls."""
+
     def __init__(self):
+        """Start with no embed calls counted."""
         self.embed_calls = 0
 
     def embed_texts(self, texts):
+        """Count the call and return one small vector per text."""
         self.embed_calls += 1
         return [[float(len(text)), 0.0, 1.0] for text in texts]
 
     def embed_query(self, text):
+        """Return a small vector for `text`."""
         return [float(len(text)), 0.0, 1.0]
 
 
 @pytest.fixture(name="service")
 def service_fixture() -> tuple[IngestService, FakeVectorStore]:
+    """Return an ingest service on fakes, plus its fake store."""
     store = FakeVectorStore()
     settings = Settings(chunk_size=200, chunk_overlap=40)
-    return IngestService(store, FakeEmbeddingProvider(), settings), store
+    service = IngestService(
+        cast(VectorStore, store),
+        cast(EmbeddingProvider, FakeEmbeddingProvider()),
+        settings,
+    )
+    return service, store
 
 
 def test_an_image_is_transcribed_but_never_stored(service, monkeypatch):
     """
-    A screenshot's transcript is small enough to go straight into a prompt, so
-    it must not reach the vector store or the embedding provider.
+    A screenshot's transcript is small enough to go straight into a
+    prompt, so it must not reach the vector store or the embedding
+    provider.
     """
     ingest_service, store = service
     monkeypatch.setattr(
@@ -120,9 +148,10 @@ def test_chunking_terminates_without_whitespace_boundaries():
 
 
 def test_chunking_terminates_when_a_break_falls_exactly_overlap_past_the_start():
-    # A line break exactly `overlap` characters into the next chunk used to
-    # make that chunk restart where it began, appending it forever — a real
-    # PDF grew the backend until Docker's VM ran out of memory.
+    # A line break exactly `overlap` characters into the next chunk must
+    # not make that chunk restart where it began and append forever. A
+    # real PDF once grew the backend until Docker's VM ran out of
+    # memory.
     text = ("x" * 849) + "\n" + ("y" * 149) + "\n" + ("z" * 3000)
 
     chunks = chunk_text(text, chunk_size=1000, overlap=150)
@@ -138,6 +167,31 @@ def test_blank_text_produces_no_chunks():
 def test_unknown_extension_is_rejected():
     with pytest.raises(UnsupportedFileError):
         extract_text(b"data", "archive.zip", Settings())
+
+
+def _gif(width: int, height: int) -> bytes:
+    """Return a blank GIF of the given size."""
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (width, height)).save(buffer, "GIF")
+    return buffer.getvalue()
+
+
+def test_a_small_image_is_sent_untouched_with_its_own_media_type():
+    data = _gif(100, 100)
+
+    assert _prepare_image(data, ".gif") == (data, "image/gif")
+
+
+def test_a_resized_image_is_labelled_with_the_format_it_was_saved_in():
+    from PIL import Image
+
+    resized, mime = _prepare_image(_gif(MAX_IMAGE_DIMENSION * 2, 10), ".gif")
+
+    image = Image.open(BytesIO(resized))
+    assert (image.format, mime) == ("PNG", "image/png")
+    assert max(image.size) == MAX_IMAGE_DIMENSION
 
 
 def test_ingest_stores_one_chunk_per_embedding(service):
@@ -203,19 +257,22 @@ def test_a_file_exactly_at_both_limits_is_accepted(service, monkeypatch):
 
 
 class StubIngestService:
-    """Returns a canned result so the route test needs no DB or model."""
+    """Returns a canned result so route tests need no DB or model."""
 
     def __init__(self, error: Exception | None = None, stores_document: bool = True):
+        """Raise `error` on ingest, or return a canned result."""
         self.error = error
         self.stores_document = stores_document
         self.called_with: tuple[bytes, str] | None = None
         self.deleted: int | None = None
 
     def delete_document(self, document_id):
+        """Record the id; only document 7 exists."""
         self.deleted = document_id
         return document_id == 7
 
     def ingest_file(self, data, filename, *, title=None, tags=None):
+        """Record the call and return the canned result."""
         self.called_with = (data, filename)
         if self.error is not None:
             raise self.error
@@ -239,12 +296,11 @@ class StubIngestService:
 
 
 def _upload(stub, filename="screenshot.png"):
-    """
-    Posts a file with the ingest service stubbed out.
+    """Post a file with the ingest service stubbed out.
 
-    Uses its own TestClient rather than the shared `client` fixture: the app's
-    lifespan creates the pgvector extension, and nothing here touches the
-    database.
+    Uses a bare TestClient rather than the shared `client` fixture,
+    which runs the app's lifespan and so needs the database; nothing
+    here touches it.
     """
     app.dependency_overrides[get_ingest_service] = lambda: stub
     try:
@@ -285,7 +341,8 @@ def test_upload_of_an_unstored_file_reports_a_null_document_id():
 
 
 def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
-    stub = StubIngestService(ImageExtractionError("vision model returned no text"))
+    stub = StubIngestService(ImageExtractionError(
+        "vision model returned no text"))
 
     response = _upload(stub)
 
@@ -314,7 +371,8 @@ def test_upload_reads_no_more_than_one_byte_past_the_limit(monkeypatch):
 
 
 def test_upload_rejects_an_unsupported_file():
-    stub = StubIngestService(UnsupportedFileError("Cannot extract text from 'a.zip'"))
+    stub = StubIngestService(UnsupportedFileError(
+        "Cannot extract text from 'a.zip'"))
 
     response = _upload(stub, filename="a.zip")
 

@@ -1,3 +1,5 @@
+"""Scoring candidates through the voting layer, and its fallbacks."""
+
 import os
 
 import pytest
@@ -57,9 +59,10 @@ def test_score_candidates_matches_results_back_by_text_when_shuffled(monkeypatch
     ]
 
     async def fake_evaluate_input(evaluation_input):
-        # Return results in reverse order and re-sorted by score, as the real
-        # voting layer's _merge_provider_outputs does — score_candidates must
-        # still return scores lined up with the ORIGINAL candidate order.
+        # Return results in reverse order and re-sorted by score, as the
+        # real voting layer's _merge_provider_outputs does —
+        # score_candidates must still return scores lined up with the
+        # ORIGINAL candidate order.
         outputs = [
             _evaluated_output(
                 candidates[2], overall=5, relevance=5, correctness=5, understandability=5, coverage=5
@@ -78,9 +81,9 @@ def test_score_candidates_matches_results_back_by_text_when_shuffled(monkeypatch
     scores = score_candidates("prompt", candidates)
 
     assert len(scores) == 3
-    assert scores[0].overall == 1.0  # candidate A scored 1
-    assert scores[1].overall == 3.0  # candidate B scored 3
-    assert scores[2].overall == 5.0  # candidate C scored 5
+    assert scores[0].overall == 1.0  # Candidate A scored 1.
+    assert scores[1].overall == 3.0  # Candidate B scored 3.
+    assert scores[2].overall == 5.0  # Candidate C scored 5.
 
 
 def test_score_candidates_handles_duplicate_candidate_text(monkeypatch):
@@ -102,8 +105,8 @@ def test_score_candidates_handles_duplicate_candidate_text(monkeypatch):
 
     scores = score_candidates("prompt", candidates)
 
-    # Each occurrence consumes one queued result, in the order returned —
-    # not the same result reused twice, and not skipped.
+    # Each occurrence consumes one queued result, in the order returned
+    # — not the same result reused twice, and not skipped.
     assert scores[0].overall == 1.0
     assert scores[1].overall == 5.0
 
@@ -116,7 +119,8 @@ def test_score_candidates_falls_back_to_zero_when_the_provider_call_raises(monke
 
     scores = score_candidates("prompt", ["a", "b"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
+    assert scores == [CandidateScore(
+        0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_falls_back_to_zero_when_results_dont_cover_all_candidates(monkeypatch):
@@ -124,14 +128,16 @@ def test_score_candidates_falls_back_to_zero_when_results_dont_cover_all_candida
         # Only one result for two candidates submitted.
         return _voting_result(
             evaluation_input.prompt,
-            [_evaluated_output("a", overall=5, relevance=5, correctness=5, understandability=5, coverage=5)],
+            [_evaluated_output("a", overall=5, relevance=5,
+                               correctness=5, understandability=5, coverage=5)],
         )
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
 
     scores = score_candidates("prompt", ["a", "b"])
 
-    assert scores == [CandidateScore(0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
+    assert scores == [CandidateScore(
+        0, 0, 0, 0, 0, failed=True), CandidateScore(0, 0, 0, 0, 0, failed=True)]
 
 
 def test_score_candidates_falls_back_to_zero_when_voting_failed_to_import(monkeypatch):
@@ -148,7 +154,8 @@ def test_score_candidates_bridges_gemini_api_key_into_environment(monkeypatch):
     async def fake_evaluate_input(evaluation_input):
         return _voting_result(
             evaluation_input.prompt,
-            [_evaluated_output("a", overall=5, relevance=5, correctness=5, understandability=5, coverage=5)],
+            [_evaluated_output("a", overall=5, relevance=5,
+                               correctness=5, understandability=5, coverage=5)],
         )
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
@@ -165,7 +172,8 @@ def test_score_candidates_does_not_overwrite_an_already_set_gemini_api_key(monke
     async def fake_evaluate_input(evaluation_input):
         return _voting_result(
             evaluation_input.prompt,
-            [_evaluated_output("a", overall=5, relevance=5, correctness=5, understandability=5, coverage=5)],
+            [_evaluated_output("a", overall=5, relevance=5,
+                               correctness=5, understandability=5, coverage=5)],
         )
 
     monkeypatch.setattr(scoring, "_evaluate_input", fake_evaluate_input)
@@ -177,7 +185,7 @@ def test_score_candidates_does_not_overwrite_an_already_set_gemini_api_key(monke
 
 
 def test_score_marks_candidates_the_voting_layer_failed_to_rate(monkeypatch):
-    """The -1 sentinel clamps to 0.0, so `failed` is the only way to tell."""
+    """Flag unrated candidates: -1 clamps to 0.0 like a real zero."""
     async def fake_evaluate_input(evaluation_input):
         outputs = [
             _evaluated_output(

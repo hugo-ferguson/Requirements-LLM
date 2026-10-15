@@ -1,8 +1,9 @@
 """The ensemble orchestrator: fan out to every enabled agent at once.
 
-This is the core of the generation layer. Running the agents concurrently means
-total latency tracks the slowest agent rather than the sum of all of them
-(backlog R10), which is what keeps the run inside the 60 second budget in R6.
+This is the core of the generation layer. Running the agents
+concurrently means total latency tracks the slowest agent rather than
+the sum of all of them (backlog R10), which is what keeps the run inside
+the 60 second budget in R6.
 
 There is deliberately no agent framework here — `asyncio.gather` over
 async-native PydanticAI agents is the whole mechanism.
@@ -57,24 +58,26 @@ async def _run_one(
     prompt: str | None = None,
     anchor_titles: list[str] | None = None,
 ) -> AgentResult:
-    """Run a single agent, converting every failure mode into a result object.
+    """Run one agent, turning every failure into a result object.
 
-    Nothing raises out of here. A dead agent must degrade the ensemble, not
-    fail the request — the same convention the voting layer uses.
+    Nothing raises out of here. A dead agent must degrade the ensemble,
+    not fail the request — the same convention the voting layer uses.
 
-    `prompt` overrides the default user message so the title-anchored passes
-    can reuse this same failure handling instead of duplicating it. Passing
-    `anchor_titles` makes this a pass-2 run: the agent answers by title
-    number and the anchor's exact titles are attached here.
+    `prompt` overrides the default user message so the title-anchored
+    passes can reuse this same failure handling instead of duplicating
+    it. Passing `anchor_titles` makes this a pass-2 run: the agent
+    answers by title number and the anchor's exact titles are attached
+    here.
     """
     if anchor_titles is None:
-        make_agent = lambda: build_agent(config)  # noqa: E731
+        def make_agent(): return build_agent(config)
     else:
-        make_agent = lambda: build_agent(config, output_type=NumberedCriteriaSet)  # noqa: E731
+        def make_agent(): return build_agent(config, output_type=NumberedCriteriaSet)
     run = await _run_agent(
         config,
         make_agent,
-        prompt if prompt is not None else build_user_prompt(deps, max_criteria),
+        prompt if prompt is not None else build_user_prompt(
+            deps, max_criteria),
         deps,
         timeout_seconds,
     )
@@ -103,6 +106,8 @@ async def _run_one(
 
 @dataclass
 class _AgentRun:
+    """What one agent run produced: its output, or why it failed."""
+
     output: Any = None
     error: str | None = None
     duration_ms: int = 0
@@ -115,7 +120,7 @@ async def _run_agent(
     deps: GenerationDeps,
     timeout_seconds: float,
 ) -> _AgentRun:
-    """Build and run one agent; every failure comes back as `error`, never raised."""
+    """Build and run one agent, returning any failure as `error`."""
     started = time.perf_counter()
 
     def elapsed_ms() -> int:
@@ -125,10 +130,12 @@ async def _run_agent(
         agent = make_agent()
         run = await asyncio.wait_for(agent.run(prompt, deps=deps), timeout=timeout_seconds)
     except ModelBuildError as error:
-        logger.warning("Generation agent %s not available: %s", config.id, error)
+        logger.warning("Generation agent %s not available: %s",
+                       config.id, error)
         return _AgentRun(error=str(error), duration_ms=elapsed_ms())
     except asyncio.TimeoutError:
-        logger.warning("Generation agent %s timed out after %ss", config.id, timeout_seconds)
+        logger.warning("Generation agent %s timed out after %ss",
+                       config.id, timeout_seconds)
         return _AgentRun(error=f"Timed out after {timeout_seconds}s", duration_ms=elapsed_ms())
     except Exception as error:  # noqa: BLE001 - one bad agent must not fail the run
         logger.exception("Generation agent %s failed", config.id)
@@ -141,7 +148,7 @@ async def _run_agent(
 def _attach_anchor_titles(
     agent_id: str, output: NumberedCriteriaSet, titles: list[str]
 ) -> list[GeneratedCriterion]:
-    """Turn numbered pass-2 answers into criteria carrying the anchor's titles.
+    """Turn numbered pass-2 answers into criteria with anchor titles.
 
     A number outside the list, or a second answer to the same number, is
     dropped: there is no title to attach, or the group already has this
@@ -156,7 +163,8 @@ def _attach_anchor_titles(
         answered.add(number)
         criteria.append(
             GeneratedCriterion(
-                title=titles[number - 1], given=item.given, when=item.when, then=item.then
+                title=titles[number -
+                             1], given=item.given, when=item.when, then=item.then
             )
         )
 
@@ -205,20 +213,22 @@ async def run_title_anchored_ensemble(
     max_criteria: int = 8,
     timeout_seconds: float = 90.0,
 ) -> tuple[EnsembleResult, list[CandidateGroup]]:
-    """Two-pass generation: one agent fixes the titles, the rest fill them in.
+    """Run pass 1 (titles) on one agent, then pass 2 on the rest.
 
-    Pass 1 runs a single nominated agent. Its titles become the grouping key.
-    Pass 2 runs every *other* agent concurrently against those titles, so each
-    group holds one candidate per agent describing the same behaviour — which
-    is what lets the voting layer compare like against like instead of scoring
-    an arbitrary union (see the review notes on duplicate criteria).
+    Pass 1 runs a single nominated agent. Its titles become the grouping
+    key. Pass 2 runs every *other* agent concurrently against those
+    titles, so each group holds one candidate per agent describing the
+    same behaviour — which is what lets the voting layer compare like
+    against like instead of scoring an arbitrary union.
 
-    Latency is pass 1 plus the slowest agent in pass 2, rather than the slowest
-    agent overall. That is the inherent cost of anchoring, and it is why the
-    caller can still fall back to `run_ensemble`.
+    Latency is pass 1 plus the slowest agent in pass 2, rather than the
+    slowest agent overall. That is the inherent cost of anchoring, and
+    it is why the caller can still fall back to `run_ensemble`.
 
-    Returns the pass-1 ensemble alongside the groups, because the caller still
-    needs `EnsembleResult.prompt` for scoring and `failed` for error reporting.
+    Return the ensemble (every agent's result, from both passes)
+    alongside the groups, because the caller still needs
+    `EnsembleResult.prompt` for scoring and `failed` for error
+    reporting. The groups are empty when the anchor produced nothing.
     """
     roster = agents if agents is not None else get_models_config().enabled_agents()
     if not roster:
@@ -280,23 +290,25 @@ def group_by_title(
 ) -> list[CandidateGroup]:
     """Collect every agent's criteria into one group per anchor title.
 
-    Group order follows the anchor's title order, so the anchor agent decides
-    both the content and the sequence of the final list. A follower criterion
-    whose title matches nothing is dropped rather than promoted to its own
-    group: pass 2 asked for a fixed set, so an unmatched title means the model
-    ignored the instruction, and letting it through would reintroduce exactly
-    the ungrouped duplicates this design exists to prevent.
+    Group order follows the anchor's title order, so the anchor agent
+    decides both the content and the sequence of the final list. A
+    follower criterion whose title matches no anchor title is dropped
+    rather than promoted to its own group: letting it through would
+    reintroduce exactly the ungrouped duplicates this design exists to
+    prevent.
     """
     groups: dict[str, CandidateGroup] = {}
     for criterion in anchor.criteria:
         key = title_key(criterion.title)
         if key in groups:
-            # The anchor itself produced two titles that normalise the same.
-            # Keep the first; the second would create a duplicate group.
+            # The anchor itself produced two titles that normalise the
+            # same. Keep the first; the second would create a duplicate
+            # group.
             continue
         groups[key] = CandidateGroup(
             title=criterion.title,
-            candidates=[Candidate(agent_id=anchor.agent_id, criterion=criterion)],
+            candidates=[
+                Candidate(agent_id=anchor.agent_id, criterion=criterion)],
         )
 
     for follower in followers:
@@ -327,12 +339,13 @@ def group_by_title(
 
 
 def pool_criteria(ensemble: EnsembleResult) -> list[tuple[str, GeneratedCriterion]]:
-    """Flatten every successful agent's criteria into one candidate pool.
+    """Flatten every successful agent's criteria into one pool.
 
-    Returns `(agent_id, criterion)` pairs so provenance survives into logging
-    and evaluation, even though the voting layer itself never sees the labels.
-    Exact duplicates across agents are dropped — three models independently
-    producing the same criterion should appear once, not three times.
+    Return `(agent_id, criterion)` pairs so provenance survives into
+    logging and evaluation, even though the voting layer itself never
+    sees the labels. Exact duplicates across agents are dropped — three
+    models independently producing the same criterion should appear
+    once, not three times.
     """
     seen: set[str] = set()
     pooled: list[tuple[str, GeneratedCriterion]] = []
@@ -348,16 +361,22 @@ def pool_criteria(ensemble: EnsembleResult) -> list[tuple[str, GeneratedCriterio
     return pooled
 
 
-# --- UAT test cases ----------------------------------------------------------
+"""UAT test cases.
+
+The same two-pass shape as acceptance criteria, run once per accepted
+AC.
+"""
 
 
 def _uat_agent(config: GenerationAgentConfig, output_type):
+    # A generation agent with the UAT prompt and no story context.
     return build_agent(
         config, output_type=output_type, system_prompt=UAT_SYSTEM_PROMPT, with_context=False
     )
 
 
 def _uat_result(config: GenerationAgentConfig, run: _AgentRun, cases=None) -> UatAgentResult:
+    # Package one agent run as a UAT result, failed or not.
     return UatAgentResult(
         agent_id=config.id,
         provider=config.provider,
@@ -374,14 +393,15 @@ async def run_uat_ensemble(
     agents: list[GenerationAgentConfig] | None = None,
     timeout_seconds: float = 90.0,
 ) -> tuple[list[UatAgentResult], list[UatCandidateGroup]]:
-    """Two-pass UAT generation for one acceptance criterion.
+    """Generate UAT cases for one acceptance criterion, in two passes.
 
-    The first agent that succeeds anchors the test case titles; every other
-    agent then writes its own description for each, by case number. Unlike AC
-    generation there is no flat fallback: if the preferred anchor fails, the
-    next agent in roster order anchors instead, so one dead model still
-    leaves a usable set. Returns every agent's result (for error reporting)
-    and one group per case title — empty only when every agent failed.
+    The first agent that succeeds anchors the test case titles; every
+    other agent then writes its own description for each, by case
+    number. Unlike AC generation there is no flat fallback: if the
+    preferred anchor fails, the next agent in roster order anchors
+    instead, so one dead model still leaves a usable set. Return every
+    agent's result (for error reporting) and one group per case title —
+    empty only when every agent failed.
     """
     roster = agents if agents is not None else get_models_config().enabled_agents()
     deps = GenerationDeps(user_story=acceptance_criterion)
@@ -398,7 +418,8 @@ async def run_uat_ensemble(
             deps,
             timeout_seconds,
         )
-        result = _uat_result(config, run, list(run.output.cases) if run.output else None)
+        result = _uat_result(config, run, list(
+            run.output.cases) if run.output else None)
         results.append(result)
         if result.ok and result.cases:
             anchor = result
@@ -423,7 +444,8 @@ async def run_uat_ensemble(
         _uat_result(
             config,
             run,
-            _attach_uat_titles(config.id, run.output, titles) if run.output else None,
+            _attach_uat_titles(config.id, run.output,
+                               titles) if run.output else None,
         )
         for config, run in zip(remaining, follower_runs, strict=True)
     ]
@@ -434,13 +456,15 @@ async def run_uat_ensemble(
         key = title_key(case.title)
         if key not in groups:
             groups[key] = UatCandidateGroup(
-                title=case.title, candidates=[UatCandidate(agent_id=anchor.agent_id, case=case)]
+                title=case.title, candidates=[UatCandidate(
+                    agent_id=anchor.agent_id, case=case)]
             )
     for follower in followers:
         for case in follower.cases:
             group = groups.get(title_key(case.title))
             if group is not None and all(c.agent_id != follower.agent_id for c in group.candidates):
-                group.candidates.append(UatCandidate(agent_id=follower.agent_id, case=case))
+                group.candidates.append(UatCandidate(
+                    agent_id=follower.agent_id, case=case))
 
     return results, list(groups.values())
 
@@ -448,7 +472,7 @@ async def run_uat_ensemble(
 def _attach_uat_titles(
     agent_id: str, output: NumberedUatCaseSet, titles: list[str]
 ) -> list[GeneratedUatCase]:
-    """UAT counterpart of `_attach_anchor_titles`, with the same drop rules."""
+    """Give UAT answers their titles, like `_attach_anchor_titles`."""
     cases: list[GeneratedUatCase] = []
     answered: set[int] = set()
     for item in output.cases:
@@ -456,7 +480,8 @@ def _attach_uat_titles(
         if not 1 <= number <= len(titles) or number in answered:
             continue
         answered.add(number)
-        cases.append(GeneratedUatCase(title=titles[number - 1], description=item.description))
+        cases.append(GeneratedUatCase(
+            title=titles[number - 1], description=item.description))
 
     dropped = len(output.cases) - len(cases)
     if dropped:

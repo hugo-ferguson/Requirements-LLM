@@ -1,3 +1,5 @@
+"""UatCaseService generation and regeneration, against stub models."""
+
 import asyncio
 
 import pytest
@@ -24,6 +26,7 @@ from app.services.uat_cases import GeneratedUatCase, UatCaseService
 
 @pytest.fixture(name="db_session")
 def db_session_fixture():
+    """Yield a session on a fresh in-memory SQLite database."""
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -33,7 +36,7 @@ def db_session_fixture():
 
 
 def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
-    """Creates a session with one accepted AC record; returns (session_id, ac_id)."""
+    """Seed one accepted AC; return (session_id, ac_id)."""
     sessions = SessionRepository(db_session)
     ac_repo = AcceptanceCriteriaRepository(db_session)
 
@@ -44,15 +47,19 @@ def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
         given="a registered user",
         when="they submit valid credentials",
         then="they land on the dashboard",
-        scores=AcceptanceCriterionScores(relevance=1, correctness=1, understandability=1, coverage=1),
+        scores=AcceptanceCriterionScores(
+            relevance=1, correctness=1, understandability=1, coverage=1),
         overall_score=1,
     )
+    assert chat_session.id is not None
     [record] = ac_repo.persist_batch(chat_session.id, [seeded])
     ac_repo.update_status(record, "accepted")
+    assert record.id is not None
     return chat_session.id, record.id
 
 
-_FAKE_SCORE = CandidateScore(relevance=3, correctness=3.5, understandability=4, coverage=4.5, overall=3.75)
+_FAKE_SCORE = CandidateScore(
+    relevance=3, correctness=3.5, understandability=4, coverage=4.5, overall=3.75)
 
 
 def _fake_scorer(prompt, candidates, *, reference_answer="", settings=None):
@@ -82,7 +89,8 @@ def _tool_response(info: AgentInfo, **fields) -> ModelResponse:
 async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
     db_session: Session,
 ) -> None:
-    # The autouse fixture points the roster at two offline `test` agents.
+    # The autouse fixture points the roster at two offline `test`
+    # agents.
     session_id, ac_id = _seed_accepted_ac(db_session)
     service = _service(db_session)
 
@@ -99,7 +107,8 @@ async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
         assert case.scores.relevance == 3
         assert case.overall_score == 3.75
         assert case.status == "pending"
-        # Equal scores tie-break on agent id, so test-a's version is shown.
+        # Equal scores tie-break on agent id, so test-a's version is
+        # shown.
         assert case.source_agent == "test-a"
         [alt] = case.alternatives
         assert alt.source_agent == "test-b"
@@ -114,7 +123,8 @@ async def test_generate_raises_generation_error_and_persists_nothing_when_every_
 
     async def all_failed(prompt, *, timeout_seconds):
         return [
-            UatAgentResult(agent_id="a", provider="test", model="test", error="upstream is down")
+            UatAgentResult(agent_id="a", provider="test",
+                           model="test", error="upstream is down")
         ], []
 
     service = _service(db_session, uat_ensemble=all_failed)
@@ -123,6 +133,7 @@ async def test_generate_raises_generation_error_and_persists_nothing_when_every_
         await service.generate(session_id)
 
     listed = service.list_items(session_id)
+    assert listed is not None
     assert listed.groups == []
 
 
@@ -131,12 +142,14 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
 ) -> None:
     session_id, ac_id = _seed_accepted_ac(db_session)
 
-    # Seeded from the offline `test` roster the autouse fixture configures.
-    # Kept synchronous: regenerate_selected uses run_sync, which can't run
-    # inside an already-running event loop.
+    # Seeded from the offline `test` roster the autouse fixture
+    # configures. Kept synchronous: regenerate_selected uses run_sync,
+    # which can't run inside an already-running event loop.
     seed_service = _service(db_session)
     asyncio.run(seed_service.generate(session_id))
-    [group] = seed_service.list_items(session_id).groups
+    listed = seed_service.list_items(session_id)
+    assert listed is not None
+    [group] = listed.groups
     target_id = group.uat_cases[0].id
 
     def refine(messages, info):
@@ -144,7 +157,8 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
 
     service = _service(
         db_session,
-        regen_agent=Agent(FunctionModel(refine), output_type=GeneratedUatCase, system_prompt="test"),
+        regen_agent=Agent(FunctionModel(refine),
+                          output_type=GeneratedUatCase, system_prompt="test"),
     )
 
     response = service.regenerate_selected(
@@ -173,7 +187,8 @@ def test_regenerate_selected_returns_none_for_a_missing_uat_case(db_session: Ses
 
     service = _service(
         db_session,
-        regen_agent=Agent(FunctionModel(explode), output_type=GeneratedUatCase, system_prompt="test"),
+        regen_agent=Agent(FunctionModel(explode),
+                          output_type=GeneratedUatCase, system_prompt="test"),
     )
 
     result = service.regenerate_selected(

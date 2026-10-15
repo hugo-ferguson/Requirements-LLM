@@ -1,10 +1,10 @@
 """Prompt caching on the voting layer.
 
-Every vote shares the same rubric text, so for judges with `cache_prompt`
-(Anthropic needs it) it is sent as a cache-marked system block. These tests pin
-the two things that silently break caching: per-vote text leaking into the
-cached prefix, and a cold batch fired all at once so that nothing is ever read
-back.
+Every vote shares the same rubric text, so for judges with
+`cache_prompt` (Anthropic needs it) it is sent as a cache-marked system
+block. These tests pin the two things that silently break caching:
+per-vote text leaking into the cached prefix, and a cold batch fired all
+at once so that nothing is ever read back.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -26,12 +27,14 @@ VOTE_JSON = json.dumps(
     }
 )
 
-CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5", cache_prompt=True)
+CLAUDE = JudgeConfig(id="claude", provider="anthropic",
+                     model="claude-sonnet-5-5", cache_prompt=True)
 LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
 @pytest.fixture
 def api(monkeypatch) -> FakeLlmApi:
+    """Return a fake API that answers every call with a vote."""
     monkeypatch.setenv("FAKE_LLM_API_KEY", "test-key")
     return FakeLlmApi(default_reply=VOTE_JSON)
 
@@ -72,7 +75,7 @@ def test_other_judges_get_the_same_prefix_without_a_cache_marker(api) -> None:
 
 
 class _RecordingClient:
-    """Stands in for CombinedJudgeClient, recording which votes overlap."""
+    """Stands in for `CombinedJudgeClient`, recording vote overlap."""
 
     def __init__(self, judge: JudgeConfig) -> None:
         self.judge = judge
@@ -111,8 +114,11 @@ def _input(candidates: list[str]) -> EvaluationInput:
 def test_a_caching_judge_scores_one_candidate_before_the_rest() -> None:
     client = _RecordingClient(CLAUDE)
 
-    result = asyncio.run(evaluate_with_combined_model(_input(["a", "b", "c", "d"]), client))
+    result = asyncio.run(evaluate_with_combined_model(
+        _input(["a", "b", "c", "d"]), cast(CombinedJudgeClient, client)))
 
     assert [item.output for item in result.output] == ["a", "b", "c", "d"]
-    assert client.overlaps["a"] == set(), "the first vote must finish before others start"
-    assert client.overlaps["b"] >= {"c", "d"}, "the rest still run concurrently"
+    assert client.overlaps["a"] == set(
+    ), "the first vote must finish before others start"
+    assert client.overlaps["b"] >= {
+        "c", "d"}, "the rest still run concurrently"

@@ -1,8 +1,10 @@
+"""The chat assistant and single-agent AC generation, on stub models."""
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 
 from app.models_conversation import (
     ConversationAttachment,
@@ -24,15 +26,19 @@ def _request(*messages: ConversationMessage) -> ConversationRequest:
 
 
 def _zero_scorer(prompt, candidates, *, reference_answer="", settings=None):
-    """A fake scorer standing in for the voting layer, so generate-only tests
-    stay offline and don't depend on the real scoring wiring under test."""
+    """Score every candidate 0, standing in for the voting layer.
+
+    Keeps generate-only tests offline and independent of the real
+    scoring wiring.
+    """
     return [CandidateScore(0, 0, 0, 0, 0) for _ in candidates]
 
 
 def _service(model, *, chat_model=None, scorer=None) -> ConversationService:
-    """A service backed by offline models, so no test needs an API key."""
+    """Build a service on offline models, so no test needs a key."""
     return ConversationService(
-        agent=Agent(model, output_type=GeneratedCriteria, system_prompt="test"),
+        agent=Agent(model, output_type=GeneratedCriteria,
+                    system_prompt="test"),
         chat_agent=(
             Agent(chat_model, output_type=str, system_prompt="test")
             if chat_model is not None
@@ -81,12 +87,14 @@ def test_the_whole_conversation_is_rendered_in_order():
 def test_generate_returns_criteria_from_the_model():
     service = _service(TestModel())
 
-    result = service.generate(_request(ConversationMessage(role="user", text="story")))
+    result = service.generate(
+        _request(ConversationMessage(role="user", text="story")))
 
     assert result.acceptance_criteria
     first = result.acceptance_criteria[0]
     assert first.title and first.given and first.when and first.then
-    # Ids are positional; the repository assigns the real ones on persist.
+    # Ids are positional; the repository assigns the real ones on
+    # persist.
     assert [c.id for c in result.acceptance_criteria] == list(
         range(1, len(result.acceptance_criteria) + 1)
     )
@@ -98,13 +106,15 @@ def test_generate_scores_criteria_via_the_injected_scorer():
     def fake_scorer(prompt, candidates, *, reference_answer="", settings=None):
         seen_prompts_and_candidates.append((prompt, list(candidates)))
         return [
-            CandidateScore(relevance=1, correctness=2, understandability=3, coverage=4, overall=5)
+            CandidateScore(relevance=1, correctness=2,
+                           understandability=3, coverage=4, overall=5)
             for _ in candidates
         ]
 
     service = _service(TestModel(), scorer=fake_scorer)
 
-    result = service.generate(_request(ConversationMessage(role="user", text="story")))
+    result = service.generate(
+        _request(ConversationMessage(role="user", text="story")))
 
     assert result.acceptance_criteria
     for criterion in result.acceptance_criteria:
@@ -117,7 +127,8 @@ def test_generate_scores_criteria_via_the_injected_scorer():
     # The scorer is called with the same rendered prompt used for
     # generation, and one candidate string per generated criterion.
     prompt, candidates = seen_prompts_and_candidates[0]
-    assert prompt == render_conversation(_request(ConversationMessage(role="user", text="story")))
+    assert prompt == render_conversation(
+        _request(ConversationMessage(role="user", text="story")))
     assert len(candidates) == len(result.acceptance_criteria)
 
 
@@ -127,7 +138,8 @@ def test_send_message_returns_the_models_reply():
 
     service = _service(TestModel(), chat_model=FunctionModel(echo))
 
-    reply = service.send_message(_request(ConversationMessage(role="user", text="hi")))
+    reply = service.send_message(
+        _request(ConversationMessage(role="user", text="hi")))
 
     assert reply.role == "assistant"
     assert reply.text == "Real assistant reply"
@@ -139,23 +151,23 @@ def test_send_message_falls_back_to_canned_reply_on_model_failure():
 
     service = _service(TestModel(), chat_model=FunctionModel(explode))
 
-    reply = service.send_message(_request(ConversationMessage(role="user", text="hi")))
+    reply = service.send_message(
+        _request(ConversationMessage(role="user", text="hi")))
 
     assert reply.role == "assistant"
-    assert reply.text  # falls back to the canned string, never raises
+    assert reply.text  # Falls back to the canned reply; never raises.
 
 
 def test_the_model_actually_receives_the_attachment_text():
     seen: list[str] = []
 
-    service = _service(
-        FunctionModel(
-            lambda messages, info: (
-                seen.append(str(messages[-1].parts[-1].content)),  # type: ignore[union-attr]
-                _tool_response(info),
-            )[1]
-        )
-    )
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        part = messages[-1].parts[-1]
+        assert isinstance(part, UserPromptPart)
+        seen.append(str(part.content))
+        return _tool_response(info)
+
+    service = _service(FunctionModel(respond))
 
     service.generate(
         _request(
@@ -205,17 +217,19 @@ def test_a_failing_model_raises_generation_error():
     service = _service(FunctionModel(explode))
 
     with pytest.raises(GenerationError) as caught:
-        service.generate(_request(ConversationMessage(role="user", text="story")))
+        service.generate(
+            _request(ConversationMessage(role="user", text="story")))
 
     assert "upstream is down" in str(caught.value)
 
 
 def test_generating_from_an_empty_conversation_is_refused_without_calling_the_model():
+    """Refuse an empty conversation before any model call.
+
+    Given nothing to work from, the model happily invents an unrelated
+    feature and writes criteria for it.
     """
-    Guards a real failure seen in testing: given nothing to work from, the
-    model happily invented an unrelated feature and wrote criteria for it.
-    """
-    def explode(messages, info):  # must never be reached
+    def explode(messages, info):  # Must never be reached.
         raise AssertionError("the model should not have been called")
 
     service = _service(FunctionModel(explode))
@@ -227,7 +241,8 @@ def test_generating_from_an_empty_conversation_is_refused_without_calling_the_mo
             ConversationMessage(
                 role="user",
                 text="",
-                attachments=[ConversationAttachment(filename="blank.txt", content=" ")],
+                attachments=[ConversationAttachment(
+                    filename="blank.txt", content=" ")],
             )
         ),
     ):

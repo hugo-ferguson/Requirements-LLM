@@ -1,3 +1,5 @@
+"""HTTP routes for uploading, searching and deleting documents."""
+
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
@@ -12,10 +14,10 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 class UploadRead(BaseModel):
-    """The outcome of an upload: always text, sometimes a stored document."""
+    """An upload's outcome: always text, sometimes a stored document."""
 
-    # None when the file was read but not stored — images, which go straight
-    # into the conversation instead of the search index.
+    # None when the file was read but not stored — images, which go
+    # straight into the conversation instead of the search index.
     document_id: int | None
     title: str
     filename: str | None
@@ -27,6 +29,8 @@ class UploadRead(BaseModel):
 
 
 class ChunkRead(BaseModel):
+    """One stored chunk of a document, as returned by search."""
+
     id: int
     document_id: int
     chunk_index: int | None
@@ -40,7 +44,9 @@ def upload_document(
     tags: str | None = Form(None, description="Comma-separated tag names"),
     service: IngestService = Depends(get_ingest_service),
 ) -> UploadRead:
-    tag_names = [name.strip() for name in (tags or "").split(",") if name.strip()]
+    """Extract a file's text and, unless it's an image, index it."""
+    tag_names = [name.strip()
+                 for name in (tags or "").split(",") if name.strip()]
 
     try:
         result = service.ingest_file(
@@ -65,7 +71,8 @@ def upload_document(
         document_id=document.id if document else None,
         title=document.title if document else (title or filename),
         filename=document.filename if document else filename,
-        extension=document.extension if document else Path(filename).suffix.lower() or None,
+        extension=document.extension if document else Path(
+            filename).suffix.lower() or None,
         chunk_count=result.chunk_count,
         text=result.text,
     )
@@ -76,6 +83,7 @@ def delete_document(
     document_id: int,
     service: IngestService = Depends(get_ingest_service),
 ) -> Response:
+    """Delete a stored document and its chunks."""
     if not service.delete_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found")
     return Response(status_code=204)
@@ -87,6 +95,7 @@ def search_documents(
     k: int = Query(5, ge=1, le=50),
     service: IngestService = Depends(get_ingest_service),
 ) -> list[ChunkRead]:
+    """Return the `k` stored chunks most similar to the query `q`."""
     return [
         ChunkRead(
             id=chunk.id,  # type: ignore[arg-type]

@@ -1,20 +1,21 @@
 """Which models the app uses, and for what (backlog R8).
 
-Every model choice lives in one JSON file, config/models.json, so changing a
-model is a config edit, not a code change:
+Every model choice lives in one JSON file, config/models.json, so
+changing a model is a config edit, not a code change:
 
 - `chat_model`: the chat assistant and single-item regeneration.
 - `vision_model`: reads text out of uploaded images.
 - `generation_agents`: the ensemble that writes criteria and UAT cases.
-- `judges`: the voting layer's scorers (see `voting.models.JudgeConfig`).
+- `judges`: the voting layer's scorers (see
+  `voting.models.JudgeConfig`).
 
 Every one of them is a `llm.spec.ModelSpec`, e.g.
 `{"provider": "anthropic", "model": "claude-sonnet-5-5"}`, built by
 `llm.spec.build_model`.
 
-API keys are never in that file — only the *name* of the environment variable
-holding a key, which is read at build time. .env keeps the keys,
-infrastructure and tuning numbers.
+API keys are never in that file — only the *name* of the environment
+variable holding a key, which is read at build time. .env keeps the
+keys, infrastructure and tuning numbers.
 """
 
 from __future__ import annotations
@@ -38,7 +39,10 @@ class GenerationAgentConfig(ModelSpec):
 
 
 class ModelsConfig(BaseModel):
-    # A misspelt or out-of-date key fails loudly instead of being ignored.
+    """The parsed contents of config/models.json."""
+
+    # A misspelt or out-of-date key fails loudly instead of being
+    # ignored.
     model_config = ConfigDict(extra="forbid")
 
     chat_model: ModelSpec
@@ -47,14 +51,16 @@ class ModelsConfig(BaseModel):
     judges: list[JudgeConfig]
 
     def enabled_agents(self) -> list[GenerationAgentConfig]:
+        """Return the generation agents not switched off in config."""
         return [agent for agent in self.generation_agents if agent.enabled]
 
     def enabled_judges(self) -> list[JudgeConfig]:
+        """Return the voting judges not switched off in config."""
         return [judge for judge in self.judges if judge.enabled]
 
 
 class ModelsConfigError(RuntimeError):
-    """Raised when the models config file is missing, malformed, or unusable."""
+    """Raised when the models config is missing, invalid or unusable."""
 
 
 def load_models_config(path: str | Path) -> ModelsConfig:
@@ -75,7 +81,8 @@ def load_models_config(path: str | Path) -> ModelsConfig:
     try:
         config = ModelsConfig.model_validate(payload)
     except ValidationError as error:
-        raise ModelsConfigError(f"Model config {config_path} is invalid: {error}") from error
+        raise ModelsConfigError(
+            f"Model config {config_path} is invalid: {error}") from error
 
     for section, ids in (
         ("agent", [agent.id for agent in config.generation_agents]),
@@ -87,7 +94,8 @@ def load_models_config(path: str | Path) -> ModelsConfig:
                 f"Duplicate {section} ids in {config_path}: {sorted(duplicates)}")
 
     if not config.enabled_agents():
-        raise ModelsConfigError(f"No enabled generation_agents in {config_path}.")
+        raise ModelsConfigError(
+            f"No enabled generation_agents in {config_path}.")
     if not config.enabled_judges():
         raise ModelsConfigError(f"No enabled judges in {config_path}.")
 
@@ -96,7 +104,7 @@ def load_models_config(path: str | Path) -> ModelsConfig:
 
 @lru_cache(maxsize=1)
 def get_models_config() -> ModelsConfig:
-    """Process-wide models config, read once on first use."""
+    """Return the process-wide models config, read once on first use."""
     from app.config import settings
 
     return load_models_config(settings.models_config_path)

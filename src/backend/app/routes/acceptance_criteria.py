@@ -1,3 +1,5 @@
+"""HTTP routes for reviewing a session's acceptance criteria."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
@@ -27,6 +29,7 @@ router = APIRouter(
 def get_acceptance_criteria_service(
     session: Session = Depends(get_session),
 ) -> AcceptanceCriteriaService:
+    """Build the acceptance criteria service for one request."""
     return AcceptanceCriteriaService(
         SessionRepository(session),
         AcceptanceCriteriaRepository(session),
@@ -39,6 +42,7 @@ def get_acceptance_criteria_service(
 def list_acceptance_criteria(
     session_id: int, service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service)
 ) -> GenerateResult:
+    """Return the session's acceptance criteria in display order."""
     items = service.list_items(session_id)
     if items is None:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -50,11 +54,14 @@ def update_acceptance_criterion_text(
     session_id: int,
     ac_id: int,
     data: AcceptanceCriterionTextUpdate,
-    service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
+    service: AcceptanceCriteriaService = Depends(
+        get_acceptance_criteria_service),
 ) -> AcceptanceCriterion:
+    """Save a reviewer's edit to an AC's text."""
     updated = service.update_text(session_id, ac_id, data)
     if updated is None:
-        raise HTTPException(status_code=404, detail="Acceptance criterion not found")
+        raise HTTPException(
+            status_code=404, detail="Acceptance criterion not found")
     return updated
 
 
@@ -63,11 +70,14 @@ def update_acceptance_criterion_status(
     session_id: int,
     ac_id: int,
     data: AcceptanceCriterionStatusUpdate,
-    service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
+    service: AcceptanceCriteriaService = Depends(
+        get_acceptance_criteria_service),
 ) -> AcceptanceCriterion:
+    """Set an AC's review status."""
     updated = service.update_status(session_id, ac_id, data)
     if updated is None:
-        raise HTTPException(status_code=404, detail="Acceptance criterion not found")
+        raise HTTPException(
+            status_code=404, detail="Acceptance criterion not found")
     return updated
 
 
@@ -76,15 +86,18 @@ def regenerate_selected(
     session_id: int,
     ac_id: int,
     data: RegenerateSelectedRequest,
-    service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
+    service: AcceptanceCriteriaService = Depends(
+        get_acceptance_criteria_service),
 ) -> RegenerateSelectedResponse:
+    """Propose a replacement for one AC without saving it."""
     try:
         result = service.regenerate_selected(session_id, ac_id, data)
     except GenerationError as error:
         # The request was fine; the upstream model was not.
         raise HTTPException(status_code=502, detail=str(error)) from error
     if result is None:
-        raise HTTPException(status_code=404, detail="Acceptance criterion not found")
+        raise HTTPException(
+            status_code=404, detail="Acceptance criterion not found")
     return result
 
 
@@ -93,14 +106,17 @@ def apply_approved(
     session_id: int,
     ac_id: int,
     data: ApplyApprovedRequest,
-    service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
+    service: AcceptanceCriteriaService = Depends(
+        get_acceptance_criteria_service),
 ) -> GenerateResult:
+    """Swap an AC for the approved candidates; return the new list."""
     try:
         items = service.apply_approved(session_id, ac_id, data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if items is None:
-        raise HTTPException(status_code=404, detail="Acceptance criterion not found")
+        raise HTTPException(
+            status_code=404, detail="Acceptance criterion not found")
     return GenerateResult(acceptance_criteria=items)
 
 
@@ -111,11 +127,14 @@ def select_alternative(
     session_id: int,
     ac_id: int,
     candidate_id: int,
-    service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service),
+    service: AcceptanceCriteriaService = Depends(
+        get_acceptance_criteria_service),
 ) -> SelectAlternativeResponse:
+    """Show another model's version of an AC in its place."""
     result = service.select_alternative(session_id, ac_id, candidate_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="Acceptance criterion or alternative not found")
+        raise HTTPException(
+            status_code=404, detail="Acceptance criterion or alternative not found")
     return result
 
 
@@ -123,6 +142,7 @@ def select_alternative(
 def regenerate_all_kickoff(
     session_id: int, service: AcceptanceCriteriaService = Depends(get_acceptance_criteria_service)
 ) -> MessageRead:
+    """Post the assistant message that starts a full regeneration."""
     message = service.regenerate_all_kickoff(session_id)
     if message is None:
         raise HTTPException(status_code=404, detail="Session not found")

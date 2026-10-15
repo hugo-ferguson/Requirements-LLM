@@ -1,3 +1,5 @@
+"""API tests for the example items resource."""
+
 from fastapi.testclient import TestClient
 
 

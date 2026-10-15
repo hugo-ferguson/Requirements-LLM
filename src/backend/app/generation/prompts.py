@@ -1,8 +1,8 @@
 """Prompt construction for the generation agents.
 
-The system prompt is identical across every agent in the ensemble — the only
-thing that varies is the model behind it. That is what makes the outputs
-comparable when the voting layer scores them.
+The system prompt is identical across every agent in the ensemble — the
+only thing that varies is the model behind it. That is what makes the
+outputs comparable when the voting layer scores them.
 """
 
 from __future__ import annotations
@@ -36,12 +36,12 @@ rather than inventing product-specific detail.
 
 @dataclass
 class GenerationDeps:
-    """Runtime dependencies injected into an agent run via PydanticAI's
-    `RunContext`.
+    """Per-run dependencies injected through PydanticAI's `RunContext`.
 
-    Holding these in an object rather than string-formatting them into the user
-    prompt means the same agent instance serves every session — nothing about a
-    particular request is baked into the agent at construction time.
+    Holding these in an object rather than string-formatting them into
+    the user prompt means the same agent instance serves every session:
+    nothing about a particular request is baked into the agent at
+    construction time.
     """
 
     user_story: str
@@ -67,7 +67,7 @@ class GenerationDeps:
         )
 
     def feedback_block(self) -> str | None:
-        """Render reviewer feedback for a regeneration pass (backlog R20)."""
+        """Render reviewer feedback when regenerating (backlog R20)."""
         if not self.feedback:
             return None
         return (
@@ -77,8 +77,11 @@ class GenerationDeps:
 
 
 def build_user_prompt(deps: GenerationDeps, max_criteria: int) -> str:
-    """The per-run user message. Context and feedback go in via system prompts,
-    so this stays short and stable."""
+    """Build the per-run user message.
+
+    Context and feedback go in through system prompts, so this stays
+    short and stable.
+    """
     return (
         f"Write up to {max_criteria} acceptance criteria for the following "
         f"user story.\n\nUser story:\n{deps.user_story.strip()}"
@@ -86,12 +89,13 @@ def build_user_prompt(deps: GenerationDeps, max_criteria: int) -> str:
 
 
 def build_titles_prompt(deps: GenerationDeps, max_criteria: int) -> str:
-    """Pass 1 of title-anchored generation: one agent fixes the title set.
+    """Build the pass-1 prompt: one agent fixes the title set.
 
-    The titles become the grouping key every other agent writes against, which
-    is what makes candidates from different models comparable. Descriptions are
-    requested here too — this agent's own criteria are a full candidate in
-    their own right, so asking for titles alone would waste the call.
+    The titles become the grouping key every other agent writes against,
+    which is what makes candidates from different models comparable.
+    Descriptions are requested here too — this agent's own criteria are
+    a full candidate in their own right, so asking for titles alone
+    would waste the call.
     """
     return (
         f"Write up to {max_criteria} acceptance criteria for the following "
@@ -105,15 +109,16 @@ def build_titles_prompt(deps: GenerationDeps, max_criteria: int) -> str:
 def build_descriptions_prompt(
     deps: GenerationDeps, titles: list[str]
 ) -> str:
-    """Pass 2: write given/when/then for an already-fixed set of titles.
+    """Build the pass-2 prompt: given/when/then for fixed titles.
 
-    Every agent answers the same titles, so their outputs line up one-to-one
-    and the voting layer compares like against like instead of scoring an
-    arbitrary union. Answers are identified by title number, not by copying
-    the title back: the number is the join key, and the orchestrator attaches
-    the anchor's exact title itself.
+    Every agent answers the same titles, so their outputs line up
+    one-to-one and the voting layer compares like against like instead
+    of scoring an arbitrary union. Answers are identified by title
+    number, not by copying the title back: the number is the join key,
+    and the orchestrator attaches the anchor's exact title itself.
     """
-    numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    numbered = "\n".join(f"{index}. {title}" for index,
+                         title in enumerate(titles, start=1))
     return (
         "Below is a fixed, numbered list of acceptance criteria titles for a user "
         "story. Write your own given / when / then for EVERY title in the list.\n\n"
@@ -139,7 +144,7 @@ the criterion actually states — do not invent unrelated functionality.
 
 
 def build_uat_cases_prompt(acceptance_criterion: str) -> str:
-    """Pass 1 for UAT: the anchor agent writes the test cases for one AC."""
+    """Build the UAT pass-1 prompt: the anchor writes one AC's cases."""
     return (
         "Write 2-4 concrete UAT test cases for the acceptance criterion below. "
         "Cover the happy path and at least one edge or negative case. Each "
@@ -150,12 +155,13 @@ def build_uat_cases_prompt(acceptance_criterion: str) -> str:
 
 
 def build_uat_descriptions_prompt(acceptance_criterion: str, titles: list[str]) -> str:
-    """Pass 2 for UAT: write a description for each fixed, numbered case title.
+    """Build the UAT pass-2 prompt: a description per numbered title.
 
-    Answers are identified by number, like `build_descriptions_prompt`, so a
-    reworded title can't drop an agent's answer.
+    Answers are identified by number, like `build_descriptions_prompt`,
+    so a reworded title can't drop an agent's answer.
     """
-    numbered = "\n".join(f"{index}. {title}" for index, title in enumerate(titles, start=1))
+    numbered = "\n".join(f"{index}. {title}" for index,
+                         title in enumerate(titles, start=1))
     return (
         "Below is a fixed, numbered list of UAT test case titles for an "
         "acceptance criterion. Write your own description for EVERY title.\n\n"
