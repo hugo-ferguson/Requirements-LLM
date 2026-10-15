@@ -23,6 +23,7 @@ from app.services.ingest import (
     IngestResult,
     IngestService,
 )
+from app.vector_store.embeddings import EmbeddingProvider
 from app.vector_store.models import Document, DocumentChunk
 from app.vector_store.vector_store import VectorStore
 
@@ -351,7 +352,8 @@ def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
 
 
 def test_upload_reports_an_oversized_file_as_413():
-    stub = StubIngestService(FileTooLargeError("big.pdf is larger than the 10.0 MB upload limit."))
+    stub = StubIngestService(FileTooLargeError(
+        "big.pdf is larger than the 10.0 MB upload limit."))
 
     response = _upload(stub, filename="big.pdf")
 

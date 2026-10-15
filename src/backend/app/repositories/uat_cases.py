@@ -1,6 +1,6 @@
 """Database access for UAT test cases and their candidates."""
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from app.models_uat_cases import UatCase, UatCaseCandidateRecord, UatCaseRecord
 
