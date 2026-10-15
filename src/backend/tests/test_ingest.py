@@ -17,8 +17,12 @@ from app.ingest.extract import (
 )
 from app.main import app
 from app.routes.documents import get_ingest_service
-from app.services.ingest import EmptyDocumentError, IngestResult, IngestService
-from app.vector_store.embeddings import EmbeddingProvider
+from app.services.ingest import (
+    EmptyDocumentError,
+    FileTooLargeError,
+    IngestResult,
+    IngestService,
+)
 from app.vector_store.models import Document, DocumentChunk
 from app.vector_store.vector_store import VectorStore
 
@@ -217,6 +221,41 @@ def test_file_without_text_is_rejected(service):
         ingest_service.ingest_file(b"   ", "empty.txt")
 
 
+def test_a_file_over_the_byte_limit_is_rejected_before_extraction(service, monkeypatch):
+    ingest_service, store = service
+    monkeypatch.setattr("app.services.ingest.MAX_UPLOAD_BYTES", 100)
+
+    def fail_extract(data, filename, settings):
+        raise AssertionError("an oversized file must not be extracted")
+
+    monkeypatch.setattr("app.services.ingest.extract_text", fail_extract)
+
+    with pytest.raises(FileTooLargeError, match="larger than"):
+        ingest_service.ingest_file(b"x" * 101, "big.pdf")
+    assert store.created_with == {}
+
+
+def test_a_file_with_too_much_text_is_rejected_and_not_stored(service, monkeypatch):
+    """The text limit is what bounds LLM cost: attachments are resent every turn."""
+    ingest_service, store = service
+    monkeypatch.setattr("app.services.ingest.MAX_EXTRACTED_CHARS", 50)
+
+    with pytest.raises(FileTooLargeError, match="51 characters"):
+        ingest_service.ingest_file(b"y" * 51, "long.txt")
+    assert store.created_with == {}
+    assert ingest_service.embedding_provider.embed_calls == 0
+
+
+def test_a_file_exactly_at_both_limits_is_accepted(service, monkeypatch):
+    ingest_service, _ = service
+    monkeypatch.setattr("app.services.ingest.MAX_UPLOAD_BYTES", 50)
+    monkeypatch.setattr("app.services.ingest.MAX_EXTRACTED_CHARS", 50)
+
+    result = ingest_service.ingest_file(b"z" * 50, "fits.txt")
+
+    assert result.document is not None
+
+
 class StubIngestService:
     """Returns a canned result so route tests need no DB or model."""
 
@@ -309,6 +348,26 @@ def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
 
     assert response.status_code == 502
     assert "no text" in response.json()["detail"]
+
+
+def test_upload_reports_an_oversized_file_as_413():
+    stub = StubIngestService(FileTooLargeError("big.pdf is larger than the 10.0 MB upload limit."))
+
+    response = _upload(stub, filename="big.pdf")
+
+    assert response.status_code == 413
+    assert "upload limit" in response.json()["detail"]
+
+
+def test_upload_reads_no_more_than_one_byte_past_the_limit(monkeypatch):
+    monkeypatch.setattr("app.routes.documents.MAX_UPLOAD_BYTES", 4)
+    stub = StubIngestService()
+
+    _upload(stub, filename="spec.pdf")
+
+    # b"fake-bytes" is 10 bytes; the route hands over limit + 1 and the
+    # service's own check rejects it.
+    assert stub.called_with == (b"fake-", "spec.pdf")
 
 
 def test_upload_rejects_an_unsupported_file():

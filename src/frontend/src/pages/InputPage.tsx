@@ -1,6 +1,8 @@
 import { useNavigate, useParams } from "react-router";
 import { ChatThread } from "../components/chat/ChatThread";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { useConfirm } from "../components/shared/ConfirmDialog";
+import { uatCasesApi } from "../api/uatCases";
 import { useSessionConversation } from "../hooks/useSessionConversation";
 import { ROUTES } from "../routes";
 
@@ -24,10 +26,37 @@ export function InputPage() {
     generate,
   } = useSessionConversation(sessionId!);
 
+  const { confirm, dialog } = useConfirm();
+
   const busy = isSending || isGenerating;
   const generateDisabled = busy || messages.length === 0;
 
+  /** Total UAT cases in the session; 0 if they can't be loaded, so Generate never blocks on it. */
+  async function existingTestCaseCount(): Promise<number> {
+    try {
+      const { groups } = await uatCasesApi.list(sessionId!);
+      return groups.reduce((total, group) => total + group.uat_cases.length, 0);
+    } catch {
+      return 0;
+    }
+  }
+
   async function handleGenerate() {
+    // Generating replaces every AC, and the backend deletes all the session's
+    // test cases along with them.
+    const testCaseCount = await existingTestCaseCount();
+    if (testCaseCount > 0) {
+      const confirmed = await confirm({
+        title: "Delete all test cases?",
+        message:
+          "Generating again replaces all acceptance criteria and deletes all " +
+          `${testCaseCount} test case${testCaseCount === 1 ? "" : "s"} in this session. ` +
+          "This can't be undone.",
+        confirmLabel: "Delete test cases & generate",
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
     const result = await generate();
     if (result) {
       navigate(ROUTES.acReview(sessionId!));
@@ -36,6 +65,7 @@ export function InputPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {dialog}
       <ChatThread messages={messages} pending={isSending} />
       <footer className="border-t border-gray-200 p-4">
         {uploadError && (

@@ -70,6 +70,7 @@ def _build_regeneration_prompt(
 def to_acceptance_criterion(
     record: AcceptanceCriterionRecord,
     candidates: list[AcceptanceCriterionCandidateRecord] | None = None,
+    uat_case_count: int = 0,
 ) -> AcceptanceCriterion:
     """Build the wire model for one AC, with its alternatives attached.
 
@@ -112,6 +113,7 @@ def to_acceptance_criterion(
             for c in candidates
             if not c.is_winner
         ],
+        uat_case_count=uat_case_count,
     )
 
 
@@ -119,10 +121,15 @@ def to_acceptance_criteria(
     ac_repository: AcceptanceCriteriaRepository,
     session_id: int,
     records: list[AcceptanceCriterionRecord],
+    uat_counts: dict[int, int] | None = None,
 ) -> list[AcceptanceCriterion]:
     """Build wire models for several ACs from one candidate query."""
     by_position = ac_repository.candidates_by_position(session_id)
-    return [to_acceptance_criterion(r, by_position.get(r.position)) for r in records]
+    uat_counts = uat_counts or {}
+    return [
+        to_acceptance_criterion(r, by_position.get(r.position), uat_counts.get(r.id, 0))
+        for r in records
+    ]
 
 
 class AcceptanceCriteriaService:
@@ -169,7 +176,12 @@ class AcceptanceCriteriaService:
         """Return a session's ACs, or None if the session is missing."""
         if self.sessions.get(session_id) is None:
             return None
-        return to_acceptance_criteria(self.ac, session_id, self.ac.list_for_session(session_id))
+        return to_acceptance_criteria(
+            self.ac,
+            session_id,
+            self.ac.list_for_session(session_id),
+            self.uat_cases.counts_by_ac(session_id),
+        )
 
     def update_text(
         self, session_id: int, ac_id: int, data: AcceptanceCriterionTextUpdate
@@ -193,9 +205,9 @@ class AcceptanceCriteriaService:
         return self._with_alternatives(updated)
 
     def _with_alternatives(self, record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
-        # Re-read the record's candidates so the response is complete.
         [criterion] = to_acceptance_criteria(
-            self.ac, record.session_id, [record])
+            self.ac, record.session_id, [record], self.uat_cases.counts_by_ac(record.session_id)
+        )
         return criterion
 
     def select_alternative(
@@ -296,7 +308,9 @@ class AcceptanceCriteriaService:
         # database that enforces it.
         self.uat_cases.delete_for_ac(ac_id)
         updated = self.ac.replace_one(session_id, ac_id, data.candidates)
-        return to_acceptance_criteria(self.ac, session_id, updated)
+        return to_acceptance_criteria(
+            self.ac, session_id, updated, self.uat_cases.counts_by_ac(session_id)
+        )
 
     def regenerate_all_kickoff(self, session_id: int) -> MessageRead | None:
         """Post an assistant message asking for context to regenerate.

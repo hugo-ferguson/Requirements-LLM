@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { AcCard } from "../components/ac/AcCard";
 import { ChatThread } from "../components/chat/ChatThread";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
+import { useConfirm } from "../components/shared/ConfirmDialog";
 import { acceptanceCriteriaApi } from "../api/acceptanceCriteria";
 import type { AcceptanceCriterion } from "../api/acceptanceCriteria";
 import { uatCasesApi } from "../api/uatCases";
@@ -12,6 +13,10 @@ import { ROUTES } from "../routes";
 import type { Attachment } from "../types/conversation";
 
 type Mode = "list" | "regenerate";
+
+function testCases(count: number): string {
+  return `${count} test case${count === 1 ? "" : "s"}`;
+}
 
 export function AcReviewPage() {
   const navigate = useNavigate();
@@ -29,8 +34,8 @@ export function AcReviewPage() {
   const [regenerateAllError, setRegenerateAllError] = useState<string | null>(null);
   const [isGeneratingUat, setIsGeneratingUat] = useState(false);
   const [generateUatError, setGenerateUatError] = useState<string | null>(null);
-  const [swapNotice, setSwapNotice] = useState<string | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   const fetchCandidates = useCallback(
     (
@@ -53,17 +58,40 @@ export function AcReviewPage() {
     updateStatus(id, currentStatus === "rejected" ? "pending" : "rejected");
   }
 
-  async function handleSelectAlternative(acId: number, acIndex: number, candidateId: number) {
+  /**
+   * Asks before a change that leaves an AC's test cases describing wording it
+   * no longer has. Resolves true straight away when the AC has none.
+   */
+  function confirmStaleUat(item: AcceptanceCriterion, index: number, action: string) {
+    if (item.uat_case_count === 0) return Promise.resolve(true);
+    return confirm({
+      title: "This AC has test cases",
+      message:
+        `AC #${index + 1} has ${testCases(item.uat_case_count)} written against its current ` +
+        `wording. ${action} will leave them out of date; you can regenerate them on the UAT page.`,
+    });
+  }
+
+  async function handleEditSave(
+    item: AcceptanceCriterion,
+    index: number,
+    fields: { title: string; given: string; when: string; then: string },
+  ) {
+    // Declining keeps the card in edit mode with the draft intact.
+    if (!(await confirmStaleUat(item, index, "Saving this edit"))) return;
+    await updateText(item.id, fields);
+    setEditingId(null);
+  }
+
+  async function handleSelectAlternative(
+    item: AcceptanceCriterion,
+    index: number,
+    candidateId: number,
+  ) {
     setSwapError(null);
-    setSwapNotice(null);
+    if (!(await confirmStaleUat(item, index, "Switching to this version"))) return;
     try {
-      const staleUatCases = await selectAlternative(acId, candidateId);
-      if (staleUatCases > 0) {
-        setSwapNotice(
-          `AC #${acIndex + 1} has ${staleUatCases} test case${staleUatCases === 1 ? "" : "s"} ` +
-            "written against the previous version. Regenerate them from the UAT page if needed.",
-        );
-      }
+      await selectAlternative(item.id, candidateId);
     } catch {
       setSwapError("Couldn't switch to that version. Please try again.");
     }
@@ -85,6 +113,21 @@ export function AcReviewPage() {
 
   async function handleApplyApproved() {
     if (regenerateTargetId == null || regenerate.approvedCandidates.length === 0) return;
+    const targetIndex = items.findIndex((item) => item.id === regenerateTargetId);
+    const target = items[targetIndex];
+    // The backend deletes the replaced AC's test cases, so this one is not
+    // just "out of date".
+    if (target && target.uat_case_count > 0) {
+      const confirmed = await confirm({
+        title: "Delete this AC's test cases?",
+        message:
+          `Replacing AC #${targetIndex + 1} will delete its ${testCases(target.uat_case_count)}. ` +
+          "This can't be undone.",
+        confirmLabel: "Delete test cases & replace",
+        destructive: true,
+      });
+      if (!confirmed) return;
+    }
     setApplyError(null);
     setIsApplying(true);
     try {
@@ -188,6 +231,7 @@ export function AcReviewPage() {
         />
 
         {applyError && <p className="mt-2 text-sm text-red-600">{applyError}</p>}
+        {dialog}
         <div className="mt-4 flex justify-between border-t border-gray-200 pt-4">
           <button
             type="button"
@@ -211,19 +255,7 @@ export function AcReviewPage() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
-      {swapNotice && (
-        <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          <span>{swapNotice}</span>
-          <button
-            type="button"
-            onClick={() => setSwapNotice(null)}
-            aria-label="Dismiss"
-            className="text-amber-600 hover:text-amber-900"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {dialog}
       {swapError && <p className="mb-3 text-sm text-red-600">{swapError}</p>}
       <div className="flex-1 space-y-3">
         {items.map((item, index) => (
@@ -236,14 +268,11 @@ export function AcReviewPage() {
             onSelect={() => handleSelect(item.id)}
             onEditStart={() => setEditingId(item.id)}
             onEditCancel={() => setEditingId(null)}
-            onEditSave={async (fields) => {
-              await updateText(item.id, fields);
-              setEditingId(null);
-            }}
+            onEditSave={(fields) => handleEditSave(item, index, fields)}
             onAccept={() => handleAccept(item.id, item.status)}
             onReject={() => handleReject(item.id, item.status)}
             onSelectAlternative={(candidateId) =>
-              handleSelectAlternative(item.id, index, candidateId)
+              handleSelectAlternative(item, index, candidateId)
             }
           />
         ))}

@@ -229,6 +229,43 @@ def test_select_alternative_reports_uat_cases_written_against_the_old_version(
     assert result.uat_cases_affected == 2
 
 
+def test_every_ac_reports_how_many_uat_cases_it_has(db_session: Session) -> None:
+    """The frontend warns before changing an AC whose count is above zero."""
+    service, session_id, ac_ids = _seed(db_session)
+    UatCaseRepository(db_session).persist_generated(
+        session_id,
+        {ac_ids[0]: [_uat_case(ac_ids[0]), _uat_case(ac_ids[0])], ac_ids[2]: [_uat_case(ac_ids[2])]},
+    )
+
+    assert [item.uat_case_count for item in service.list_items(session_id)] == [2, 0, 1]
+
+    # Every single-AC response carries it too, so the page never shows a stale count.
+    [alt] = service.list_items(session_id)[0].alternatives
+    assert service.select_alternative(session_id, ac_ids[0], alt.candidate_id).acceptance_criterion.uat_case_count == 2
+    edited = service.update_text(
+        session_id,
+        ac_ids[2],
+        AcceptanceCriterionTextUpdate(title="Edited", given="g", when="w", then="t"),
+    )
+    assert edited.uat_case_count == 1
+
+
+def test_apply_approved_reports_the_replaced_acs_uat_cases_as_gone(db_session: Session) -> None:
+    service, session_id, ac_ids = _seed(db_session)
+    UatCaseRepository(db_session).persist_generated(
+        session_id, {ac_ids[0]: [_uat_case(ac_ids[0])], ac_ids[1]: [_uat_case(ac_ids[1])]}
+    )
+    replacement = AcceptanceCriterion(
+        id=-1, title="Replacement", given="g", when="w", then="t", scores=_scores(5), overall_score=5
+    )
+
+    items = service.apply_approved(
+        session_id, ac_ids[0], ApplyApprovedRequest(candidates=[replacement])
+    )
+
+    assert [item.uat_case_count for item in items] == [0, 1, 0]
+
+
 def test_apply_approved_keeps_other_acs_alternatives_on_the_right_ac(db_session: Session) -> None:
     service, session_id, ac_ids = _seed(db_session)
     replacement = AcceptanceCriterion(

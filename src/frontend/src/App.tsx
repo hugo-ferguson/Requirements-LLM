@@ -5,7 +5,7 @@ import { InputPage } from "./pages/InputPage";
 import { AcReviewPage } from "./pages/AcReviewPage";
 import { UatReviewPage } from "./pages/UatReviewPage";
 import { EmptyStatePage } from "./pages/EmptyStatePage";
-import { ComingSoonPage } from "./pages/ComingSoonPage";
+import { ExportPage } from "./pages/ExportPage";
 import { SessionsProvider } from "./context/SessionsContext";
 import { TAB_PATHS } from "./routes";
 
@@ -20,7 +20,7 @@ export default function App() {
             <Route path={TAB_PATHS.input} element={<InputPage />} />
             <Route path={TAB_PATHS.acReview} element={<AcReviewPage />} />
             <Route path={TAB_PATHS.uatReview} element={<UatReviewPage />} />
-            <Route path={TAB_PATHS.export} element={<ComingSoonPage title="Export" />} />
+            <Route path={TAB_PATHS.export} element={<ExportPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

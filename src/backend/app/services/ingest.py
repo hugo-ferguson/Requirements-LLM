@@ -8,6 +8,7 @@ from pathlib import Path
 from app.config import Settings
 from app.ingest.chunk import chunk_text
 from app.ingest.extract import IMAGE_EXTENSIONS, extract_text
+from app.ingest.limits import MAX_EXTRACTED_CHARS, MAX_UPLOAD_BYTES
 from app.vector_store.embeddings import EmbeddingProvider
 from app.vector_store.models import Document, DocumentChunk
 from app.vector_store.vector_store import VectorStore
@@ -17,6 +18,14 @@ logger = logging.getLogger(__name__)
 
 class EmptyDocumentError(ValueError):
     """Raised when a file yields no text to embed."""
+
+
+class FileTooLargeError(ValueError):
+    """Raised when a file, or the text extracted from it, exceeds app.ingest.limits."""
+
+
+def _megabytes(size: int) -> str:
+    return f"{size / (1024 * 1024):.1f} MB"
 
 
 @dataclass
@@ -54,24 +63,31 @@ class IngestService:
         title: str | None = None,
         tags: list[str] | None = None,
     ) -> IngestResult:
-        """Extract, chunk and embed a file, then store it as a document.
+        """Extracts, chunks and embeds a file, then stores it as one Document.
 
-        Images are the exception: their text goes straight back to the
-        caller and is never stored. A screenshot transcribes to a few
-        hundred tokens — measured across a real screenshot set, five
-        images came to 789 tokens, one chunk each — so it fits in a
-        prompt many times over and embedding it only adds a retrieval
-        hop and rows nothing queries. Documents that can actually
-        outgrow a prompt (PDFs, long text) are still chunked and
-        embedded.
+        Images are the exception: their text goes straight back to the caller
+        and is never stored. A screenshot transcribes to a few hundred tokens
+        — measured across a real screenshot set, five images came to 789
+        tokens, one chunk each — so it fits in a prompt many times over and
+        embedding it only adds a retrieval hop and rows nothing queries.
+        Documents that can actually outgrow a prompt (PDFs, long text) are
+        still chunked and embedded.
 
-        Return the extracted text, plus the stored document and its
-        chunk count when the file was stored. Raise
-        `EmptyDocumentError` when no text could be extracted.
+        Returns the extracted text, plus the stored document and its chunk
+        count when the file was stored.
+
+        Raises FileTooLargeError when the file or its extracted text is over
+        the limits in app.ingest.limits; nothing is stored in either case.
         """
-        # Progress is logged at each stage: uvicorn only logs a request
-        # once it finishes, so without these a slow upload looks exactly
-        # like a dead one.
+        if len(data) > MAX_UPLOAD_BYTES:
+            # Not the file's real size: the upload route stops reading one
+            # byte past the limit.
+            raise FileTooLargeError(
+                f"{filename} is larger than the {_megabytes(MAX_UPLOAD_BYTES)} upload limit."
+            )
+
+        # Progress is logged at each stage: uvicorn only logs a request once it
+        # finishes, so without these a slow upload looks exactly like a dead one.
         started = time.perf_counter()
         logger.info("ingest %r: started (%d KB)", filename, len(data) // 1024)
         text = extract_text(data, filename, self.settings)
@@ -82,6 +98,12 @@ class IngestService:
             len(text),
             time.perf_counter() - started,
         )
+
+        if len(text) > MAX_EXTRACTED_CHARS:
+            raise FileTooLargeError(
+                f"{filename} has {len(text):,} characters of text; the limit is "
+                f"{MAX_EXTRACTED_CHARS:,}. Split it, or upload only the relevant pages."
+            )
 
         if extension in IMAGE_EXTENSIONS:
             if not text.strip():

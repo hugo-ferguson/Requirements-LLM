@@ -30,6 +30,15 @@ class UatCaseRepository:
         )
         return list(self.session.exec(statement).all())
 
+    def counts_by_ac(self, session_id: int) -> dict[int, int]:
+        """Number of UAT cases per ac_id in a session; ACs without any are absent."""
+        statement = (
+            select(UatCaseRecord.ac_id, func.count())
+            .where(UatCaseRecord.session_id == session_id)
+            .group_by(UatCaseRecord.ac_id)
+        )
+        return {ac_id: count for ac_id, count in self.session.exec(statement).all()}
+
     def get(self, session_id: int, uat_id: int) -> UatCaseRecord | None:
         """Return a case, or None if it isn't in this session."""
         record = self.session.get(UatCaseRecord, uat_id)

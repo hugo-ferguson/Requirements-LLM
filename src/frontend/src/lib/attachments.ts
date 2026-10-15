@@ -17,6 +17,14 @@ export const SUPPORTED_EXTENSIONS = [
 /** Value for an <input type="file"> accept attribute. */
 export const ATTACHMENT_ACCEPT = SUPPORTED_EXTENSIONS.join(",");
 
+/**
+ * Largest file sent for upload. Mirrors MAX_UPLOAD_BYTES in
+ * backend/app/ingest/limits.py, which is the source of truth — this copy only
+ * saves uploading a file the backend would reject. The backend also limits
+ * the extracted text, which can only be checked after upload.
+ */
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 export interface AttachmentUploadError {
   filename: string;
   message: string;
@@ -58,6 +66,13 @@ export async function uploadFilesAsAttachments(files: FileList): Promise<Attachm
   const errors: AttachmentUploadError[] = [];
 
   for (const file of Array.from(files)) {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      errors.push({
+        filename: file.name,
+        message: `${file.name} is larger than the ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB upload limit.`,
+      });
+      continue;
+    }
     try {
       const uploaded = await documentsApi.upload(file);
       attachments.push({
