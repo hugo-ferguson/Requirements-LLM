@@ -1,50 +1,31 @@
-"""The chat assistant and single-agent AC generation, on stub models."""
+"""The chat assistant, on stub models."""
 
-import pytest
 from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 
 from app.models_conversation import (
     ConversationAttachment,
     ConversationMessage,
     ConversationRequest,
 )
-from app.services.conversation import (
-    EmptyConversationError,
-    GeneratedCriteria,
-    GenerationError,
-    ConversationService,
-    render_conversation,
-)
-from app.services.scoring import CandidateScore
+from app.services.conversation import ConversationService, render_conversation
 
 
 def _request(*messages: ConversationMessage) -> ConversationRequest:
+    """Wrap messages in a conversation request."""
     return ConversationRequest(messages=list(messages))
 
 
-def _zero_scorer(prompt, candidates, *, reference_answer="", settings=None):
-    """Score every candidate 0, standing in for the voting layer.
-
-    Keeps generate-only tests offline and independent of the real
-    scoring wiring.
-    """
-    return [CandidateScore(0, 0, 0, 0, 0) for _ in candidates]
-
-
-def _service(model, *, chat_model=None, scorer=None) -> ConversationService:
-    """Build a service on offline models, so no test needs a key."""
+def _service(*, chat_model=None) -> ConversationService:
+    """Build a service on an offline model, so no test needs an API key."""
     return ConversationService(
-        agent=Agent(model, output_type=GeneratedCriteria,
-                    system_prompt="test"),
-        chat_agent=(
-            Agent(chat_model, output_type=str, system_prompt="test")
-            if chat_model is not None
-            else Agent(TestModel(), output_type=str, system_prompt="test")
+        chat_agent=Agent(
+            chat_model if chat_model is not None else TestModel(),
+            output_type=str,
+            system_prompt="test",
         ),
-        scorer=scorer or _zero_scorer,
     )
 
 
@@ -84,92 +65,42 @@ def test_the_whole_conversation_is_rendered_in_order():
     assert "ASSISTANT: Understood" in prompt
 
 
-def test_generate_returns_criteria_from_the_model():
-    service = _service(TestModel())
-
-    result = service.generate(
-        _request(ConversationMessage(role="user", text="story")))
-
-    assert result.acceptance_criteria
-    first = result.acceptance_criteria[0]
-    assert first.title and first.given and first.when and first.then
-    # Ids are positional; the repository assigns the real ones on
-    # persist.
-    assert [c.id for c in result.acceptance_criteria] == list(
-        range(1, len(result.acceptance_criteria) + 1)
-    )
-
-
-def test_generate_scores_criteria_via_the_injected_scorer():
-    seen_prompts_and_candidates: list[tuple[str, list[str]]] = []
-
-    def fake_scorer(prompt, candidates, *, reference_answer="", settings=None):
-        seen_prompts_and_candidates.append((prompt, list(candidates)))
-        return [
-            CandidateScore(relevance=1, correctness=2,
-                           understandability=3, coverage=4, overall=5)
-            for _ in candidates
-        ]
-
-    service = _service(TestModel(), scorer=fake_scorer)
-
-    result = service.generate(
-        _request(ConversationMessage(role="user", text="story")))
-
-    assert result.acceptance_criteria
-    for criterion in result.acceptance_criteria:
-        assert criterion.scores.relevance == 1
-        assert criterion.scores.correctness == 2
-        assert criterion.scores.understandability == 3
-        assert criterion.scores.coverage == 4
-        assert criterion.overall_score == 5
-
-    # The scorer is called with the same rendered prompt used for
-    # generation, and one candidate string per generated criterion.
-    prompt, candidates = seen_prompts_and_candidates[0]
-    assert prompt == render_conversation(
-        _request(ConversationMessage(role="user", text="story")))
-    assert len(candidates) == len(result.acceptance_criteria)
-
-
 def test_send_message_returns_the_models_reply():
-    def echo(messages, info):
+    def echo(messages, agent_info):
         return ModelResponse(parts=[TextPart(content="Real assistant reply")])
 
-    service = _service(TestModel(), chat_model=FunctionModel(echo))
+    service = _service(chat_model=FunctionModel(echo))
 
-    reply = service.send_message(
-        _request(ConversationMessage(role="user", text="hi")))
+    reply = service.send_message(_request(ConversationMessage(role="user", text="hi")))
 
     assert reply.role == "assistant"
     assert reply.text == "Real assistant reply"
 
 
 def test_send_message_falls_back_to_canned_reply_on_model_failure():
-    def explode(messages, info):
+    def explode(messages, agent_info):
         raise RuntimeError("upstream is down")
 
-    service = _service(TestModel(), chat_model=FunctionModel(explode))
+    service = _service(chat_model=FunctionModel(explode))
 
-    reply = service.send_message(
-        _request(ConversationMessage(role="user", text="hi")))
+    reply = service.send_message(_request(ConversationMessage(role="user", text="hi")))
 
     assert reply.role == "assistant"
-    assert reply.text  # Falls back to the canned reply; never raises.
+    assert reply.text  # The canned reply.
 
 
-def test_the_model_actually_receives_the_attachment_text():
-    seen: list[str] = []
+def test_the_chat_model_receives_the_attachment_text():
+    prompts_seen: list[str] = []
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        part = messages[-1].parts[-1]
-        assert isinstance(part, UserPromptPart)
-        seen.append(str(part.content))
-        return _tool_response(info)
+    def respond(messages: list[ModelMessage], agent_info: AgentInfo) -> ModelResponse:
+        prompt_part = messages[-1].parts[-1]
+        assert isinstance(prompt_part, UserPromptPart)
+        prompts_seen.append(str(prompt_part.content))
+        return ModelResponse(parts=[TextPart(content="Thanks, that helps.")])
 
-    service = _service(FunctionModel(respond))
+    service = _service(chat_model=FunctionModel(respond))
 
-    service.generate(
+    service.send_message(
         _request(
             ConversationMessage(
                 role="user",
@@ -183,68 +114,5 @@ def test_the_model_actually_receives_the_attachment_text():
         )
     )
 
-    assert "Sections may be reordered." in seen[0]
-    assert "spec.pdf" in seen[0]
-
-
-def _tool_response(info: AgentInfo) -> ModelResponse:
-    """Answers with the structured output the agent asked for."""
-    from pydantic_ai.messages import ToolCallPart
-
-    return ModelResponse(
-        parts=[
-            ToolCallPart(
-                tool_name=info.output_tools[0].name,
-                args={
-                    "criteria": [
-                        {
-                            "title": "Reorder a section",
-                            "given": "a unit with several sections",
-                            "when": "an administrator moves one before another",
-                            "then": "the new order is shown and saved",
-                        }
-                    ]
-                },
-            )
-        ]
-    )
-
-
-def test_a_failing_model_raises_generation_error():
-    def explode(messages, info):
-        raise RuntimeError("upstream is down")
-
-    service = _service(FunctionModel(explode))
-
-    with pytest.raises(GenerationError) as caught:
-        service.generate(
-            _request(ConversationMessage(role="user", text="story")))
-
-    assert "upstream is down" in str(caught.value)
-
-
-def test_generating_from_an_empty_conversation_is_refused_without_calling_the_model():
-    """Refuse an empty conversation before any model call.
-
-    Given nothing to work from, the model happily invents an unrelated
-    feature and writes criteria for it.
-    """
-    def explode(messages, info):  # Must never be reached.
-        raise AssertionError("the model should not have been called")
-
-    service = _service(FunctionModel(explode))
-
-    for request in (
-        _request(),
-        _request(ConversationMessage(role="user", text="   ")),
-        _request(
-            ConversationMessage(
-                role="user",
-                text="",
-                attachments=[ConversationAttachment(
-                    filename="blank.txt", content=" ")],
-            )
-        ),
-    ):
-        with pytest.raises(EmptyConversationError):
-            service.generate(request)
+    assert "Sections may be reordered." in prompts_seen[0]
+    assert "spec.pdf" in prompts_seen[0]

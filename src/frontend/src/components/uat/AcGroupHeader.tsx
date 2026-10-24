@@ -1,14 +1,17 @@
 import type { AcceptanceCriterion } from "../../api/acceptanceCriteria";
 
 interface AcGroupHeaderProps {
-  ac: AcceptanceCriterion;
+  criterion: AcceptanceCriterion;
+  /** Zero-based; shown as "#AC 1" and so on. */
   index: number;
-  expanded: boolean;
+  /** Expanded adds Given/When/Then below the title. */
+  isExpanded: boolean;
   onToggle: () => void;
 }
 
-export function AcGroupHeader({ ac, index, expanded, onToggle }: AcGroupHeaderProps) {
-  if (!expanded) {
+/** The acceptance criterion at the head of a group of UAT cases. */
+export function AcGroupHeader({ criterion, index, isExpanded, onToggle }: AcGroupHeaderProps) {
+  if (!isExpanded) {
     return (
       <button
         type="button"
@@ -17,7 +20,7 @@ export function AcGroupHeader({ ac, index, expanded, onToggle }: AcGroupHeaderPr
       >
         <span>
           <span className="mr-2 text-sm font-semibold text-gray-400">#AC {index + 1}</span>
-          <span className="font-semibold">{ac.title}</span>
+          <span className="font-semibold">{criterion.title}</span>
         </span>
         <span aria-hidden="true">⌄</span>
       </button>
@@ -30,10 +33,10 @@ export function AcGroupHeader({ ac, index, expanded, onToggle }: AcGroupHeaderPr
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-400">#AC {index + 1}</span>
-            <span className="font-bold text-gray-900">{ac.title}</span>
+            <span className="font-bold text-gray-900">{criterion.title}</span>
           </div>
           <p className="mt-1 text-sm text-gray-600">
-            GIVEN {ac.given}, WHEN {ac.when}, THEN {ac.then}
+            GIVEN {criterion.given}, WHEN {criterion.when}, THEN {criterion.then}
           </p>
         </div>
         <button

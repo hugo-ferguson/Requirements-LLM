@@ -9,11 +9,7 @@ from app.config import Settings, settings
 
 
 class EmbeddingProvider(ABC):
-    """Turns text into fixed-length vectors for similarity search.
-
-    Extended by concrete embedding providers that may use a local model,
-    API, etc.
-    """
+    """Turns text into fixed-length vectors for similarity search."""
 
     @property
     @abstractmethod
@@ -25,23 +21,18 @@ class EmbeddingProvider(ABC):
         """Embed a batch of texts, preserving order."""
 
     def embed_query(self, text: str) -> list[float]:
-        """Embed a single piece of text."""
+        """Embed a single search query."""
         return self.embed_texts([text])[0]
 
 
 class LocalEmbeddingProvider(EmbeddingProvider):
     """Runs a small embedding model locally with fastembed."""
 
-    # fastembed's default batch is 256 chunks. The model's activations
-    # grow with batch size x sequence length squared, so a large PDF
-    # briefly needed gigabytes — enough to exhaust Docker's WSL VM and
-    # take the whole stack down mid-upload. Small batches give identical
-    # vectors at a fraction of the peak memory, for a negligible cost in
-    # speed on CPU.
+    # Smaller than fastembed's default of 256, which ran out of memory on large PDFs.
     BATCH_SIZE = 16
 
     def __init__(self, model_name: str = "BAAI/bge-base-en-v1.5"):
-        """Load `model_name` and measure the size of its vectors."""
+        """Load `model_name` and measure the length of its vectors."""
         from fastembed import TextEmbedding
 
         self._model = TextEmbedding(model_name=model_name)
@@ -53,7 +44,7 @@ class LocalEmbeddingProvider(EmbeddingProvider):
         return self._dimension
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of texts in small batches, preserving order."""
+        """Embed texts in batches of BATCH_SIZE, preserving order."""
         return [
             vector.tolist()
             for vector in self._model.embed(texts, batch_size=self.BATCH_SIZE)
@@ -62,35 +53,31 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
 @lru_cache(maxsize=1)
 def get_embedding_provider() -> EmbeddingProvider:
-    """Return the process-wide provider, building it on first use.
-
-    Construction loads a model and issues a test embedding, so it must
-    not happen per request.
-    """
+    """Return the shared provider, building it on first use."""
     return build_embedding_provider(settings)
 
 
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
-    """Build the configured provider and check its vector size.
+    """Build the configured provider and check its vector length.
 
-    Raise `ValueError` when the model's vectors don't match
-    `EMBEDDING_DIM`, or the provider name is unknown.
+    Raises:
+        ValueError: If the provider is unknown or doesn't match `EMBEDDING_DIM`.
     """
     provider = _construct_provider(settings)
 
     if provider.dimension != settings.embedding_dim:
         raise ValueError(
             f"Embedding provider {settings.embedding_provider!r} with model "
-            f"{settings.embedding_model!r} produces {provider.dimension}-dim vectors."
-            f"EMBEDDING_DIM is set to {settings.embedding_dim}. "
-            f"Update EMBEDDING_DIM to match, or choose a different EMBEDDING_MODEL."
+            f"{settings.embedding_model!r} produces {provider.dimension}-dim "
+            f"vectors. EMBEDDING_DIM is set to {settings.embedding_dim}. "
+            "Update EMBEDDING_DIM to match, or choose a different EMBEDDING_MODEL."
         )
 
     return provider
 
 
 def _construct_provider(settings: Settings) -> EmbeddingProvider:
-    # Map the EMBEDDING_PROVIDER setting to a provider class.
+    """Build the provider that `EMBEDDING_PROVIDER` names."""
     if settings.embedding_provider == "local":
         return LocalEmbeddingProvider(model_name=settings.embedding_model)
 

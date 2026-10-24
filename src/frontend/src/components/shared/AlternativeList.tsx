@@ -2,8 +2,8 @@ import { useState, type ReactNode } from "react";
 import { ScorePill } from "../ac/ScorePill";
 import { OverallScoreBadge } from "../ac/OverallScoreBadge";
 
-/** The fields every alternative shares, whether it's an AC or a UAT case. */
-export interface AlternativeItem {
+/** Fields shared by AC and UAT case alternatives. */
+interface AlternativeItem {
   candidate_id?: number | null;
   source_agent?: string | null;
   scores: {
@@ -15,48 +15,52 @@ export interface AlternativeItem {
   overall_score: number;
 }
 
-interface AlternativeListProps<T extends AlternativeItem> {
-  alternatives: T[];
+interface AlternativeListProps<Alternative extends AlternativeItem> {
+  alternatives: Alternative[];
+  /** The candidate being swapped in. Disables every button while set. */
   swappingId: number | null;
-  onUse: (candidateId: number) => void;
-  /** The version's own text: Given/When/Then for an AC, the description for a UAT case. */
-  renderBody: (alternative: T) => ReactNode;
+  onSwap: (candidateId: number) => void;
+  /** Given/When/Then for an AC, the description for a UAT case. */
+  renderBody: (alternative: Alternative) => ReactNode;
 }
 
 /** Other models' versions of one item, each swappable into the main card. */
-export function AlternativeList<T extends AlternativeItem>({
+export function AlternativeList<Alternative extends AlternativeItem>({
   alternatives,
   swappingId,
-  onUse,
+  onSwap,
   renderBody,
-}: AlternativeListProps<T>) {
+}: AlternativeListProps<Alternative>) {
   return (
     <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-      {alternatives.map((alt, index) => {
-        const candidateId = alt.candidate_id;
+      {alternatives.map((alternative, index) => {
+        const candidateId = alternative.candidate_id;
         return (
           <div
-            key={candidateId ?? `${alt.source_agent}-${index}`}
+            key={candidateId ?? `${alternative.source_agent}-${index}`}
             className="rounded-lg border border-gray-200 bg-gray-50 p-3"
           >
             <div className="flex items-start gap-4">
               <div className="min-w-0 flex-1">
                 <span className="text-xs font-medium text-gray-500">
-                  by {alt.source_agent ?? "unknown model"}
+                  by {alternative.source_agent ?? "unknown model"}
                 </span>
-                <div className="mt-1 text-sm text-gray-600">{renderBody(alt)}</div>
+                <div className="mt-1 text-sm text-gray-600">{renderBody(alternative)}</div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <ScorePill label="Relevance" value={alt.scores.relevance} />
-                  <ScorePill label="Correctness" value={alt.scores.correctness} />
-                  <ScorePill label="Understandability" value={alt.scores.understandability} />
-                  <ScorePill label="Coverage" value={alt.scores.coverage} />
+                  <ScorePill label="Relevance" value={alternative.scores.relevance} />
+                  <ScorePill label="Correctness" value={alternative.scores.correctness} />
+                  <ScorePill
+                    label="Understandability"
+                    value={alternative.scores.understandability}
+                  />
+                  <ScorePill label="Coverage" value={alternative.scores.coverage} />
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                <OverallScoreBadge value={alt.overall_score} />
+                <OverallScoreBadge value={alternative.overall_score} />
                 <button
                   type="button"
-                  onClick={() => candidateId != null && onUse(candidateId)}
+                  onClick={() => candidateId != null && onSwap(candidateId)}
                   disabled={candidateId == null || swappingId != null}
                   className="rounded-full bg-gray-100 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
                 >
@@ -73,12 +77,12 @@ export function AlternativeList<T extends AlternativeItem>({
 
 interface AlternativesToggleProps {
   count: number;
-  expanded: boolean;
+  isExpanded: boolean;
   onToggle: () => void;
 }
 
-/** "▾ N other versions" — sits inside a clickable card, so it stops propagation. */
-export function AlternativesToggle({ count, expanded, onToggle }: AlternativesToggleProps) {
+/** The "▾ N other versions" button. Stops clicks reaching the clickable card. */
+export function AlternativesToggle({ count, isExpanded, onToggle }: AlternativesToggleProps) {
   return (
     <button
       type="button"
@@ -86,20 +90,20 @@ export function AlternativesToggle({ count, expanded, onToggle }: AlternativesTo
         event.stopPropagation();
         onToggle();
       }}
-      aria-expanded={expanded}
+      aria-expanded={isExpanded}
       className="mt-2 text-sm font-medium text-primary hover:underline"
     >
-      {expanded ? "▴" : "▾"} {count} other version{count === 1 ? "" : "s"}
+      {isExpanded ? "▴" : "▾"} {count} other version{count === 1 ? "" : "s"}
     </button>
   );
 }
 
-/** Expanded/collapsed and in-flight state for one card's alternatives. */
+/** Whether a card's alternatives are showing, and which one is being swapped in. */
 export function useAlternativeSwap(onSelectAlternative?: (candidateId: number) => Promise<void>) {
-  const [expanded, setExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [swappingId, setSwappingId] = useState<number | null>(null);
 
-  async function use(candidateId: number) {
+  async function swap(candidateId: number) {
     if (!onSelectAlternative) return;
     setSwappingId(candidateId);
     try {
@@ -109,5 +113,5 @@ export function useAlternativeSwap(onSelectAlternative?: (candidateId: number) =
     }
   }
 
-  return { expanded, toggle: () => setExpanded((prev) => !prev), swappingId, use };
+  return { isExpanded, toggle: () => setIsExpanded((previous) => !previous), swappingId, swap };
 }

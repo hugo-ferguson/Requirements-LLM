@@ -1,9 +1,6 @@
-"""Shared FastAPI dependency providers.
+"""FastAPI dependencies shared between route modules.
 
-These live here rather than inside a route module so that routes never
-have to import each other just to reuse a dependency. `documents`,
-`sessions` and `acceptance_criteria` all need the ingest and generation
-services.
+Kept here so route modules don't import each other.
 """
 
 from fastapi import Depends
@@ -25,9 +22,8 @@ def get_ingest_service(session: Session = Depends(get_session)) -> IngestService
 def get_generation_service(
     ingest_service: IngestService = Depends(get_ingest_service),
 ) -> GenerationService:
-    """Build the ensemble generation service for one request.
+    """Build the generation service for one request.
 
-    The ingest service is passed in as the RAG retriever, so generation
-    agents receive project-specific context chunks (backlog R11).
+    The ingest service gives the agents RAG context from uploads (backlog R11).
     """
     return GenerationService(settings, ingest_service)

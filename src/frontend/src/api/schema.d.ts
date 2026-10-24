@@ -4,24 +4,6 @@
  */
 
 export interface paths {
-    "/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Items */
-        get: operations["list_items_items_get"];
-        put?: never;
-        /** Create Item */
-        post: operations["create_item_items_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/sessions": {
         parameters: {
             query?: never;
@@ -29,10 +11,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Sessions */
+        /**
+         * List Sessions
+         * @description Return every session, most recently updated first.
+         */
         get: operations["list_sessions_sessions_get"];
         put?: never;
-        /** Create Session */
+        /**
+         * Create Session
+         * @description Create an empty chat session.
+         */
         post: operations["create_session_sessions_post"];
         delete?: never;
         options?: never;
@@ -47,15 +35,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Session Detail */
+        /**
+         * Get Session Detail
+         * @description Return a session together with its message history.
+         */
         get: operations["get_session_detail_sessions__session_id__get"];
         put?: never;
         post?: never;
-        /** Delete Session */
+        /**
+         * Delete Session
+         * @description Delete a session with its messages, ACs and test cases.
+         */
         delete: operations["delete_session_sessions__session_id__delete"];
         options?: never;
         head?: never;
-        /** Rename Session */
+        /**
+         * Rename Session
+         * @description Rename a session.
+         */
         patch: operations["rename_session_sessions__session_id__patch"];
         trace?: never;
     };
@@ -68,7 +65,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Post Message */
+        /**
+         * Post Message
+         * @description Store the user's message and return the assistant's reply.
+         */
         post: operations["post_message_sessions__session_id__messages_post"];
         delete?: never;
         options?: never;
@@ -85,7 +85,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate */
+        /**
+         * Generate
+         * @description Generate and store ranked ACs from the conversation so far.
+         *
+         *     Replaces the session's existing ACs and deletes their UAT cases.
+         */
         post: operations["generate_sessions__session_id__generate_post"];
         delete?: never;
         options?: never;
@@ -100,7 +105,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Acceptance Criteria */
+        /**
+         * List Acceptance Criteria
+         * @description Return the session's acceptance criteria in display order.
+         */
         get: operations["list_acceptance_criteria_sessions__session_id__acceptance_criteria_get"];
         put?: never;
         post?: never;
@@ -123,7 +131,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Acceptance Criterion Text */
+        /**
+         * Update Acceptance Criterion Text
+         * @description Save a reviewer's edit to an AC's text.
+         */
         patch: operations["update_acceptance_criterion_text_sessions__session_id__acceptance_criteria__ac_id__patch"];
         trace?: never;
     };
@@ -140,7 +151,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Acceptance Criterion Status */
+        /**
+         * Update Acceptance Criterion Status
+         * @description Set an AC's review status.
+         */
         patch: operations["update_acceptance_criterion_status_sessions__session_id__acceptance_criteria__ac_id__status_patch"];
         trace?: never;
     };
@@ -153,7 +167,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Regenerate Selected */
+        /**
+         * Regenerate Selected
+         * @description Propose one refined version of an AC, scored but not saved.
+         */
         post: operations["regenerate_selected_sessions__session_id__acceptance_criteria__ac_id__regenerate_post"];
         delete?: never;
         options?: never;
@@ -170,7 +187,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply Approved */
+        /**
+         * Apply Approved
+         * @description Replace an AC with the approved candidates and return the new list.
+         *
+         *     UAT cases generated from the replaced AC are deleted.
+         */
         post: operations["apply_approved_sessions__session_id__acceptance_criteria__ac_id__apply_approved_post"];
         delete?: never;
         options?: never;
@@ -187,7 +209,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Select Alternative */
+        /**
+         * Select Alternative
+         * @description Show another model's version of an AC in its place.
+         */
         post: operations["select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post"];
         delete?: never;
         options?: never;
@@ -204,7 +229,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Regenerate All Kickoff */
+        /**
+         * Regenerate All Kickoff
+         * @description Post the assistant message that starts a full regeneration.
+         *
+         *     The message names any rejected ACs and asks the reviewer for more context.
+         */
         post: operations["regenerate_all_kickoff_sessions__session_id__acceptance_criteria_regenerate_all_kickoff_post"];
         delete?: never;
         options?: never;
@@ -219,7 +249,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Uat Cases */
+        /**
+         * List Uat Cases
+         * @description Return the session's test cases, grouped by AC.
+         */
         get: operations["list_uat_cases_sessions__session_id__uat_cases_get"];
         put?: never;
         post?: never;
@@ -238,7 +271,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate Uat Cases */
+        /**
+         * Generate Uat Cases
+         * @description Generate test cases for each accepted AC, replacing the old ones.
+         */
         post: operations["generate_uat_cases_sessions__session_id__uat_cases_generate_post"];
         delete?: never;
         options?: never;
@@ -259,7 +295,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Uat Case Text */
+        /**
+         * Update Uat Case Text
+         * @description Save a reviewer's edit to a test case's text.
+         */
         patch: operations["update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch"];
         trace?: never;
     };
@@ -276,7 +315,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Uat Case Status */
+        /**
+         * Update Uat Case Status
+         * @description Set a test case's review status.
+         */
         patch: operations["update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch"];
         trace?: never;
     };
@@ -289,7 +331,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Regenerate Selected */
+        /**
+         * Regenerate Selected
+         * @description Propose one refined version of a test case, scored but not saved.
+         */
         post: operations["regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post"];
         delete?: never;
         options?: never;
@@ -306,7 +351,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply Approved */
+        /**
+         * Apply Approved
+         * @description Replace a test case with the approved candidates.
+         *
+         *     Returns the parent AC's updated group.
+         */
         post: operations["apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post"];
         delete?: never;
         options?: never;
@@ -323,7 +373,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Select Uat Alternative */
+        /**
+         * Select Uat Alternative
+         * @description Show another model's version of a test case in its place.
+         */
         post: operations["select_uat_alternative_sessions__session_id__uat_cases__uat_id__alternatives__candidate_id__select_post"];
         delete?: never;
         options?: never;
@@ -340,7 +393,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload Document */
+        /**
+         * Upload Document
+         * @description Extract a file's text and, unless it's an image, index it for search.
+         *
+         *     Images aren't stored, so `document_id` is null. Responds 413 if too large,
+         *     422 if unsupported or empty, and 502 if the vision model fails.
+         */
         post: operations["upload_document_documents_upload_post"];
         delete?: never;
         options?: never;
@@ -358,7 +417,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Document */
+        /**
+         * Delete Document
+         * @description Delete a stored document and its chunks, or respond 404 if it's gone.
+         */
         delete: operations["delete_document_documents__document_id__delete"];
         options?: never;
         head?: never;
@@ -372,7 +434,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search Documents */
+        /**
+         * Search Documents
+         * @description Return the `k` stored chunks most similar to the query `q`.
+         */
         get: operations["search_documents_documents_search_get"];
         put?: never;
         post?: never;
@@ -389,7 +454,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Export */
+        /**
+         * Get Export
+         * @description Return the session's accepted ACs and UAT cases as a JSON document.
+         *
+         *     `warnings` lists what's left out, so the user can confirm first.
+         */
         get: operations["get_export_sessions__session_id__export_get"];
         put?: never;
         post?: never;
@@ -406,7 +476,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Report that the API process is up.
+         */
         get: operations["health_health_get"];
         put?: never;
         post?: never;
@@ -420,7 +493,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AcceptanceCriterion */
+        /**
+         * AcceptanceCriterion
+         * @description An acceptance criterion as the frontend sees it.
+         */
         AcceptanceCriterion: {
             /** Id */
             id: number;
@@ -447,17 +523,16 @@ export interface components {
             alternatives?: components["schemas"]["AcceptanceCriterionAlternative"][];
             /**
              * Uat Case Count
+             * @description Number of UAT cases generated from this AC, any status. Used to warn before an edit or regeneration affects them.
              * @default 0
              */
             uat_case_count: number;
         };
         /**
          * AcceptanceCriterionAlternative
-         * @description A losing candidate for the same title as its parent criterion.
+         * @description Another model's version of the same criterion.
          *
-         *     Carries no `status`: an alternative is not a reviewable item in its own
-         *     right, it is the answer to "what did the other model say?". It does carry
-         *     `candidate_id` once persisted, so the reviewer can swap it in.
+         *     `candidate_id` is set once stored, so the reviewer can swap it in.
          */
         AcceptanceCriterionAlternative: {
             /** Candidate Id */
@@ -474,7 +549,10 @@ export interface components {
             /** Source Agent */
             source_agent?: string | null;
         };
-        /** AcceptanceCriterionScores */
+        /**
+         * AcceptanceCriterionScores
+         * @description The voting layer's four rubric scores, each from 0 to 5.
+         */
         AcceptanceCriterionScores: {
             /** Relevance */
             relevance: number;
@@ -485,7 +563,10 @@ export interface components {
             /** Coverage */
             coverage: number;
         };
-        /** AcceptanceCriterionStatusUpdate */
+        /**
+         * AcceptanceCriterionStatusUpdate
+         * @description Request body for accepting, rejecting or resetting an AC.
+         */
         AcceptanceCriterionStatusUpdate: {
             /**
              * Status
@@ -493,7 +574,10 @@ export interface components {
              */
             status: "pending" | "accepted" | "rejected";
         };
-        /** AcceptanceCriterionTextUpdate */
+        /**
+         * AcceptanceCriterionTextUpdate
+         * @description Request body for a reviewer's manual edit of an AC.
+         */
         AcceptanceCriterionTextUpdate: {
             /** Title */
             title: string;
@@ -504,7 +588,10 @@ export interface components {
             /** Then */
             then: string;
         };
-        /** ApplyApprovedRequest */
+        /**
+         * ApplyApprovedRequest
+         * @description The candidates a reviewer approved to replace an AC.
+         */
         ApplyApprovedRequest: {
             /** Candidates */
             candidates: components["schemas"]["AcceptanceCriterion"][];
@@ -521,7 +608,10 @@ export interface components {
              */
             tags?: string | null;
         };
-        /** ChunkRead */
+        /**
+         * ChunkRead
+         * @description One stored chunk of a document, as returned by search.
+         */
         ChunkRead: {
             /** Id */
             id: number;
@@ -532,16 +622,25 @@ export interface components {
             /** Content */
             content: string;
         };
-        /** ConversationAttachment */
+        /**
+         * ConversationAttachment
+         * @description A file's extracted text, sent along with a chat message.
+         */
         ConversationAttachment: {
             /** Filename */
             filename: string;
             /** Content */
             content: string;
-            /** Document Id */
+            /**
+             * Document Id
+             * @description ID of the ingested document, if uploaded via /documents/upload.
+             */
             document_id?: number | null;
         };
-        /** ConversationMessage */
+        /**
+         * ConversationMessage
+         * @description One chat turn, from either the user or the assistant.
+         */
         ConversationMessage: {
             /**
              * Role
@@ -576,7 +675,7 @@ export interface components {
         };
         /**
          * ExportDocument
-         * @description What the downloaded JSON file contains.
+         * @description The contents of the downloaded JSON file.
          */
         ExportDocument: {
             /** Session Name */
@@ -589,12 +688,18 @@ export interface components {
             /** Acceptance Criteria */
             acceptance_criteria: components["schemas"]["ExportAcceptanceCriterion"][];
         };
-        /** ExportResponse */
+        /**
+         * ExportResponse
+         * @description The export document and the warnings about what it leaves out.
+         */
         ExportResponse: {
             document: components["schemas"]["ExportDocument"];
             warnings: components["schemas"]["ExportWarnings"];
         };
-        /** ExportUatCase */
+        /**
+         * ExportUatCase
+         * @description An approved UAT case, as it appears in the export.
+         */
         ExportUatCase: {
             /** Title */
             title: string;
@@ -608,15 +713,24 @@ export interface components {
         };
         /**
          * ExportWarnings
-         * @description What the export leaves out, so the user can confirm before downloading.
+         * @description What the export leaves out, shown before downloading.
          */
         ExportWarnings: {
-            /** Unapproved Ac Count */
+            /**
+             * Unapproved Ac Count
+             * @description Number of pending or rejected ACs, which aren't exported.
+             */
             unapproved_ac_count: number;
-            /** Approved Ac Without Uat */
+            /**
+             * Approved Ac Without Uat
+             * @description Titles of approved ACs that have no approved UAT case.
+             */
             approved_ac_without_uat: string[];
         };
-        /** GenerateResult */
+        /**
+         * GenerateResult
+         * @description The ranked acceptance criteria for a session.
+         */
         GenerateResult: {
             /** Acceptance Criteria */
             acceptance_criteria: components["schemas"]["AcceptanceCriterion"][];
@@ -626,31 +740,20 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** ItemCreate */
-        ItemCreate: {
-            /** Name */
-            name: string;
-        };
-        /** ItemRead */
-        ItemRead: {
-            /** Name */
-            name: string;
-            /** Id */
-            id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /** MessageCreate */
+        /**
+         * MessageCreate
+         * @description Request body for a new user message.
+         */
         MessageCreate: {
             /** Text */
             text: string;
             /** Attachments */
             attachments?: components["schemas"]["ConversationAttachment"][];
         };
-        /** MessageRead */
+        /**
+         * MessageRead
+         * @description A stored message as returned by the API.
+         */
         MessageRead: {
             /** Id */
             id: number;
@@ -669,29 +772,47 @@ export interface components {
              */
             created_at: string;
         };
-        /** RegenerateSelectedRequest */
+        /**
+         * RegenerateSelectedRequest
+         * @description The conversation that steers regenerating one AC.
+         */
         RegenerateSelectedRequest: {
             /** Messages */
             messages: components["schemas"]["ConversationMessage"][];
         };
-        /** RegenerateSelectedResponse */
+        /**
+         * RegenerateSelectedResponse
+         * @description The assistant's reply and the unsaved replacement candidates.
+         */
         RegenerateSelectedResponse: {
             reply: components["schemas"]["ConversationMessage"];
             /** Candidates */
             candidates: components["schemas"]["AcceptanceCriterion"][];
         };
-        /** SelectAlternativeResponse */
+        /**
+         * SelectAlternativeResponse
+         * @description The AC after swapping in another model's version.
+         */
         SelectAlternativeResponse: {
             acceptance_criterion: components["schemas"]["AcceptanceCriterion"];
-            /** Uat Cases Affected */
+            /**
+             * Uat Cases Affected
+             * @description Number of UAT cases written against the old wording.
+             */
             uat_cases_affected: number;
         };
-        /** SessionCreate */
+        /**
+         * SessionCreate
+         * @description Request body for creating a session; the name is optional.
+         */
         SessionCreate: {
             /** Name */
             name?: string | null;
         };
-        /** SessionDetail */
+        /**
+         * SessionDetail
+         * @description A session together with its full message history.
+         */
         SessionDetail: {
             /** Id */
             id: number;
@@ -710,7 +831,10 @@ export interface components {
             /** Messages */
             messages: components["schemas"]["MessageRead"][];
         };
-        /** SessionSummary */
+        /**
+         * SessionSummary
+         * @description A session without its messages, as listed in the sidebar.
+         */
         SessionSummary: {
             /** Id */
             id: number;
@@ -727,17 +851,26 @@ export interface components {
              */
             updated_at: string;
         };
-        /** SessionUpdate */
+        /**
+         * SessionUpdate
+         * @description Request body for renaming a session.
+         */
         SessionUpdate: {
             /** Name */
             name: string;
         };
-        /** UatApplyApprovedRequest */
+        /**
+         * UatApplyApprovedRequest
+         * @description The candidates a reviewer approved to replace a test case.
+         */
         UatApplyApprovedRequest: {
             /** Candidates */
             candidates: components["schemas"]["UatCase"][];
         };
-        /** UatCase */
+        /**
+         * UatCase
+         * @description A UAT test case as the frontend sees it.
+         */
         UatCase: {
             /** Id */
             id: number;
@@ -763,7 +896,9 @@ export interface components {
         };
         /**
          * UatCaseAlternative
-         * @description Another model's version of the same test case; swappable via `candidate_id`.
+         * @description Another model's version of the same test case.
+         *
+         *     `candidate_id` is set once stored, so the reviewer can swap it in.
          */
         UatCaseAlternative: {
             /** Candidate Id */
@@ -776,18 +911,27 @@ export interface components {
             /** Source Agent */
             source_agent?: string | null;
         };
-        /** UatCaseGroup */
+        /**
+         * UatCaseGroup
+         * @description An AC together with the test cases generated from it.
+         */
         UatCaseGroup: {
             ac: components["schemas"]["AcceptanceCriterion"];
             /** Uat Cases */
             uat_cases: components["schemas"]["UatCase"][];
         };
-        /** UatCaseGroupsResult */
+        /**
+         * UatCaseGroupsResult
+         * @description A session's test cases, grouped by AC.
+         */
         UatCaseGroupsResult: {
             /** Groups */
             groups: components["schemas"]["UatCaseGroup"][];
         };
-        /** UatCaseScores */
+        /**
+         * UatCaseScores
+         * @description The voting layer's four rubric scores, each from 0 to 5.
+         */
         UatCaseScores: {
             /** Relevance */
             relevance: number;
@@ -798,7 +942,10 @@ export interface components {
             /** Coverage */
             coverage: number;
         };
-        /** UatCaseStatusUpdate */
+        /**
+         * UatCaseStatusUpdate
+         * @description Request body for accepting, rejecting or resetting a test case.
+         */
         UatCaseStatusUpdate: {
             /**
              * Status
@@ -806,19 +953,28 @@ export interface components {
              */
             status: "pending" | "accepted" | "rejected";
         };
-        /** UatCaseTextUpdate */
+        /**
+         * UatCaseTextUpdate
+         * @description Request body for a reviewer's manual edit of a test case.
+         */
         UatCaseTextUpdate: {
             /** Title */
             title: string;
             /** Description */
             description: string;
         };
-        /** UatRegenerateSelectedRequest */
+        /**
+         * UatRegenerateSelectedRequest
+         * @description The conversation that steers regenerating one test case.
+         */
         UatRegenerateSelectedRequest: {
             /** Messages */
             messages: components["schemas"]["ConversationMessage"][];
         };
-        /** UatRegenerateSelectedResponse */
+        /**
+         * UatRegenerateSelectedResponse
+         * @description The assistant's reply and the unsaved replacement candidates.
+         */
         UatRegenerateSelectedResponse: {
             reply: components["schemas"]["ConversationMessage"];
             /** Candidates */
@@ -826,7 +982,7 @@ export interface components {
         };
         /**
          * UploadRead
-         * @description The outcome of an upload: always text, sometimes a stored document.
+         * @description An upload's outcome: always text, sometimes a stored document.
          */
         UploadRead: {
             /** Document Id */
@@ -864,59 +1020,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_items_items_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemRead"][];
-                };
-            };
-        };
-    };
-    create_item_items_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ItemCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_sessions_sessions_get: {
         parameters: {
             query?: never;

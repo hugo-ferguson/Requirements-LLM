@@ -9,6 +9,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
+from app.generation.models import GeneratedUatCase, UatAgentResult
 from app.models_conversation import (
     AcceptanceCriterion,
     AcceptanceCriterionScores,
@@ -20,8 +21,7 @@ from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
 from app.services.agents import GenerationError
 from app.services.scoring import CandidateScore
-from app.generation.models import UatAgentResult
-from app.services.uat_cases import GeneratedUatCase, UatCaseService
+from app.services.uat_cases import UatCaseService
 
 
 @pytest.fixture(name="db_session")
@@ -37,10 +37,10 @@ def db_session_fixture():
 
 def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
     """Seed one accepted AC; return (session_id, ac_id)."""
-    sessions = SessionRepository(db_session)
-    ac_repo = AcceptanceCriteriaRepository(db_session)
+    session_repository = SessionRepository(db_session)
+    ac_repository = AcceptanceCriteriaRepository(db_session)
 
-    chat_session = sessions.create("test session")
+    chat_session = session_repository.create("test session")
     seeded = AcceptanceCriterion(
         id=0,
         title="Login succeeds",
@@ -48,49 +48,53 @@ def _seed_accepted_ac(db_session: Session) -> tuple[int, int]:
         when="they submit valid credentials",
         then="they land on the dashboard",
         scores=AcceptanceCriterionScores(
-            relevance=1, correctness=1, understandability=1, coverage=1),
+            relevance=1, correctness=1, understandability=1, coverage=1
+        ),
         overall_score=1,
     )
     assert chat_session.id is not None
-    [record] = ac_repo.persist_batch(chat_session.id, [seeded])
-    ac_repo.update_status(record, "accepted")
+    [record] = ac_repository.persist_batch(chat_session.id, [seeded])
+    ac_repository.update_status(record, "accepted")
     assert record.id is not None
     return chat_session.id, record.id
 
 
 _FAKE_SCORE = CandidateScore(
-    relevance=3, correctness=3.5, understandability=4, coverage=4.5, overall=3.75)
+    relevance=3, correctness=3.5, understandability=4, coverage=4.5, overall=3.75
+)
 
 
 def _fake_scorer(prompt, candidates, *, reference_answer="", settings=None):
+    """Give every candidate the same fixed score."""
     return [_FAKE_SCORE for _ in candidates]
 
 
 def _service(
-    db_session: Session, *, regen_agent=None, scorer=None, uat_ensemble=None
+    db_session: Session, *, regeneration_agent=None, scorer=None, uat_ensemble=None
 ) -> UatCaseService:
+    """Build the service, with the fake scorer unless another is given."""
     extra = {"uat_ensemble": uat_ensemble} if uat_ensemble else {}
     return UatCaseService(
         SessionRepository(db_session),
         UatCaseRepository(db_session),
         AcceptanceCriteriaRepository(db_session),
-        regen_agent=regen_agent,
+        regeneration_agent=regeneration_agent,
         scorer=scorer or _fake_scorer,
         **extra,
     )
 
 
-def _tool_response(info: AgentInfo, **fields) -> ModelResponse:
+def _tool_response(agent_info: AgentInfo, **fields) -> ModelResponse:
+    """Return a model response that calls the agent's output tool with `fields`."""
     return ModelResponse(
-        parts=[ToolCallPart(tool_name=info.output_tools[0].name, args=fields)]
+        parts=[ToolCallPart(tool_name=agent_info.output_tools[0].name, args=fields)]
     )
 
 
 async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
     db_session: Session,
 ) -> None:
-    # The autouse fixture points the roster at two offline `test`
-    # agents.
+    # The autouse fixture points the roster at two offline `test` agents.
     session_id, ac_id = _seed_accepted_ac(db_session)
     service = _service(db_session)
 
@@ -99,7 +103,7 @@ async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
     assert result is not None
     [group] = result.groups
     assert group.ac.id == ac_id
-    assert [c.title for c in group.uat_cases] == [
+    assert [case.title for case in group.uat_cases] == [
         "Log in with valid credentials",
         "Reject a wrong password",
     ]
@@ -107,24 +111,24 @@ async def test_generate_writes_one_version_per_model_scored_by_the_scorer(
         assert case.scores.relevance == 3
         assert case.overall_score == 3.75
         assert case.status == "pending"
-        # Equal scores tie-break on agent id, so test-a's version is
-        # shown.
+        # Equal scores tie-break on agent ID, so test-a's version is shown.
         assert case.source_agent == "test-a"
-        [alt] = case.alternatives
-        assert alt.source_agent == "test-b"
-        assert alt.description.startswith("test-b:")
-        assert alt.candidate_id is not None
+        [alternative] = case.alternatives
+        assert alternative.source_agent == "test-b"
+        assert alternative.description.startswith("test-b:")
+        assert alternative.candidate_id is not None
 
 
-async def test_generate_raises_generation_error_and_persists_nothing_when_every_agent_fails(
+async def test_generate_raises_and_stores_nothing_when_every_agent_fails(
     db_session: Session,
 ) -> None:
     session_id, _ = _seed_accepted_ac(db_session)
 
     async def all_failed(prompt, *, timeout_seconds):
         return [
-            UatAgentResult(agent_id="a", provider="test",
-                           model="test", error="upstream is down")
+            UatAgentResult(
+                agent_id="a", provider="test", model="test", error="upstream is down"
+            )
         ], []
 
     service = _service(db_session, uat_ensemble=all_failed)
@@ -132,33 +136,34 @@ async def test_generate_raises_generation_error_and_persists_nothing_when_every_
     with pytest.raises(GenerationError, match="upstream is down"):
         await service.generate(session_id)
 
-    listed = service.list_items(session_id)
+    listed = service.list_for_session(session_id)
     assert listed is not None
     assert listed.groups == []
 
 
-def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_and_scorer(
+def test_regenerate_selected_returns_one_candidate_from_the_model_and_scorer(
     db_session: Session,
 ) -> None:
     session_id, ac_id = _seed_accepted_ac(db_session)
 
-    # Seeded from the offline `test` roster the autouse fixture
-    # configures. Kept synchronous: regenerate_selected uses run_sync,
-    # which can't run inside an already-running event loop.
+    # Not async, as regenerate_selected's run_sync can't run in an event loop.
     seed_service = _service(db_session)
     asyncio.run(seed_service.generate(session_id))
-    listed = seed_service.list_items(session_id)
+    listed = seed_service.list_for_session(session_id)
     assert listed is not None
     [group] = listed.groups
     target_id = group.uat_cases[0].id
 
-    def refine(messages, info):
-        return _tool_response(info, title="Refined title", description="Refined description")
+    def refine(messages, agent_info):
+        return _tool_response(
+            agent_info, title="Refined title", description="Refined description"
+        )
 
     service = _service(
         db_session,
-        regen_agent=Agent(FunctionModel(refine),
-                          output_type=GeneratedUatCase, system_prompt="test"),
+        regeneration_agent=Agent(
+            FunctionModel(refine), output_type=GeneratedUatCase, system_prompt="test"
+        ),
     )
 
     response = service.regenerate_selected(
@@ -179,16 +184,19 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
     assert response.reply.role == "assistant"
 
 
-def test_regenerate_selected_returns_none_for_a_missing_uat_case(db_session: Session) -> None:
+def test_regenerate_selected_returns_none_for_a_missing_uat_case(
+    db_session: Session,
+) -> None:
     session_id, _ = _seed_accepted_ac(db_session)
 
-    def explode(messages, info):
+    def explode(messages, agent_info):
         raise AssertionError("should not be called for a missing UAT case")
 
     service = _service(
         db_session,
-        regen_agent=Agent(FunctionModel(explode),
-                          output_type=GeneratedUatCase, system_prompt="test"),
+        regeneration_agent=Agent(
+            FunctionModel(explode), output_type=GeneratedUatCase, system_prompt="test"
+        ),
     )
 
     result = service.regenerate_selected(

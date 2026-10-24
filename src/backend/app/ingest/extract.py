@@ -8,7 +8,6 @@ from pathlib import Path
 
 from pydantic_ai import Agent, BinaryContent
 
-from app.config import Settings
 from app.llm_config import get_models_config
 from llm.spec import build_model
 
@@ -39,15 +38,20 @@ JPEG_QUALITY = 90
 
 
 class UnsupportedFileError(ValueError):
-    """Raised when a file's extension has no configured extractor."""
+    """Raised when a file's extension has no extractor."""
 
 
 class ImageExtractionError(RuntimeError):
     """Raised when the vision model fails or returns no usable text."""
 
 
-def extract_text(data: bytes, filename: str, settings: Settings) -> str:
-    """Return the searchable text of an uploaded file, by extension."""
+def extract_text(data: bytes, filename: str) -> str:
+    """Return the searchable text of an uploaded file, chosen by its extension.
+
+    Raises:
+        UnsupportedFileError: If the extension isn't supported.
+        ImageExtractionError: If the vision model fails or returns no text.
+    """
     extension = Path(filename).suffix.lower()
 
     if extension in TEXT_EXTENSIONS:
@@ -57,7 +61,7 @@ def extract_text(data: bytes, filename: str, settings: Settings) -> str:
         return _extract_pdf(data)
 
     if extension in IMAGE_EXTENSIONS:
-        return _extract_image(data, extension, settings)
+        return _extract_image(data, extension)
 
     supported = sorted(TEXT_EXTENSIONS | PDF_EXTENSIONS | IMAGE_EXTENSIONS)
     raise UnsupportedFileError(
@@ -67,7 +71,7 @@ def extract_text(data: bytes, filename: str, settings: Settings) -> str:
 
 
 def _extract_pdf(data: bytes) -> str:
-    """Concatenate the embedded text layer of every page."""
+    """Join the text layer of every page that has one."""
     from pypdf import PdfReader
 
     reader = PdfReader(BytesIO(data))
@@ -76,10 +80,10 @@ def _extract_pdf(data: bytes) -> str:
     return "\n\n".join(page for page in pages if page.strip())
 
 
-def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
-    """Transcribe and describe an image with a vision-capable model."""
+def _extract_image(data: bytes, extension: str) -> str:
+    """Transcribe and describe an image with the configured vision model."""
     vision_model = get_models_config().vision_model
-    image_bytes, mime = _prepare_image(data, extension)
+    image_bytes, media_type = _prepare_image(data, extension)
 
     try:
         agent = Agent(
@@ -87,7 +91,7 @@ def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
             model_settings=vision_model.model_settings(timeout=300.0),
         )
         result = agent.run_sync(
-            [IMAGE_PROMPT, BinaryContent(data=image_bytes, media_type=mime)]
+            [IMAGE_PROMPT, BinaryContent(data=image_bytes, media_type=media_type)]
         )
     except Exception as error:
         raise ImageExtractionError(
@@ -105,28 +109,24 @@ def _extract_image(data: bytes, extension: str, settings: Settings) -> str:
 
 
 def _prepare_image(data: bytes, extension: str) -> tuple[bytes, str]:
-    """Shrink oversized images before sending them to the model.
+    """Shrink an oversized image and return its bytes and media type.
 
-    Return the bytes to send and their media type. Images already within
-    MAX_IMAGE_DIMENSION are sent untouched, so the common case pays
-    nothing and loses no detail. Anything Pillow cannot read falls back
-    to the original bytes and lets the model decide. A resized image is
-    re-encoded as JPEG if it was one, and as PNG otherwise, so its media
-    type changes with it.
+    Small or unreadable images are returned as they are. Resized images
+    become JPEG if they were JPEG, otherwise PNG.
     """
     from PIL import Image
 
-    original_mime = MIME_TYPES.get(extension, "image/png")
+    original_media_type = MIME_TYPES.get(extension, "image/png")
 
     try:
         image = Image.open(BytesIO(data))
         image.load()
     except Exception as error:
         logger.warning("Could not open image for resizing: %s", error)
-        return data, original_mime
+        return data, original_media_type
 
     if max(image.size) <= MAX_IMAGE_DIMENSION:
-        return data, original_mime
+        return data, original_media_type
 
     original_size = image.size
     image.thumbnail(
@@ -136,10 +136,10 @@ def _prepare_image(data: bytes, extension: str) -> tuple[bytes, str]:
     buffer = BytesIO()
     if extension in JPEG_EXTENSIONS:
         image.convert("RGB").save(buffer, "JPEG", quality=JPEG_QUALITY)
-        mime = "image/jpeg"
+        media_type = "image/jpeg"
     else:
         image.convert("RGBA").save(buffer, "PNG")
-        mime = "image/png"
+        media_type = "image/png"
 
     resized = buffer.getvalue()
     logger.info(
@@ -150,4 +150,4 @@ def _prepare_image(data: bytes, extension: str) -> tuple[bytes, str]:
         len(resized) // 1024,
     )
 
-    return resized, mime
+    return resized, media_type

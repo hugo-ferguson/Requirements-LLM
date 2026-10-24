@@ -13,29 +13,30 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from llm.spec import build_model, with_output_mode
-from voting.models import CombinedVote, EvaluationInput, JudgeConfig, EvaluatedOutput, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
-
+from voting.models import (
+    CombinedVote,
+    EvaluatedOutput,
+    EvaluationInput,
+    JudgeConfig,
+    ProviderFeedback,
+    RubricAverage,
+    RubricFeedback,
+    VotingResult,
+)
 
 logger = logging.getLogger(__name__)
 
 RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
-PROMPT_DIR = Path(__file__).resolve().parent.parent / \
-    "ai_prompts" / "voting_layer"
+PROMPT_DIR = Path(__file__).resolve().parent.parent / "ai_prompts" / "voting_layer"
 COMBINED_PROMPT = PROMPT_DIR / "combined.txt"
 COMBINED_INPUT_PROMPT = PROMPT_DIR / "combined_input.txt"
 
-# One retry of a reply that came back without a usable vote: empty, or
-# not matching the schema. Network and rate-limit errors are retried
-# separately, by the provider's SDK.
+# Retries for an empty or invalid reply. The SDK retries network errors.
 INVALID_REPLY_RETRIES = 1
 
 
 def default_timeout() -> float:
-    """Return the per-request timeout; slow hardware can raise it.
-
-    120s is generous for a cloud model and marginal for a 7B model
-    running on CPU, so it has to be tunable without a code change.
-    """
+    """Return the per-request timeout from `VOTING_TIMEOUT_SECONDS`, default 120s."""
     try:
         return max(1.0, float(os.getenv("VOTING_TIMEOUT_SECONDS", "120")))
     except ValueError:
@@ -43,41 +44,24 @@ def default_timeout() -> float:
 
 
 def max_parallel_requests(judge: JudgeConfig) -> int:
-    """Return how many requests `judge` may have in flight at once.
+    """Return how many concurrent requests `judge` may make.
 
-    `VOTING_MAX_PARALLEL` overrides the judge's `max_parallel`. Ollama
-    serves one request per model at a time, so firing N candidates
-    concurrently does not make them run in parallel — it queues them,
-    and the per-request timeout counts that queue time. Later candidates
-    then expire before they ever start, which reads downstream as an
-    unrated candidate rather than as a capacity problem. Observed
-    directly: 3 of 5 candidates timing out at exactly 120.0s while the
-    first two scored fine.
-
-    Serialising costs nothing in wall-clock terms, because Ollama was
-    going to run them one at a time regardless. It just means each
-    timeout covers real work instead of waiting in line.
+    A valid `VOTING_MAX_PARALLEL` overrides the judge's `max_parallel`.
     """
-    raw = os.getenv("VOTING_MAX_PARALLEL")
-    if raw:
+    override = os.getenv("VOTING_MAX_PARALLEL")
+    if override:
         try:
-            return max(1, int(raw))
+            return max(1, int(override))
         except ValueError:
             pass
     return judge.max_parallel
 
 
-# One gate per judge per event loop. The app runs every scoring call on
-# one long-lived loop (see app/services/scoring.py), so a judge's
-# `max_parallel` caps its requests across all concurrent scoring runs,
-# not just within one. Without that, UAT generation, which scores every
-# accepted AC at once, would multiply the cap by the number of ACs and
-# trip Anthropic's org-wide concurrency limit. Keyed by loop because
-# an asyncio primitive binds to the loop that first uses it, and tests
-# start a fresh loop each time.
-_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]] = (
-    weakref.WeakKeyDictionary()
-)
+# One gate per judge per event loop, so `max_parallel` applies across scoring
+# runs. Keyed by loop because tests start a new loop each time.
+_gates: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]
+] = weakref.WeakKeyDictionary()
 
 
 def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
@@ -89,11 +73,7 @@ def judge_gate(judge: JudgeConfig) -> asyncio.Semaphore:
 
 
 def judge_settings(judge: JudgeConfig) -> ModelSettings:
-    """Return the request settings for every call `judge` makes.
-
-    `anthropic_cache_instructions` marks the system prompt for caching.
-    Only Anthropic reads it; every other provider ignores it.
-    """
+    """Return the request settings for every call `judge` makes."""
     return judge.model_settings(
         timeout=default_timeout(),
         anthropic_cache_instructions=judge.cache_prompt,
@@ -101,12 +81,9 @@ def judge_settings(judge: JudgeConfig) -> ModelSettings:
 
 
 def _system_prompt() -> str:
-    """Return the evaluator role and rubrics, all fixed text.
+    """Return the evaluator role and rubrics.
 
-    Every vote across every story shares this exact prefix.
-    Byte-for-byte stability is what lets the cache hit, so nothing
-    per-request belongs here. The response schema isn't in it either:
-    the judge's output mode sends it.
+    Keep per-request text out, so the prompt cache can hit.
     """
     return (
         "You are an acceptance-criteria evaluator.\n\n"
@@ -115,7 +92,7 @@ def _system_prompt() -> str:
 
 
 def log_cache_usage(judge: JudgeConfig, usage: RunUsage) -> None:
-    """Log cache reads and writes, the only proof of cache hits."""
+    """Log cache reads and writes, to show whether the cache hit."""
     if not judge.cache_prompt:
         return
     logger.debug(
@@ -128,10 +105,7 @@ def log_cache_usage(judge: JudgeConfig, usage: RunUsage) -> None:
 
 
 class CombinedJudgeClient:
-    """Scores all four rubrics in one request.
-
-    Used for judges with `style: "combined"`.
-    """
+    """Scores all four rubrics in one request, for judges with `style: "combined"`."""
 
     def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
         """Build the judge's agent; tests may pass their own `model`."""
@@ -157,10 +131,14 @@ class CombinedJudgeClient:
         return result.output
 
 
-def _error_output(output: str, provider_name: str, model: str, message: str) -> EvaluatedOutput:
-    # An output whose every rubric is the -1 error sentinel.
-    feedback = [RubricFeedback(rubric=name, value=-1, feedback=message)
-                for name in RUBRIC_NAMES]
+def error_output(
+    output: str, provider_name: str, model: str, message: str
+) -> EvaluatedOutput:
+    """Return `output` scored -1, the error value, with `message` on every rubric."""
+    feedback = [
+        RubricFeedback(rubric=rubric_name, value=-1, feedback=message)
+        for rubric_name in RUBRIC_NAMES
+    ]
     provider_feedback = ProviderFeedback(
         ai=provider_name,
         model=model,
@@ -170,33 +148,39 @@ def _error_output(output: str, provider_name: str, model: str, message: str) -> 
     return EvaluatedOutput(
         output=output,
         feedback=[provider_feedback],
-        rubric_averages=[RubricAverage(rubric=name, value=-1.0)
-                         for name in RUBRIC_NAMES],
+        rubric_averages=[
+            RubricAverage(rubric=rubric_name, value=-1.0)
+            for rubric_name in RUBRIC_NAMES
+        ],
         overall_score=-1.0,
     )
 
 
-async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client: CombinedJudgeClient) -> VotingResult:
+async def evaluate_with_combined_model(
+    evaluation_input: EvaluationInput, client: CombinedJudgeClient
+) -> VotingResult:
     """Score every output with one combined judge, one request each.
 
-    A failed request degrades its output to the -1 sentinel rather than
-    failing the batch; a cancellation still propagates.
+    A failed request scores -1. Cancellation still propagates.
     """
     gate = judge_gate(client.judge)
 
     async def evaluate_output(output: str) -> EvaluatedOutput:
         async with gate:
-            result = await client.evaluate(instruction=evaluation_input.prompt, response=output)
+            vote = await client.evaluate(
+                instruction=evaluation_input.prompt, response=output
+            )
         rubric_feedback = [
             RubricFeedback(
-                rubric=name,
-                value=getattr(result, name).score,
-                feedback=getattr(result, name).feedback,
+                rubric=rubric_name,
+                value=getattr(vote, rubric_name).score,
+                feedback=getattr(vote, rubric_name).feedback,
             )
-            for name in RUBRIC_NAMES
+            for rubric_name in RUBRIC_NAMES
         ]
-        overall_score = sum(
-            item.value for item in rubric_feedback) / len(rubric_feedback)
+        overall_score = sum(feedback.value for feedback in rubric_feedback) / len(
+            rubric_feedback
+        )
         provider_feedback = ProviderFeedback(
             ai=client.provider_name,
             model=client.model,
@@ -206,20 +190,20 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
         return EvaluatedOutput(
             output=output,
             feedback=[provider_feedback],
-            rubric_averages=[RubricAverage(rubric=item.rubric, value=float(
-                item.value)) for item in rubric_feedback],
+            rubric_averages=[
+                RubricAverage(rubric=feedback.rubric, value=float(feedback.value))
+                for feedback in rubric_feedback
+            ],
             overall_score=overall_score,
         )
 
     outputs = evaluation_input.output
     results: list[EvaluatedOutput | BaseException] = []
     if client.judge.cache_prompt and len(outputs) > 1:
-        # A cache entry only exists once the first request has started
-        # responding, so a cold batch fired all at once would pay the
-        # write premium on every vote and read nothing. Score one
-        # candidate first to write the shared rubric prefix, then the
-        # rest read it.
-        results.extend(await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True))
+        # Score one candidate first to fill the cache, so the rest can read it.
+        results.extend(
+            await asyncio.gather(evaluate_output(outputs[0]), return_exceptions=True)
+        )
         outputs = outputs[1:]
     results.extend(
         await asyncio.gather(
@@ -241,7 +225,7 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
                 result,
             )
             evaluated_outputs.append(
-                _error_output(
+                error_output(
                     output,
                     client.provider_name,
                     client.model,
@@ -251,6 +235,7 @@ async def evaluate_with_combined_model(evaluation_input: EvaluationInput, client
         elif isinstance(result, EvaluatedOutput):
             evaluated_outputs.append(result)
         else:
+            # Cancellation isn't an Exception, and must propagate.
             raise result
 
     if failures:

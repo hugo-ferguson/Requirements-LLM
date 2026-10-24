@@ -2,13 +2,12 @@
 
 Subpackages:
 
-- `generation`: the multi-model ensemble that writes ACs and UAT cases.
-- `ingest`: text extraction and chunking for uploaded files.
-- `repositories`: all direct database access.
+- `generation`: the model ensemble that writes ACs and UAT cases.
+- `ingest`: text extraction and chunking for uploads.
+- `repositories`: database access.
 - `routes`: the HTTP API.
-- `services`: business logic between the routes and repositories.
-- `vector_store`: embeddings and similarity search over documents.
+- `services`: business logic.
+- `vector_store`: embeddings and document search.
 
-The application object lives in `app.main`, settings in `app.config`
-and the model roster in `app.llm_config`.
+The app is in `app.main`, settings in `app.config`, models in `app.llm_config`.
 """

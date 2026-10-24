@@ -52,9 +52,9 @@ class FakeVectorStore:
         self.chunks = chunks
         return chunks
 
-    def similarity_search(self, query_embedding, k=5):
-        """Return the first `k` stored chunks."""
-        return self.chunks[:k]
+    def similarity_search(self, query_embedding, top_k=5):
+        """Return the first `top_k` stored chunks."""
+        return self.chunks[:top_k]
 
 
 class FakeEmbeddingProvider:
@@ -76,27 +76,22 @@ class FakeEmbeddingProvider:
 
 @pytest.fixture(name="service")
 def service_fixture() -> tuple[IngestService, FakeVectorStore]:
-    """Return an ingest service on fakes, plus its fake store."""
-    store = FakeVectorStore()
+    """Return an ingest service on fakes, plus its fake vector store."""
+    vector_store = FakeVectorStore()
     settings = Settings(chunk_size=200, chunk_overlap=40)
-    service = IngestService(
-        cast(VectorStore, store),
+    ingest_service = IngestService(
+        cast(VectorStore, vector_store),
         cast(EmbeddingProvider, FakeEmbeddingProvider()),
         settings,
     )
-    return service, store
+    return ingest_service, vector_store
 
 
 def test_an_image_is_transcribed_but_never_stored(service, monkeypatch):
-    """
-    A screenshot's transcript is small enough to go straight into a
-    prompt, so it must not reach the vector store or the embedding
-    provider.
-    """
-    ingest_service, store = service
+    ingest_service, vector_store = service
     monkeypatch.setattr(
         "app.services.ingest.extract_text",
-        lambda data, filename, settings: "Mass Actions. Select all in section.",
+        lambda data, filename: "Mass Actions. Select all in section.",
     )
 
     result = ingest_service.ingest_file(b"\x89PNG-bytes", "001-1.png")
@@ -104,22 +99,22 @@ def test_an_image_is_transcribed_but_never_stored(service, monkeypatch):
     assert result.text == "Mass Actions. Select all in section."
     assert result.document is None
     assert result.chunk_count == 0
-    assert store.created_with == {}
-    assert store.chunks == []
+    assert vector_store.created_with == {}
+    assert vector_store.chunks == []
     assert ingest_service.embedding_provider.embed_calls == 0
 
 
 def test_a_pdf_is_still_chunked_and_embedded(service, monkeypatch):
-    ingest_service, store = service
+    ingest_service, vector_store = service
     monkeypatch.setattr(
         "app.services.ingest.extract_text",
-        lambda data, filename, settings: "Requirement text. " * 60,
+        lambda data, filename: "Requirement text. " * 60,
     )
 
     result = ingest_service.ingest_file(b"%PDF-bytes", "spec.pdf")
 
     assert result.document is not None
-    assert result.chunk_count == len(store.chunks) > 0
+    assert result.chunk_count == len(vector_store.chunks) > 0
     assert ingest_service.embedding_provider.embed_calls == 1
 
 
@@ -127,7 +122,7 @@ def test_an_image_the_model_returns_nothing_for_is_rejected(service, monkeypatch
     ingest_service, _ = service
     monkeypatch.setattr(
         "app.services.ingest.extract_text",
-        lambda data, filename, settings: "   ",
+        lambda data, filename: "   ",
     )
 
     with pytest.raises(EmptyDocumentError):
@@ -135,7 +130,7 @@ def test_an_image_the_model_returns_nothing_for_is_rejected(service, monkeypatch
 
 
 def test_chunks_stay_within_size_and_cover_the_text():
-    text = "\n\n".join(f"Paragraph {i}. " + "word " * 60 for i in range(6))
+    text = "\n\n".join(f"Paragraph {index}. " + "word " * 60 for index in range(6))
 
     chunks = chunk_text(text, chunk_size=500, overlap=80)
 
@@ -149,10 +144,7 @@ def test_chunking_terminates_without_whitespace_boundaries():
 
 
 def test_chunking_terminates_when_a_break_falls_exactly_overlap_past_the_start():
-    # A line break exactly `overlap` characters into the next chunk must
-    # not make that chunk restart where it began and append forever. A
-    # real PDF once grew the backend until Docker's VM ran out of
-    # memory.
+    # A break exactly `overlap` past the start used to loop forever.
     text = ("x" * 849) + "\n" + ("y" * 149) + "\n" + ("z" * 3000)
 
     chunks = chunk_text(text, chunk_size=1000, overlap=150)
@@ -167,7 +159,7 @@ def test_blank_text_produces_no_chunks():
 
 def test_unknown_extension_is_rejected():
     with pytest.raises(UnsupportedFileError):
-        extract_text(b"data", "archive.zip", Settings())
+        extract_text(b"data", "archive.zip")
 
 
 def _gif(width: int, height: int) -> bytes:
@@ -188,15 +180,15 @@ def test_a_small_image_is_sent_untouched_with_its_own_media_type():
 def test_a_resized_image_is_labelled_with_the_format_it_was_saved_in():
     from PIL import Image
 
-    resized, mime = _prepare_image(_gif(MAX_IMAGE_DIMENSION * 2, 10), ".gif")
+    resized, media_type = _prepare_image(_gif(MAX_IMAGE_DIMENSION * 2, 10), ".gif")
 
     image = Image.open(BytesIO(resized))
-    assert (image.format, mime) == ("PNG", "image/png")
+    assert (image.format, media_type) == ("PNG", "image/png")
     assert max(image.size) == MAX_IMAGE_DIMENSION
 
 
 def test_ingest_stores_one_chunk_per_embedding(service):
-    ingest_service, store = service
+    ingest_service, vector_store = service
 
     result = ingest_service.ingest_file(
         ("Requirement text. " * 60).encode(),
@@ -206,13 +198,13 @@ def test_ingest_stores_one_chunk_per_embedding(service):
 
     assert result.document.title == "spec.txt"
     assert result.text.startswith("Requirement text.")
-    assert store.created_with["extension"] == ".txt"
-    assert store.created_with["tags"] == ["reqs"]
-    assert result.chunk_count == len(store.chunks)
-    assert [chunk.chunk_index for chunk in store.chunks] == list(
+    assert vector_store.created_with["extension"] == ".txt"
+    assert vector_store.created_with["tags"] == ["reqs"]
+    assert result.chunk_count == len(vector_store.chunks)
+    assert [chunk.chunk_index for chunk in vector_store.chunks] == list(
         range(result.chunk_count)
     )
-    assert all(chunk.embedding for chunk in store.chunks)
+    assert all(chunk.embedding for chunk in vector_store.chunks)
 
 
 def test_file_without_text_is_rejected(service):
@@ -223,27 +215,26 @@ def test_file_without_text_is_rejected(service):
 
 
 def test_a_file_over_the_byte_limit_is_rejected_before_extraction(service, monkeypatch):
-    ingest_service, store = service
+    ingest_service, vector_store = service
     monkeypatch.setattr("app.services.ingest.MAX_UPLOAD_BYTES", 100)
 
-    def fail_extract(data, filename, settings):
+    def fail_extract(data, filename):
         raise AssertionError("an oversized file must not be extracted")
 
     monkeypatch.setattr("app.services.ingest.extract_text", fail_extract)
 
     with pytest.raises(FileTooLargeError, match="larger than"):
         ingest_service.ingest_file(b"x" * 101, "big.pdf")
-    assert store.created_with == {}
+    assert vector_store.created_with == {}
 
 
 def test_a_file_with_too_much_text_is_rejected_and_not_stored(service, monkeypatch):
-    """The text limit is what bounds LLM cost: attachments are resent every turn."""
-    ingest_service, store = service
+    ingest_service, vector_store = service
     monkeypatch.setattr("app.services.ingest.MAX_EXTRACTED_CHARS", 50)
 
     with pytest.raises(FileTooLargeError, match="51 characters"):
         ingest_service.ingest_file(b"y" * 51, "long.txt")
-    assert store.created_with == {}
+    assert vector_store.created_with == {}
     assert ingest_service.embedding_provider.embed_calls == 0
 
 
@@ -299,9 +290,7 @@ class StubIngestService:
 def _upload(stub, filename="screenshot.png"):
     """Post a file with the ingest service stubbed out.
 
-    Uses a bare TestClient rather than the shared `client` fixture,
-    which runs the app's lifespan and so needs the database; nothing
-    here touches it.
+    A bare TestClient skips the app's lifespan, so no database is needed.
     """
     app.dependency_overrides[get_ingest_service] = lambda: stub
     try:
@@ -342,8 +331,7 @@ def test_upload_of_an_unstored_file_reports_a_null_document_id():
 
 
 def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
-    stub = StubIngestService(ImageExtractionError(
-        "vision model returned no text"))
+    stub = StubIngestService(ImageExtractionError("vision model returned no text"))
 
     response = _upload(stub)
 
@@ -352,8 +340,9 @@ def test_upload_reports_an_unreadable_image_as_a_bad_gateway():
 
 
 def test_upload_reports_an_oversized_file_as_413():
-    stub = StubIngestService(FileTooLargeError(
-        "big.pdf is larger than the 10.0 MB upload limit."))
+    stub = StubIngestService(
+        FileTooLargeError("big.pdf is larger than the 10.0 MB upload limit.")
+    )
 
     response = _upload(stub, filename="big.pdf")
 
@@ -367,14 +356,12 @@ def test_upload_reads_no_more_than_one_byte_past_the_limit(monkeypatch):
 
     _upload(stub, filename="spec.pdf")
 
-    # b"fake-bytes" is 10 bytes; the route hands over limit + 1 and the
-    # service's own check rejects it.
+    # The route passes on limit + 1 bytes and lets the service reject it.
     assert stub.called_with == (b"fake-", "spec.pdf")
 
 
 def test_upload_rejects_an_unsupported_file():
-    stub = StubIngestService(UnsupportedFileError(
-        "Cannot extract text from 'a.zip'"))
+    stub = StubIngestService(UnsupportedFileError("Cannot extract text from 'a.zip'"))
 
     response = _upload(stub, filename="a.zip")
 
@@ -383,6 +370,7 @@ def test_upload_rejects_an_unsupported_file():
 
 
 def _delete(stub, document_id):
+    """Delete a document with the ingest service stubbed out."""
     app.dependency_overrides[get_ingest_service] = lambda: stub
     try:
         return TestClient(app).delete(f"/documents/{document_id}")

@@ -29,6 +29,7 @@ include = ["app*", "voting*", "llm*", "ai_prompts*"]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "ruff>=0.17",
 ]
 
 [tool.uv]
@@ -37,3 +38,23 @@ package = false
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "D", "UP", "B"]
+ignore = [
+    # FastAPI declares dependencies as `Depends(...)` default arguments.
+    "B008",
+    # Google style documents constructor arguments in the class docstring.
+    "D107",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names already say what they check, so a docstring would only repeat them.
+"tests/**" = ["D103"]

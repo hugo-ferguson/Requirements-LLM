@@ -1,42 +1,31 @@
 import { useCallback, useState } from "react";
-import type { Attachment, ChatMessage } from "../types/conversation";
+import type { ChatMessage } from "../types/conversation";
 import { useAttachmentUploads } from "./useAttachmentUploads";
 
-function newId(): string {
-  return crypto.randomUUID();
-}
+/** A mini-chat message in the form the regenerate endpoints take. */
+export type RegenerateMessage = Omit<ChatMessage, "id">;
 
-interface WireMessage {
-  role: "user" | "assistant";
-  text: string;
-  attachments: Attachment[];
-}
-
-interface FetchCandidatesResult<T> {
+interface FetchCandidatesResult<Candidate> {
   reply: { text: string };
-  candidates: T[];
+  candidates: Candidate[];
 }
 
-type FetchCandidates<T> = (
+type FetchCandidates<Candidate> = (
   targetId: number,
-  messages: WireMessage[],
-) => Promise<FetchCandidatesResult<T>>;
+  messages: RegenerateMessage[],
+) => Promise<FetchCandidatesResult<Candidate>>;
 
 /**
- * Owns the ephemeral "regenerate selected" mini-chat + candidate review state.
- * None of this is persisted — it's local to the sub-view and discarded on
- * Cancel (or once the approved candidates are merged into the main list).
+ * Holds the "regenerate selected" mini-chat and its candidates. Nothing here is saved.
  *
- * Generic over the candidate item type `T` so both AC's and UAT's
- * regenerate-selected sub-flows can share this hook — the actual API call is
- * injected via `fetchCandidates` rather than hard-wired to one endpoint.
+ * @param targetId - The item being regenerated. Sending does nothing while it's null.
  */
-export function useRegenerateSelected<T>(
+export function useRegenerateSelected<Candidate>(
   targetId: number | null,
-  fetchCandidates: FetchCandidates<T>,
+  fetchCandidates: FetchCandidates<Candidate>,
 ) {
   const [miniChatMessages, setMiniChatMessages] = useState<ChatMessage[]>([]);
-  const [candidates, setCandidates] = useState<T[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [approvedIndexes, setApprovedIndexes] = useState<Set<number>>(new Set());
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -45,8 +34,7 @@ export function useRegenerateSelected<T>(
 
   const reset = useCallback(() => {
     setMiniChatMessages([]);
-    // Cancelling the sub-flow throws its attachments away, so the documents
-    // they ingested go too.
+    // Also deletes the attachments' documents.
     discardAttachments();
     setCandidates([]);
     setApprovedIndexes(new Set());
@@ -58,9 +46,9 @@ export function useRegenerateSelected<T>(
       const trimmed = text.trim();
       if ((!trimmed && pendingAttachments.length === 0) || targetId == null) return;
 
-      const nextHistory = [
+      const nextHistory: ChatMessage[] = [
         ...miniChatMessages,
-        { id: newId(), role: "user" as const, text: trimmed, attachments: pendingAttachments },
+        { id: crypto.randomUUID(), role: "user", text: trimmed, attachments: pendingAttachments },
       ];
       setMiniChatMessages(nextHistory);
       clearAttachments();
@@ -69,14 +57,23 @@ export function useRegenerateSelected<T>(
       try {
         const response = await fetchCandidates(
           targetId,
-          nextHistory.map((m) => ({ role: m.role, text: m.text, attachments: m.attachments })),
+          nextHistory.map((message) => ({
+            role: message.role,
+            text: message.text,
+            attachments: message.attachments,
+          })),
         );
-        setMiniChatMessages((prev) => [
-          ...prev,
-          { id: newId(), role: "assistant", text: response.reply.text, attachments: [] },
+        setMiniChatMessages((previous) => [
+          ...previous,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            text: response.reply.text,
+            attachments: [],
+          },
         ]);
         setCandidates(response.candidates);
-        // Pre-tick every candidate, matching the mockup's already-approved appearance.
+        // Tick every candidate by default, as in the mockup.
         setApprovedIndexes(new Set(response.candidates.map((_, index) => index)));
       } catch {
         setSendError("Couldn't reach the server. Please try again.");
@@ -87,10 +84,10 @@ export function useRegenerateSelected<T>(
     [targetId, fetchCandidates, miniChatMessages, pendingAttachments, clearAttachments],
   );
 
-  const setApproved = useCallback((index: number, approved: boolean) => {
-    setApprovedIndexes((prev) => {
-      const next = new Set(prev);
-      if (approved) next.add(index);
+  const setApproved = useCallback((index: number, isApproved: boolean) => {
+    setApprovedIndexes((previous) => {
+      const next = new Set(previous);
+      if (isApproved) next.add(index);
       else next.delete(index);
       return next;
     });

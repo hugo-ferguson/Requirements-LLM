@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+"""Business logic for exporting a session's approved requirements as JSON."""
+
+from datetime import UTC, datetime
 
 from app.models_export import (
     ExportAcceptanceCriterion,
@@ -23,31 +25,43 @@ class ExportService:
         ac_repository: AcceptanceCriteriaRepository,
         uat_case_repository: UatCaseRepository,
     ):
-        self.sessions = session_repository
-        self.ac = ac_repository
-        self.uat_cases = uat_case_repository
+        """Store the repositories the export reads from."""
+        self.session_repository = session_repository
+        self.ac_repository = ac_repository
+        self.uat_case_repository = uat_case_repository
 
     def build(self, session_id: int) -> ExportResponse | None:
-        chat_session = self.sessions.get(session_id)
+        """Build a session's export, or return None if the session is missing."""
+        chat_session = self.session_repository.get(session_id)
         if chat_session is None:
             return None
 
-        records = self.ac.list_for_session(session_id)
-        approved = [r for r in records if r.status == "accepted"]
+        records = self.ac_repository.list_for_session(session_id)
+        approved = [record for record in records if record.status == "accepted"]
 
-        approved_cases: dict[int, list[UatCaseRecord]] = {}
-        for case in self.uat_cases.list_for_session(session_id):
+        approved_cases_by_ac: dict[int, list[UatCaseRecord]] = {}
+        for case in self.uat_case_repository.list_for_session(session_id):
             if case.status == "accepted":
-                approved_cases.setdefault(case.ac_id, []).append(case)
-        uat_candidates = self.uat_cases.candidates_by_case(session_id)
+                approved_cases_by_ac.setdefault(case.ac_id, []).append(case)
+        uat_candidates = self.uat_case_repository.candidates_by_case(session_id)
 
         def uat_source_agent(case: UatCaseRecord) -> str | None:
+            """Return the agent that wrote the case's displayed version."""
             candidates = uat_candidates.get((case.ac_id, case.position), [])
-            return next((c.source_agent for c in candidates if c.is_winner), None)
+            return next(
+                (
+                    candidate.source_agent
+                    for candidate in candidates
+                    if candidate.is_winner
+                ),
+                None,
+            )
 
-        # The wire conversion already resolves each AC's source_agent.
-        criteria = []
-        for criterion in to_acceptance_criteria(self.ac, session_id, approved):
+        # to_acceptance_criteria already resolves each AC's source agent.
+        criteria: list[ExportAcceptanceCriterion] = []
+        for criterion in to_acceptance_criteria(
+            self.ac_repository, session_id, approved
+        ):
             criteria.append(
                 ExportAcceptanceCriterion(
                     title=criterion.title,
@@ -70,7 +84,7 @@ class ExportService:
                             overall_score=case.overall_score,
                             source_agent=uat_source_agent(case),
                         )
-                        for case in approved_cases.get(criterion.id, [])
+                        for case in approved_cases_by_ac.get(criterion.id, [])
                     ],
                 )
             )
@@ -78,11 +92,13 @@ class ExportService:
         return ExportResponse(
             document=ExportDocument(
                 session_name=chat_session.name,
-                exported_at=datetime.now(timezone.utc),
+                exported_at=datetime.now(UTC),
                 acceptance_criteria=criteria,
             ),
             warnings=ExportWarnings(
                 unapproved_ac_count=len(records) - len(approved),
-                approved_ac_without_uat=[c.title for c in criteria if not c.uat_cases],
+                approved_ac_without_uat=[
+                    criterion.title for criterion in criteria if not criterion.uat_cases
+                ],
             ),
         )

@@ -1,36 +1,47 @@
 import { useCallback, useEffect, useState } from "react";
 import { acceptanceCriteriaApi } from "../api/acceptanceCriteria";
-import type { AcceptanceCriterion, AcceptanceCriterionStatus } from "../api/acceptanceCriteria";
+import type {
+  AcceptanceCriterion,
+  AcceptanceCriterionStatus,
+  AcceptanceCriterionTextUpdate,
+} from "../api/acceptanceCriteria";
 
+/** Loads and updates a session's ACs. Ignores loads for a previous session. */
 export function useAcceptanceCriteria(sessionId: string) {
-  const [items, setItems] = useState<AcceptanceCriterion[]>([]);
+  const [criteria, setCriteria] = useState<AcceptanceCriterion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    let isCancelled = false;
     setIsLoading(true);
     setLoadError(null);
     acceptanceCriteriaApi
       .list(sessionId)
       .then((result) => {
-        if (!cancelled) setItems(result.acceptance_criteria);
+        if (!isCancelled) setCriteria(result.acceptance_criteria);
       })
       .catch(() => {
-        if (!cancelled) setLoadError("Couldn't load acceptance criteria. Please try again.");
+        if (!isCancelled) setLoadError("Couldn't load acceptance criteria. Please try again.");
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!isCancelled) setIsLoading(false);
       });
     return () => {
-      cancelled = true;
+      isCancelled = true;
     };
   }, [sessionId]);
 
+  function replaceCriterion(updated: AcceptanceCriterion) {
+    setCriteria((previous) =>
+      previous.map((criterion) => (criterion.id === updated.id ? updated : criterion)),
+    );
+  }
+
   const updateText = useCallback(
-    async (acId: number, fields: { title: string; given: string; when: string; then: string }) => {
+    async (acId: number, fields: AcceptanceCriterionTextUpdate) => {
       const updated = await acceptanceCriteriaApi.updateText(sessionId, acId, fields);
-      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      replaceCriterion(updated);
     },
     [sessionId],
   );
@@ -38,29 +49,34 @@ export function useAcceptanceCriteria(sessionId: string) {
   const updateStatus = useCallback(
     async (acId: number, status: AcceptanceCriterionStatus) => {
       const updated = await acceptanceCriteriaApi.updateStatus(sessionId, acId, status);
-      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      replaceCriterion(updated);
     },
     [sessionId],
   );
 
   const applyApproved = useCallback(
-    async (targetId: number, candidates: AcceptanceCriterion[]) => {
-      const result = await acceptanceCriteriaApi.applyApproved(sessionId, targetId, candidates);
-      setItems(result.acceptance_criteria);
+    async (acId: number, candidates: AcceptanceCriterion[]) => {
+      const result = await acceptanceCriteriaApi.applyApproved(sessionId, acId, candidates);
+      setCriteria(result.acceptance_criteria);
     },
     [sessionId],
   );
 
-  /** Swaps another model's version in; resolves to the number of UAT cases now stale. */
   const selectAlternative = useCallback(
-    async (acId: number, candidateId: number): Promise<number> => {
+    async (acId: number, candidateId: number) => {
       const result = await acceptanceCriteriaApi.selectAlternative(sessionId, acId, candidateId);
-      const updated = result.acceptance_criterion;
-      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      return result.uat_cases_affected;
+      replaceCriterion(result.acceptance_criterion);
     },
     [sessionId],
   );
 
-  return { items, isLoading, loadError, updateText, updateStatus, applyApproved, selectAlternative };
+  return {
+    criteria,
+    isLoading,
+    loadError,
+    updateText,
+    updateStatus,
+    applyApproved,
+    selectAlternative,
+  };
 }

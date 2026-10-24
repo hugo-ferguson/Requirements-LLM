@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   title: string;
   message: ReactNode;
   /** Label for the go-ahead button. Defaults to "Continue". */
   confirmLabel?: string;
-  /** Red go-ahead button, for actions that delete something. */
-  destructive?: boolean;
+  /** Makes the go-ahead button red, for deletions. */
+  isDestructive?: boolean;
 }
 
 interface ConfirmDialogProps extends ConfirmOptions {
@@ -14,20 +14,20 @@ interface ConfirmDialogProps extends ConfirmOptions {
   onCancel: () => void;
 }
 
-/** A modal asking the user to confirm an action before it happens. */
-export function ConfirmDialog({
+/** A modal asking the user to confirm an action. */
+function ConfirmDialog({
   title,
   message,
   confirmLabel = "Continue",
-  destructive = false,
+  isDestructive = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    // Focus the safe choice, so Enter never confirms by accident.
-    cancelRef.current?.focus();
+    // Focus Cancel so Enter can't confirm by accident.
+    cancelButtonRef.current?.focus();
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onCancel();
     }
@@ -53,7 +53,7 @@ export function ConfirmDialog({
         <div className="mt-2 text-sm text-gray-600">{message}</div>
         <div className="mt-6 flex justify-end gap-2">
           <button
-            ref={cancelRef}
+            ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
             className="rounded-full bg-gray-100 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
@@ -64,7 +64,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             className={`rounded-full px-5 py-2 text-sm font-medium text-white ${
-              destructive ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:bg-primary-hover"
+              isDestructive ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:bg-primary-hover"
             }`}
           >
             {confirmLabel}
@@ -75,37 +75,34 @@ export function ConfirmDialog({
   );
 }
 
-/**
- * Promise-style confirmation: `if (!(await confirm({...}))) return;`.
- * Render `dialog` once anywhere in the component.
- */
+/** Promise-based confirmation: `if (!(await confirm({...}))) return;`. Render `dialog` once. */
 export function useConfirm() {
-  const [pending, setPending] = useState<
-    (ConfirmOptions & { resolve: (confirmed: boolean) => void }) | null
+  const [pendingConfirmation, setPendingConfirmation] = useState<
+    (ConfirmOptions & { resolve: (isConfirmed: boolean) => void }) | null
   >(null);
 
   const confirm = useCallback(
     (options: ConfirmOptions) =>
-      new Promise<boolean>((resolve) => setPending({ ...options, resolve })),
+      new Promise<boolean>((resolve) => setPendingConfirmation({ ...options, resolve })),
     [],
   );
 
   const settle = useCallback(
-    (confirmed: boolean) => {
-      pending?.resolve(confirmed);
-      setPending(null);
+    (isConfirmed: boolean) => {
+      pendingConfirmation?.resolve(isConfirmed);
+      setPendingConfirmation(null);
     },
-    [pending],
+    [pendingConfirmation],
   );
   const handleConfirm = useCallback(() => settle(true), [settle]);
   const handleCancel = useCallback(() => settle(false), [settle]);
 
-  const dialog = pending ? (
+  const dialog = pendingConfirmation ? (
     <ConfirmDialog
-      title={pending.title}
-      message={pending.message}
-      confirmLabel={pending.confirmLabel}
-      destructive={pending.destructive}
+      title={pendingConfirmation.title}
+      message={pendingConfirmation.message}
+      confirmLabel={pendingConfirmation.confirmLabel}
+      isDestructive={pendingConfirmation.isDestructive}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
     />

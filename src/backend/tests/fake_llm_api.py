@@ -1,11 +1,4 @@
-"""A stand-in for the providers' HTTP APIs, to check what gets sent.
-
-`FakeLlmApi.model(spec)` builds the real PydanticAI model for a model
-entry, with a mock transport underneath, so the request each provider
-would receive can be inspected without a network or an API key. Replies
-are queued as text and answered in whichever API's shape the request was
-for.
-"""
+"""A fake provider HTTP API, to check what each request sends."""
 
 from __future__ import annotations
 
@@ -29,9 +22,13 @@ class FakeLlmApi:
         """Build the real model for `spec`, wired to this fake API."""
         if spec.api_key_env is None and spec.provider != "ollama":
             spec = spec.model_copy(update={"api_key_env": "FAKE_LLM_API_KEY"})
-        return build_model(spec, http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(self._reply)))
+        return build_model(
+            spec,
+            http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(self._reply)),
+        )
 
     def _reply(self, request: httpx2.Request) -> httpx2.Response:
+        """Record the request and answer it in its API's shape."""
         self.requests.append(json.loads(request.content))
         text = self.replies.pop(0) if self.replies else self.default_reply
         path = request.url.path
@@ -43,6 +40,7 @@ class FakeLlmApi:
 
 
 def _anthropic(text: str) -> dict:
+    """Return an Anthropic Messages API reply carrying `text`."""
     return {
         "id": "msg_test",
         "type": "message",
@@ -56,6 +54,7 @@ def _anthropic(text: str) -> dict:
 
 
 def _openai_responses(text: str) -> dict:
+    """Return an OpenAI Responses API reply carrying `text`."""
     return {
         "id": "resp_test",
         "object": "response",
@@ -85,11 +84,18 @@ def _openai_responses(text: str) -> dict:
 
 
 def _chat_completions(text: str) -> dict:
+    """Return an OpenAI-compatible Chat Completions reply carrying `text`."""
     return {
         "id": "chatcmpl_test",
         "object": "chat.completion",
         "created": 0,
         "model": "test",
-        "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": text}}],
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": text},
+            }
+        ],
         "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
     }

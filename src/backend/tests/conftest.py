@@ -1,5 +1,6 @@
 """Shared fixtures: a Postgres test database and offline models."""
 
+import os
 from collections.abc import Generator
 from pathlib import Path
 
@@ -14,7 +15,12 @@ from app.db import get_session
 from app.llm_config import get_models_config
 from app.main import app
 
-TEST_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/app_test"
+# Overridable, so parallel test runs don't drop each other's tables.
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/app_test",
+)
+TEST_MODELS_CONFIG = Path(__file__).with_name("models.test.json")
 
 
 @pytest.fixture(name="engine", scope="session")
@@ -29,18 +35,11 @@ def engine_fixture():
     engine.dispose()
 
 
-TEST_MODELS_CONFIG = Path(__file__).with_name("models.test.json")
-
-
 @pytest.fixture(autouse=True)
 def stub_generation_agents() -> Generator[None, None, None]:
-    """Point the ensemble at PydanticAI's TestModel for the whole suite.
+    """Point every model at PydanticAI's TestModel and turn voting off.
 
-    Keeps the tests offline and free: no API keys, no Ollama, no token
-    spend. Voting is disabled for the same reason: the voters need a
-    live provider. Every entry in tests/models.test.json sets
-    `"output_mode": "tool"`, because TestModel has no native structured
-    output.
+    Keeps the tests offline.
     """
     original_path = settings.models_config_path
     original_voting = settings.generation_enable_voting

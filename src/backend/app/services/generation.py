@@ -1,29 +1,14 @@
-"""Business logic for ensemble acceptance criteria generation.
-
-Sits at the same level as the other services: it knows nothing about
-HTTP or about SQLModel, and it is the only place the stages of the
-pipeline are sequenced together.
-
-    conversation -> RAG retrieval -> ensemble generation
-        -> scoring -> ranked ACs
-
-Scoring is delegated to `app.services.scoring`, which is shared with AC
-regeneration and UAT generation. That module owns the voting-layer
-contract: it matches results back to candidates by exact text (the
-voting layer sorts its output by score, so position is not stable) and
-clamps rubric values onto the app's 0-5 scale. This layer's job is the
-ensemble, not the scoring.
-"""
+"""Acceptance criteria generation: retrieve context, generate, score and rank."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from app.config import Settings
-from app.generation.models import CandidateGroup, EnsembleResult
+from app.generation.models import CandidateGroup, EnsembleResult, GeneratedCriterion
 from app.generation.orchestrator import (
     pool_criteria,
     run_ensemble,
@@ -37,11 +22,8 @@ from app.models_conversation import (
     ConversationMessage,
 )
 from app.services.agents import GenerationError
-from app.services.scoring import (
-    Scorer,
-    render_ac_candidate,
-    score_candidates as default_score_candidates,
-)
+from app.services.scoring import CandidateScore, Scorer, render_ac_candidate
+from app.services.scoring import score_candidates as default_score_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -52,17 +34,11 @@ class RetrievedChunk(Protocol):
     content: str
 
 
-@runtime_checkable
 class ContextRetriever(Protocol):
-    """The slice of `IngestService` this layer actually needs.
+    """The part of `IngestService` that generation uses, so tests can fake it."""
 
-    Depending on the shape rather than the concrete class keeps the
-    generation layer testable without a database, and means the RAG
-    implementation can change underneath without touching this file.
-    """
-
-    def search(self, query: str, k: int = 5) -> Sequence[RetrievedChunk]:
-        """Return the `k` stored chunks most similar to `query`."""
+    def search(self, query: str, top_k: int = 5) -> Sequence[RetrievedChunk]:
+        """Return the `top_k` stored chunks most similar to `query`."""
         ...
 
 
@@ -71,12 +47,12 @@ class NoUserStoryError(ValueError):
 
 
 def compose_user_story(messages: list[ConversationMessage]) -> str:
-    """Fold the conversation into the story text the agents receive.
+    """Join the user messages and their attachments into the story text.
 
-    Only user turns are used — assistant replies are the system talking
-    to itself and would bias generation. Attachment text is appended
-    after the messages so uploaded requirements documents are visible to
-    the agents even before retrieval runs.
+    Assistant replies are left out, as they would bias generation.
+
+    Raises:
+        NoUserStoryError: No user turn has any text or attachment content.
     """
     parts: list[str] = []
 
@@ -102,54 +78,42 @@ def compose_user_story(messages: list[ConversationMessage]) -> str:
 
 
 class GenerationService:
-    """Runs the ensemble generation pipeline for one request."""
+    """The ensemble generation pipeline for one request."""
 
     def __init__(
         self,
         settings: Settings,
-        ingest_service: ContextRetriever | None = None,
+        context_retriever: ContextRetriever | None = None,
         scorer: Scorer | None = None,
     ):
-        """Configure the pipeline; RAG and the scorer are optional."""
+        """Store the settings, the RAG retriever and the scorer.
+
+        Args:
+            settings: App settings.
+            context_retriever: Source of project context. Optional.
+            scorer: Replaces the voting layer, for tests.
+        """
         self.settings = settings
-        # Optional so the service can run without a vector store
-        # configured; generation then proceeds on the user story alone.
-        self.ingest = ingest_service
-        # Injectable so tests can score without reaching the voting
-        # layer.
+        self.context_retriever = context_retriever
         self.scorer: Scorer = scorer or default_score_candidates
 
     async def retrieve_context(self, query: str) -> list[str]:
-        """Fetch the top-K chunks relevant to the story (backlog R11).
-
-        The embedding call and the pgvector query are both synchronous
-        and network- or CPU-bound, so they run in a worker thread rather
-        than blocking the event loop the agents are running on.
-        """
-        if self.ingest is None or self.settings.rag_top_k <= 0:
+        """Fetch the top-K chunks relevant to the story (R11), or none on failure."""
+        if self.context_retriever is None or self.settings.rag_top_k <= 0:
             return []
 
         try:
             chunks = await asyncio.to_thread(
-                self.ingest.search, query, self.settings.rag_top_k
+                self.context_retriever.search, query, self.settings.rag_top_k
             )
-        except Exception:  # noqa: BLE001 - retrieval is best-effort
-            logger.exception(
-                "RAG retrieval failed; generating without project context")
+        except Exception:
+            logger.exception("RAG retrieval failed; generating without project context")
             return []
 
         return [chunk.content for chunk in chunks]
 
-    async def score(
-        self, prompt: str, candidates: list[str]
-    ) -> list:
-        """Score candidates through the shared voting seam.
-
-        `score_candidates` is synchronous and blocks until the voting
-        loop finishes, so it goes through a worker thread rather than
-        blocking this one. It never raises: a scoring outage returns
-        all-zero scores rather than losing the generated criteria.
-        """
+    async def score(self, prompt: str, candidates: list[str]) -> list[CandidateScore]:
+        """Return one score per candidate, in the order given."""
         return await asyncio.to_thread(
             self.scorer,
             prompt=prompt,
@@ -163,7 +127,19 @@ class GenerationService:
         *,
         feedback: str | None = None,
     ) -> list[AcceptanceCriterion]:
-        """Run the full pipeline: retrieve, generate, score, rank."""
+        """Run the full pipeline: retrieve, generate, score, rank.
+
+        Args:
+            messages: The session's conversation, oldest first.
+            feedback: Reviewer feedback when regenerating (R20).
+
+        Returns:
+            The criteria, with `id` set to list position.
+
+        Raises:
+            NoUserStoryError: The conversation has no user story in it.
+            GenerationError: Every generation agent failed.
+        """
         story = compose_user_story(messages)
         context_chunks = await self.retrieve_context(story)
 
@@ -182,10 +158,6 @@ class GenerationService:
                 timeout_seconds=self.settings.generation_timeout_seconds,
             )
             if not groups and ensemble.successful:
-                # The anchor agent succeeded but produced nothing
-                # groupable. Fall through to the flat path rather than
-                # returning an empty result — a degraded answer beats no
-                # answer.
                 logger.warning(
                     "title-anchored generation produced no groups; "
                     "falling back to the flat ensemble"
@@ -215,7 +187,10 @@ class GenerationService:
             return _to_wire_models(criteria, scores=None)
 
         candidate_texts = [
-            render_ac_candidate(c.title, c.given, c.when, c.then) for c in criteria
+            render_ac_candidate(
+                criterion.title, criterion.given, criterion.when, criterion.then
+            )
+            for criterion in criteria
         ]
         scores = await self.score(ensemble.prompt, candidate_texts)
         return _to_wire_models(criteria, scores=scores)
@@ -223,25 +198,20 @@ class GenerationService:
     async def _generate_grouped(
         self, ensemble: EnsembleResult, groups: list[CandidateGroup]
     ) -> list[AcceptanceCriterion]:
-        """Score every candidate, then rank within each group.
-
-        All candidates go to the voting layer in one call — it is far
-        cheaper than one call per group, and `score_candidates`
-        guarantees results come back in submission order, so a flat list
-        can be unpacked back into the groups it came from.
-        """
+        """Score every candidate in one call, then rank within each group."""
         flat = [
-            (group, candidate)
-            for group in groups
-            for candidate in group.candidates
+            (group, candidate) for group in groups for candidate in group.candidates
         ]
 
         if self.settings.generation_enable_voting:
             texts = [
                 render_ac_candidate(
-                    c.criterion.title, c.criterion.given, c.criterion.when, c.criterion.then
+                    candidate.criterion.title,
+                    candidate.criterion.given,
+                    candidate.criterion.when,
+                    candidate.criterion.then,
                 )
-                for _, c in flat
+                for _, candidate in flat
             ]
             scores = await self.score(ensemble.prompt, texts)
             for (_, candidate), score in zip(flat, scores, strict=True):
@@ -255,33 +225,28 @@ class GenerationService:
         for group in groups:
             group.rank()
 
-        contested = [g for g in groups if len(g.candidates) > 1]
+        contested = [group for group in groups if len(group.candidates) > 1]
         logger.info(
             "grouped %d criteria from %d candidates; %d contested, %d unrated",
             len(groups),
             len(flat),
             len(contested),
-            sum(len(g.unrated) for g in groups),
+            sum(len(group.unrated) for group in groups),
         )
         for group in contested:
             if group.winner.scoring_failed:
-                # Every candidate here was unrated, so "winner" means
-                # first by agent id, not best. Worth saying out loud.
                 logger.warning(
                     "no candidate for %r was rated; the winner was chosen by "
                     "tie-break, not by score",
                     group.title,
                 )
 
-        # Groups keep the anchor agent's order; within a group the best
-        # candidate wins. Sorting groups by score would let a
-        # low-scoring behaviour vanish to the bottom of the list even
-        # though the reviewer still has to decide on it.
+        # Keep the anchor's order, not score order.
         return _groups_to_wire_models(groups)
 
     @staticmethod
     def _log_ensemble(ensemble: EnsembleResult) -> None:
-        # One log line per agent: its output size, or why it failed.
+        """Log one line per agent: how many criteria, or why it failed."""
         for result in ensemble.results:
             if result.ok:
                 logger.info(
@@ -302,33 +267,24 @@ class GenerationService:
 
 
 def _unscored() -> AcceptanceCriterionScores:
-    # Placeholder scores for when voting is switched off.
+    """Return placeholder scores for when voting is switched off."""
     return AcceptanceCriterionScores(
         relevance=0.0, correctness=0.0, understandability=0.0, coverage=0.0
     )
 
 
 def _groups_to_wire_models(groups: list[CandidateGroup]) -> list[AcceptanceCriterion]:
-    """Flatten ranked groups into the schema the frontend consumes.
-
-    Each group contributes exactly one `AcceptanceCriterion` — its
-    winner — with the beaten candidates attached as `alternatives`. A
-    client that ignores `alternatives` still sees one row per behaviour,
-    best version shown.
-    """
+    """Convert each ranked group to its winner, with the rest as `alternatives`."""
     wire: list[AcceptanceCriterion] = []
 
-    for index, group in enumerate(groups):
+    for index, group in enumerate(groups, start=1):
         if not group.candidates:
             continue
         winner = group.winner
         wire.append(
             AcceptanceCriterion(
-                id=index + 1,
-                # The group's title, i.e. the anchor's spelling. Pass-2
-                # candidates already carry it, but taking it from the
-                # group keeps the displayed title independent of which
-                # agent won.
+                id=index,
+                # The anchor's title, whichever agent won.
                 title=group.title,
                 given=winner.criterion.given,
                 when=winner.criterion.when,
@@ -344,19 +300,19 @@ def _groups_to_wire_models(groups: list[CandidateGroup]) -> list[AcceptanceCrite
                 source_agent=winner.agent_id,
                 alternatives=[
                     AcceptanceCriterionAlternative(
-                        given=alt.criterion.given,
-                        when=alt.criterion.when,
-                        then=alt.criterion.then,
+                        given=alternative.criterion.given,
+                        when=alternative.criterion.when,
+                        then=alternative.criterion.then,
                         scores=AcceptanceCriterionScores(
-                            relevance=alt.relevance,
-                            correctness=alt.correctness,
-                            understandability=alt.understandability,
-                            coverage=alt.coverage,
+                            relevance=alternative.relevance,
+                            correctness=alternative.correctness,
+                            understandability=alternative.understandability,
+                            coverage=alternative.coverage,
                         ),
-                        overall_score=alt.overall_score,
-                        source_agent=alt.agent_id,
+                        overall_score=alternative.overall_score,
+                        source_agent=alternative.agent_id,
                     )
-                    for alt in group.alternatives
+                    for alternative in group.alternatives
                 ],
             )
         )
@@ -364,13 +320,12 @@ def _groups_to_wire_models(groups: list[CandidateGroup]) -> list[AcceptanceCrite
     return wire
 
 
-def _to_wire_models(criteria: list, scores: list | None) -> list[AcceptanceCriterion]:
+def _to_wire_models(
+    criteria: list[GeneratedCriterion], scores: list[CandidateScore] | None
+) -> list[AcceptanceCriterion]:
     """Rank best-first and convert to the schema the frontend reads.
 
-    `id` is positional only — real ids are assigned by
-    `AcceptanceCriteriaRepository.persist_batch`, which uses list order
-    for `position`, so ranking has to happen before persistence (backlog
-    R14, R17).
+    Rank before saving, as list order is stored as `position` (R14, R17).
     """
     if scores is None:
         paired = [(criterion, _unscored(), 0.0) for criterion in criteria]
@@ -393,14 +348,14 @@ def _to_wire_models(criteria: list, scores: list | None) -> list[AcceptanceCrite
 
     return [
         AcceptanceCriterion(
-            id=index + 1,
+            id=index,
             title=criterion.title,
             given=criterion.given,
             when=criterion.when,
             then=criterion.then,
-            scores=scores_model,
+            scores=criterion_scores,
             overall_score=overall,
             status="pending",
         )
-        for index, (criterion, scores_model, overall) in enumerate(ranked, start=0)
+        for index, (criterion, criterion_scores, overall) in enumerate(ranked, start=1)
     ]

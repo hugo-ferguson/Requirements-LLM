@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { useSessions } from "../context/SessionsContext";
 import { ROUTES } from "../routes";
 
+/** The start page, shown when no session is open. */
 export function EmptyStatePage() {
   const navigate = useNavigate();
   const { createSession } = useSessions();

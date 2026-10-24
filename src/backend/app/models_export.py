@@ -1,12 +1,16 @@
+"""API models for the JSON export of a session's approved requirements."""
+
 from datetime import datetime
 
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
 from app.models_conversation import AcceptanceCriterionScores
 from app.models_uat_cases import UatCaseScores
 
 
 class ExportUatCase(SQLModel):
+    """An approved UAT case, as it appears in the export."""
+
     title: str
     description: str
     scores: UatCaseScores
@@ -28,7 +32,7 @@ class ExportAcceptanceCriterion(SQLModel):
 
 
 class ExportDocument(SQLModel):
-    """What the downloaded JSON file contains."""
+    """The contents of the downloaded JSON file."""
 
     session_name: str
     exported_at: datetime
@@ -36,14 +40,18 @@ class ExportDocument(SQLModel):
 
 
 class ExportWarnings(SQLModel):
-    """What the export leaves out, so the user can confirm before downloading."""
+    """What the export leaves out, shown before downloading."""
 
-    # ACs that are pending or rejected, and so aren't exported.
-    unapproved_ac_count: int
-    # Titles of approved ACs that have no approved UAT case to nest.
-    approved_ac_without_uat: list[str]
+    unapproved_ac_count: int = Field(
+        description="Number of pending or rejected ACs, which aren't exported."
+    )
+    approved_ac_without_uat: list[str] = Field(
+        description="Titles of approved ACs that have no approved UAT case."
+    )
 
 
 class ExportResponse(SQLModel):
+    """The export document and the warnings about what it leaves out."""
+
     document: ExportDocument
     warnings: ExportWarnings

@@ -3,16 +3,21 @@ import { useParams } from "react-router";
 import { exportApi, type ExportDocument, type ExportResponse } from "../api/export";
 import { useConfirm } from "../components/shared/ConfirmDialog";
 
-function countUatCases(document: ExportDocument): number {
-  return document.acceptance_criteria.reduce((total, ac) => total + ac.uat_cases.length, 0);
+function countUatCases(exportDocument: ExportDocument): number {
+  return exportDocument.acceptance_criteria.reduce(
+    (total, criterion) => total + criterion.uat_cases.length,
+    0,
+  );
 }
 
-function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
+/** `formatCount(2, "file")` -> "2 files". */
+function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function criteria(count: number, qualifier = ""): string {
-  return plural(count, `${qualifier}acceptance criterion`, `${qualifier}acceptance criteria`);
+/** `formatCriteriaCount(2, "approved ")` -> "2 approved acceptance criteria". */
+function formatCriteriaCount(count: number, qualifier = ""): string {
+  return formatCount(count, `${qualifier}acceptance criterion`, `${qualifier}acceptance criteria`);
 }
 
 /** `Login & Signup!` -> `login-signup-export.json`. */
@@ -34,6 +39,7 @@ function downloadJson(exportDocument: ExportDocument): void {
   URL.revokeObjectURL(url);
 }
 
+/** The Export tab. Warns first if ACs are unapproved or have no approved test cases. */
 export function ExportPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { confirm, dialog } = useConfirm();
@@ -43,19 +49,19 @@ export function ExportPage() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    let isCancelled = false;
     setSummary(null);
     setLoadError(null);
     exportApi
       .get(sessionId!)
       .then((result) => {
-        if (!cancelled) setSummary(result);
+        if (!isCancelled) setSummary(result);
       })
       .catch(() => {
-        if (!cancelled) setLoadError("Couldn't load what's ready to export. Please try again.");
+        if (!isCancelled) setLoadError("Couldn't load what's ready to export. Please try again.");
       });
     return () => {
-      cancelled = true;
+      isCancelled = true;
     };
   }, [sessionId]);
 
@@ -63,15 +69,14 @@ export function ExportPage() {
     setExportError(null);
     setIsExporting(true);
     try {
-      // Fetched again so the file reflects the latest approvals, not the
-      // summary loaded when the page opened.
+      // Refetch to include approvals made since the page loaded.
       const { document: exportDocument, warnings } = await exportApi.get(sessionId!);
       setSummary({ document: exportDocument, warnings });
 
       const problems: string[] = [];
       if (warnings.unapproved_ac_count > 0) {
         problems.push(
-          `${criteria(warnings.unapproved_ac_count)} ` +
+          `${formatCriteriaCount(warnings.unapproved_ac_count)} ` +
             `${warnings.unapproved_ac_count === 1 ? "isn't" : "aren't"} approved and won't be exported.`,
         );
       }
@@ -84,7 +89,7 @@ export function ExportPage() {
       }
 
       if (problems.length > 0) {
-        const confirmed = await confirm({
+        const isConfirmed = await confirm({
           title: "Export anyway?",
           message: (
             <ul className="list-disc space-y-1 pl-5">
@@ -95,7 +100,7 @@ export function ExportPage() {
           ),
           confirmLabel: "Export anyway",
         });
-        if (!confirmed) return;
+        if (!isConfirmed) return;
       }
 
       downloadJson(exportDocument);
@@ -121,13 +126,13 @@ export function ExportPage() {
       {dialog}
       <h2 className="text-xl font-semibold text-gray-900">Export</h2>
       <p className="max-w-md text-sm text-gray-600">
-        Downloads a JSON file of the approved acceptance criteria, each with its approved test
-        cases nested under it.
+        Downloads a JSON file of the approved acceptance criteria, each with its approved test cases
+        nested under it.
       </p>
       <p className="text-sm font-medium text-gray-700">
-        {criteria(approvedAcCount, "approved ")}
+        {formatCriteriaCount(approvedAcCount, "approved ")}
         {" · "}
-        {plural(countUatCases(summary.document), "approved test case")}
+        {formatCount(countUatCases(summary.document), "approved test case")}
       </p>
       <button
         type="button"

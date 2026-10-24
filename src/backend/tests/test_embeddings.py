@@ -11,20 +11,18 @@ from app.vector_store.vector_store import VectorStore
 
 
 @pytest.fixture(scope="module")
-def provider() -> EmbeddingProvider:
+def embedding_provider() -> EmbeddingProvider:
     """Build the configured embedding provider, loading its model."""
     return build_embedding_provider(settings)
 
 
 def test_create_document_and_embed_chunk(
-        engine: Engine, provider: EmbeddingProvider
+    engine: Engine, embedding_provider: EmbeddingProvider
 ) -> None:
     with Session(engine) as session:
-        store = VectorStore(session)
+        vector_store = VectorStore(session)
 
-        document = store.create_document(
-            source_type="user_story", title="Login"
-        )
+        document = vector_store.create_document(source_type="user_story", title="Login")
         assert document.id is not None
         chunk = None
 
@@ -34,21 +32,20 @@ def test_create_document_and_embed_chunk(
                 "can access my dashboard."
             )
 
-            [embedding] = provider.embed_texts([content])
+            [embedding] = embedding_provider.embed_texts([content])
 
-            chunk = store.add_chunk(DocumentChunk(
-                document_id=document.id,
-                content=content,
-                embedding=embedding))
+            chunk = vector_store.add_chunk(
+                DocumentChunk(
+                    document_id=document.id, content=content, embedding=embedding
+                )
+            )
 
             assert chunk.id is not None
             assert chunk.document_id == document.id
-            assert len(chunk.embedding) == provider.dimension
+            assert len(chunk.embedding) == embedding_provider.dimension
 
-            found = store.similarity_search(
-                provider.embed_query("logging in"),
-                k=1
-            )
+            query_embedding = embedding_provider.embed_query("logging in")
+            found = vector_store.similarity_search(query_embedding, top_k=1)
 
             assert found
             assert found[0].id == chunk.id
@@ -62,46 +59,47 @@ def test_create_document_and_embed_chunk(
 
 
 def test_delete_document_removes_its_chunks_but_keeps_shared_tags(
-        engine: Engine, provider: EmbeddingProvider,
+    engine: Engine,
+    embedding_provider: EmbeddingProvider,
 ) -> None:
     with Session(engine) as session:
-        store = VectorStore(session)
+        vector_store = VectorStore(session)
 
-        document = store.create_document(
+        document = vector_store.create_document(
             source_type="upload", title="Abandoned upload", tags=["scratch"]
         )
         assert document.id is not None
         document_id = document.id
 
         try:
-            [embedding] = provider.embed_texts(["A discarded screenshot."])
-            store.add_chunk(DocumentChunk(
-                document_id=document_id,
-                content="A discarded screenshot.",
-                embedding=embedding,
-            ))
+            [embedding] = embedding_provider.embed_texts(["A discarded screenshot."])
+            vector_store.add_chunk(
+                DocumentChunk(
+                    document_id=document_id,
+                    content="A discarded screenshot.",
+                    embedding=embedding,
+                )
+            )
 
-            assert store.delete_document(document_id) is True
+            assert vector_store.delete_document(document_id) is True
 
             assert session.get(Document, document_id) is None
             remaining = session.exec(
-                select(DocumentChunk).where(
-                    DocumentChunk.document_id == document_id
-                )
+                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
             ).all()
             assert remaining == []
 
             # Tags outlive the documents that referenced them.
-            assert session.exec(
-                select(Tag).where(Tag.name == "scratch")
-            ).first() is not None
+            assert (
+                session.exec(select(Tag).where(Tag.name == "scratch")).first()
+                is not None
+            )
 
             # Deleting again is a miss, not an error.
-            assert store.delete_document(document_id) is False
+            assert vector_store.delete_document(document_id) is False
 
         finally:
-            tag = session.exec(select(Tag).where(
-                Tag.name == "scratch")).first()
+            tag = session.exec(select(Tag).where(Tag.name == "scratch")).first()
             if tag is not None:
                 session.delete(tag)
                 session.commit()

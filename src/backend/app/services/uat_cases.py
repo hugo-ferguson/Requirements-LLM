@@ -5,19 +5,18 @@ from collections.abc import Awaitable, Callable
 
 from pydantic_ai import Agent
 
-from app.config import Settings, settings as default_settings
-from app.llm_config import get_models_config
-# Tests import `GeneratedUatCase` from this module, not from
-# app.generation.models.
-from app.generation.models import GeneratedUatCase, UatAgentResult, UatCandidateGroup
-from app.generation.orchestrator import run_uat_ensemble
-from app.models_acceptance_criteria import AcceptanceCriterionRecord
-from app.models_conversation import (
-    AcceptanceCriterion,
-    AcceptanceCriterionScores,
-    ConversationMessage,
-    ConversationRequest,
+from app.config import Settings
+from app.config import settings as default_settings
+from app.generation.models import (
+    GeneratedUatCase,
+    UatAgentResult,
+    UatCandidate,
+    UatCandidateGroup,
 )
+from app.generation.orchestrator import run_uat_ensemble
+from app.llm_config import get_models_config
+from app.models_acceptance_criteria import AcceptanceCriterionRecord
+from app.models_conversation import ConversationMessage, ConversationRequest
 from app.models_uat_cases import (
     UatApplyApprovedRequest,
     UatCase,
@@ -35,14 +34,20 @@ from app.models_uat_cases import (
 from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
+from app.services.acceptance_criteria import to_acceptance_criterion
 from app.services.agents import GenerationError, build_agent
 from app.services.conversation import render_conversation
-from app.services.scoring import Scorer, render_ac_candidate, render_uat_candidate, score_candidates
+from app.services.scoring import (
+    Scorer,
+    render_ac_candidate,
+    render_uat_candidate,
+    score_candidates,
+)
 
-
-# The shape of `run_uat_ensemble`, so tests can inject a fake roster.
-UatEnsemble = Callable[...,
-                       Awaitable[tuple[list[UatAgentResult], list[UatCandidateGroup]]]]
+# Signature of `run_uat_ensemble`, so tests can pass a fake.
+UatEnsemble = Callable[
+    ..., Awaitable[tuple[list[UatAgentResult], list[UatCandidateGroup]]]
+]
 
 
 UAT_REGENERATION_SYSTEM_PROMPT = """\
@@ -58,31 +63,12 @@ recent and more specific instruction.
 """
 
 
-def _to_acceptance_criterion(record: AcceptanceCriterionRecord) -> AcceptanceCriterion:
-    # The parent AC as a group header, without its alternatives.
-    return AcceptanceCriterion(
-        id=record.id,  # type: ignore[arg-type]
-        title=record.title,
-        given=record.given,
-        when=record.when,
-        then=record.then,
-        scores=AcceptanceCriterionScores(
-            relevance=record.relevance,
-            correctness=record.correctness,
-            understandability=record.understandability,
-            coverage=record.coverage,
-        ),
-        overall_score=record.overall_score,
-        status=record.status,  # type: ignore[arg-type]
-    )
-
-
 def _to_uat_case(
     record: UatCaseRecord, candidates: list[UatCaseCandidateRecord] | None = None
 ) -> UatCase:
     """Build one case's wire model, with its alternatives attached."""
     candidates = candidates or []
-    winner = next((c for c in candidates if c.is_winner), None)
+    winner = next((candidate for candidate in candidates if candidate.is_winner), None)
     return UatCase(
         id=record.id,  # type: ignore[arg-type]
         ac_id=record.ac_id,
@@ -99,28 +85,39 @@ def _to_uat_case(
         source_agent=winner.source_agent if winner else None,
         alternatives=[
             UatCaseAlternative(
-                candidate_id=c.id,
-                description=c.description,
+                candidate_id=candidate.id,
+                description=candidate.description,
                 scores=UatCaseScores(
-                    relevance=c.relevance,
-                    correctness=c.correctness,
-                    understandability=c.understandability,
-                    coverage=c.coverage,
+                    relevance=candidate.relevance,
+                    correctness=candidate.correctness,
+                    understandability=candidate.understandability,
+                    coverage=candidate.coverage,
                 ),
-                overall_score=c.overall_score,
-                source_agent=c.source_agent,
+                overall_score=candidate.overall_score,
+                source_agent=candidate.source_agent,
             )
-            for c in candidates
-            if not c.is_winner
+            for candidate in candidates
+            if not candidate.is_winner
         ],
     )
 
 
+def _scores_of(candidate: UatCandidate) -> UatCaseScores:
+    """Return a ranked candidate's rubric scores in wire form."""
+    return UatCaseScores(
+        relevance=candidate.relevance,
+        correctness=candidate.correctness,
+        understandability=candidate.understandability,
+        coverage=candidate.coverage,
+    )
+
+
 def _build_regeneration_prompt(
-    ac: AcceptanceCriterionRecord, target: UatCaseRecord, data: UatRegenerateSelectedRequest
+    ac: AcceptanceCriterionRecord,
+    target: UatCaseRecord,
+    data: UatRegenerateSelectedRequest,
 ) -> str:
-    # Show the model the parent AC and the case as it stands, then the
-    # reviewer's feedback, or a nudge to tighten it when there is none.
+    """Build the prompt from the parent AC, the case and any reviewer feedback."""
     parts = [
         "Parent acceptance criterion:",
         render_ac_candidate(ac.title, ac.given, ac.when, ac.then),
@@ -137,58 +134,51 @@ def _build_regeneration_prompt(
     else:
         parts += [
             "",
-            "No additional reviewer context was given; sharpen it for clarity and rigor.",
+            "No additional reviewer context was given; sharpen it for clarity and "
+            "rigor.",
         ]
     return "\n".join(parts)
 
 
 class UatCaseService:
-    """Business logic for reviewing and regenerating UAT test cases.
+    """Generate, review and regenerate a session's UAT test cases.
 
-    UAT cases are derived from persisted, already-accepted AC rows, not
-    from chat content. `generate` runs the same agent roster as AC
-    generation (see `run_uat_ensemble`), so each case has one version
-    per model, the best shown and the rest swappable in.
-    `regenerate_selected` stays single-model, like its AC counterpart.
-    Everything is scored via the voting layer.
+    Cases are written from accepted ACs, by the same agents as AC generation.
     """
 
     def __init__(
         self,
         session_repository: SessionRepository,
-        uat_repository: UatCaseRepository,
+        uat_case_repository: UatCaseRepository,
         ac_repository: AcceptanceCriteriaRepository,
         settings: Settings | None = None,
-        regen_agent: Agent[None, GeneratedUatCase] | None = None,
+        regeneration_agent: Agent[None, GeneratedUatCase] | None = None,
         scorer: Scorer = score_candidates,
         uat_ensemble: UatEnsemble = run_uat_ensemble,
     ):
-        """Wire up storage; the remaining arguments are for tests."""
-        self.sessions = session_repository
-        self.uat = uat_repository
-        self.ac = ac_repository
+        """Store the dependencies. Tests can swap the agent, scorer and ensemble."""
+        self.session_repository = session_repository
+        self.uat_case_repository = uat_case_repository
+        self.ac_repository = ac_repository
         self.settings = settings or default_settings
-        # Built on first use so that a missing API key breaks
-        # regeneration rather than every request that happens to
-        # construct this service.
-        self._regen_agent = regen_agent
+        # Built on first use, so a missing API key only breaks regeneration.
+        self._regeneration_agent = regeneration_agent
         self.scorer = scorer
         self.uat_ensemble = uat_ensemble
 
     @property
-    def regen_agent(self) -> Agent[None, GeneratedUatCase]:
-        """Return the regeneration agent, building it on first use."""
-        if self._regen_agent is None:
-            self._regen_agent = build_agent(
-                self.settings, GeneratedUatCase, UAT_REGENERATION_SYSTEM_PROMPT
+    def regeneration_agent(self) -> Agent[None, GeneratedUatCase]:
+        """The regeneration agent, built on first use."""
+        if self._regeneration_agent is None:
+            self._regeneration_agent = build_agent(
+                GeneratedUatCase, UAT_REGENERATION_SYSTEM_PROMPT
             )
-        return self._regen_agent
+        return self._regeneration_agent
 
-    async def _cases_for(self, ac: AcceptanceCriterionRecord) -> list[UatCase]:
-        """Return all agents' scored cases for one AC, best first.
+    async def _generate_cases(self, ac: AcceptanceCriterionRecord) -> list[UatCase]:
+        """Run the ensemble for one AC and return its scored cases.
 
-        Raise `GenerationError` only when every agent failed for this
-        AC.
+        Raise `GenerationError` if no agent returned any cases.
         """
         prompt = render_ac_candidate(ac.title, ac.given, ac.when, ac.then)
         results, groups = await self.uat_ensemble(
@@ -196,19 +186,25 @@ class UatCaseService:
         )
         if not groups:
             reasons = "; ".join(
-                f"{r.agent_id}: {r.error or 'no cases'}" for r in results)
+                f"{result.agent_id}: {result.error or 'no cases'}" for result in results
+            )
             raise GenerationError(
-                f"Every generation agent failed to write UAT cases for '{ac.title}'. {reasons}"
+                "Every generation agent failed to write UAT cases for "
+                f"'{ac.title}'. {reasons}"
             )
 
-        flat = [(group, candidate)
-                for group in groups for candidate in group.candidates]
-        texts = [render_uat_candidate(
-            c.case.title, c.case.description) for _, c in flat]
+        candidates = [candidate for group in groups for candidate in group.candidates]
+        candidate_texts = [
+            render_uat_candidate(candidate.case.title, candidate.case.description)
+            for candidate in candidates
+        ]
         scores = await asyncio.to_thread(
-            self.scorer, prompt=prompt, candidates=texts, settings=self.settings
+            self.scorer,
+            prompt=prompt,
+            candidates=candidate_texts,
+            settings=self.settings,
         )
-        for (_, candidate), score in zip(flat, scores, strict=True):
+        for candidate, score in zip(candidates, scores, strict=True):
             candidate.relevance = score.relevance
             candidate.correctness = score.correctness
             candidate.understandability = score.understandability
@@ -222,6 +218,7 @@ class UatCaseService:
             winner = group.winner
             cases.append(
                 UatCase(
+                    # Placeholder ID until the database assigns one.
                     id=-(index + 1),
                     ac_id=ac.id,  # type: ignore[arg-type]
                     title=group.title,
@@ -232,12 +229,12 @@ class UatCaseService:
                     source_agent=winner.agent_id,
                     alternatives=[
                         UatCaseAlternative(
-                            description=alt.case.description,
-                            scores=_scores_of(alt),
-                            overall_score=alt.overall_score,
-                            source_agent=alt.agent_id,
+                            description=alternative.case.description,
+                            scores=_scores_of(alternative),
+                            overall_score=alternative.overall_score,
+                            source_agent=alternative.agent_id,
                         )
-                        for alt in group.alternatives
+                        for alternative in group.alternatives
                     ],
                 )
             )
@@ -246,99 +243,115 @@ class UatCaseService:
     def _build_group(
         self,
         ac_record: AcceptanceCriterionRecord,
-        candidates: dict[tuple[int, int],
-                         list[UatCaseCandidateRecord]] | None = None,
+        candidates: dict[tuple[int, int], list[UatCaseCandidateRecord]] | None = None,
     ) -> UatCaseGroup:
-        # One AC and its cases. Pass `candidates` to reuse one query
-        # across several groups.
+        """Return one AC and its cases.
+
+        The AC is just a header, without alternatives or UAT case count.
+        Pass `candidates` to reuse one query across groups.
+        """
         if candidates is None:
-            candidates = self.uat.candidates_by_case(ac_record.session_id)
-        cases = self.uat.list_for_ac(ac_record.id)  # type: ignore[arg-type]
+            candidates = self.uat_case_repository.candidates_by_case(
+                ac_record.session_id
+            )
+        records = self.uat_case_repository.list_for_ac(ac_record.id)  # type: ignore[arg-type]
         return UatCaseGroup(
-            ac=_to_acceptance_criterion(ac_record),
-            uat_cases=[_to_uat_case(c, candidates.get(
-                (c.ac_id, c.position))) for c in cases],
+            ac=to_acceptance_criterion(ac_record),
+            uat_cases=[
+                _to_uat_case(record, candidates.get((record.ac_id, record.position)))
+                for record in records
+            ],
         )
 
     def _with_alternatives(self, record: UatCaseRecord) -> UatCase:
-        # Re-read the case's candidates so the response is complete.
-        candidates = self.uat.candidates_by_case(record.session_id)
+        """Return one case's wire model with its alternatives."""
+        candidates = self.uat_case_repository.candidates_by_case(record.session_id)
         return _to_uat_case(record, candidates.get((record.ac_id, record.position)))
 
-    def list_items(self, session_id: int) -> UatCaseGroupsResult | None:
-        """Return a session's cases by AC; None if it's missing."""
-        if self.sessions.get(session_id) is None:
+    def list_for_session(self, session_id: int) -> UatCaseGroupsResult | None:
+        """Return a session's cases grouped by AC, or None if the session is missing.
+
+        Only ACs with cases get a group, in display order.
+        """
+        if self.session_repository.get(session_id) is None:
             return None
 
-        all_cases = self.uat.list_for_session(session_id)
-        ac_ids = {c.ac_id for c in all_cases}
-        ac_records = [self.ac.get(session_id, ac_id) for ac_id in ac_ids]
-        present_records = [r for r in ac_records if r is not None]
-        present_records.sort(key=lambda r: r.position)
-        candidates = self.uat.candidates_by_case(session_id)
-        groups = [self._build_group(r, candidates) for r in present_records]
+        all_cases = self.uat_case_repository.list_for_session(session_id)
+        ac_ids = {case.ac_id for case in all_cases}
+        ac_records = [self.ac_repository.get(session_id, ac_id) for ac_id in ac_ids]
+        present_records = [record for record in ac_records if record is not None]
+        present_records.sort(key=lambda record: record.position)
+        candidates = self.uat_case_repository.candidates_by_case(session_id)
+        groups = [self._build_group(record, candidates) for record in present_records]
         return UatCaseGroupsResult(groups=groups)
 
     async def generate(self, session_id: int) -> UatCaseGroupsResult | None:
         """Generate cases for every accepted AC, replacing old ones.
 
-        Return None when the session doesn't exist. Raise
-        `GenerationError` when every agent failed for any one AC.
+        Return None if the session is missing. Raise `GenerationError` if any AC
+        gets no cases, before anything is stored.
         """
-        if self.sessions.get(session_id) is None:
+        if self.session_repository.get(session_id) is None:
             return None
 
-        accepted = [r for r in self.ac.list_for_session(
-            session_id) if r.status == "accepted"]
-        # Every AC at once: each runs its own ensemble, so total time
-        # tracks the slowest AC rather than the sum. Still
-        # all-or-nothing — a GenerationError for any one AC aborts
-        # before persist_generated runs, mirroring AC generation's
-        # replace-the-whole-batch semantics.
-        cases = await asyncio.gather(*(self._cases_for(ac) for ac in accepted))
-        self.uat.persist_generated(
-            session_id, {ac.id: ac_cases for ac,  # type: ignore[arg-type]
-                         ac_cases in zip(accepted, cases, strict=True)}
+        accepted = [
+            record
+            for record in self.ac_repository.list_for_session(session_id)
+            if record.status == "accepted"
+        ]
+        # Run every AC's ensemble at once. Any failure stops before storing.
+        cases_per_ac = await asyncio.gather(
+            *(self._generate_cases(ac) for ac in accepted)
         )
-        return self.list_items(session_id)
+        self.uat_case_repository.persist_batch(
+            session_id,
+            {
+                ac.id: cases
+                for ac, cases in zip(accepted, cases_per_ac, strict=True)  # type: ignore[arg-type]
+            },
+        )
+        return self.list_for_session(session_id)
 
     def select_alternative(
         self, session_id: int, uat_id: int, candidate_id: int
     ) -> UatCase | None:
-        """Show another model's version of a test case in its place.
+        """Swap another model's version in as the displayed one.
 
-        Return None when the case or candidate doesn't exist, or the
-        candidate belongs to a different case — the route maps all of
-        those to 404.
+        Return None if the case or candidate is missing, or they don't match.
         """
-        record = self.uat.get(session_id, uat_id)
-        candidate = self.uat.get_candidate(session_id, candidate_id)
+        record = self.uat_case_repository.get(session_id, uat_id)
+        candidate = self.uat_case_repository.get_candidate(session_id, candidate_id)
         if record is None or candidate is None:
             return None
-        if (candidate.ac_id, candidate.case_position) != (record.ac_id, record.position):
+        if (candidate.ac_id, candidate.case_position) != (
+            record.ac_id,
+            record.position,
+        ):
             return None
         if not candidate.is_winner:
-            record = self.uat.swap_in_candidate(record, candidate)
+            record = self.uat_case_repository.swap_in_candidate(record, candidate)
         return self._with_alternatives(record)
 
     def update_text(
         self, session_id: int, uat_id: int, data: UatCaseTextUpdate
     ) -> UatCase | None:
-        """Save a reviewer's edit; None if the case is missing."""
-        record = self.uat.get(session_id, uat_id)
+        """Save a reviewer's edit; return None if the case is missing."""
+        record = self.uat_case_repository.get(session_id, uat_id)
         if record is None:
             return None
-        updated = self.uat.update_text(record, data.title, data.description)
+        updated = self.uat_case_repository.update_text(
+            record, data.title, data.description
+        )
         return self._with_alternatives(updated)
 
     def update_status(
         self, session_id: int, uat_id: int, data: UatCaseStatusUpdate
     ) -> UatCase | None:
-        """Set a case's status; None if the case is missing."""
-        record = self.uat.get(session_id, uat_id)
+        """Set a case's status; return None if the case is missing."""
+        record = self.uat_case_repository.get(session_id, uat_id)
         if record is None:
             return None
-        updated = self.uat.update_status(record, data.status)
+        updated = self.uat_case_repository.update_status(record, data.status)
         return self._with_alternatives(updated)
 
     def regenerate_selected(
@@ -346,32 +359,34 @@ class UatCaseService:
     ) -> UatRegenerateSelectedResponse | None:
         """Propose one refined version of a case, scored but not saved.
 
-        Return None when the case doesn't exist. Raise `GenerationError`
-        when its parent AC is missing or the model can't be reached.
+        Return None if the case is missing. Raise `GenerationError` if its AC is
+        missing or the model fails.
         """
-        target = self.uat.get(session_id, uat_id)
+        target = self.uat_case_repository.get(session_id, uat_id)
         if target is None:
             return None
-        ac = self.ac.get(session_id, target.ac_id)
+        ac = self.ac_repository.get(session_id, target.ac_id)
         if ac is None:
             raise GenerationError(
-                f"UAT case '{target.title}' has no parent acceptance criterion.")
+                f"UAT case '{target.title}' has no parent acceptance criterion."
+            )
 
         prompt = _build_regeneration_prompt(ac, target, data)
         try:
-            result = self.regen_agent.run_sync(prompt)
+            result = self.regeneration_agent.run_sync(prompt)
         except Exception as error:
             raise GenerationError(
-                f"{get_models_config().chat_model.name} could not regenerate '{target.title}': {error}"
+                f"{get_models_config().chat_model.name} could not regenerate "
+                f"'{target.title}': {error}"
             ) from error
 
         case = result.output
         candidate_text = render_uat_candidate(case.title, case.description)
-        [score] = self.scorer(prompt=prompt, candidates=[
-                              candidate_text], settings=self.settings)
+        [score] = self.scorer(
+            prompt=prompt, candidates=[candidate_text], settings=self.settings
+        )
 
-        # The id is a throwaway placeholder: nothing is persisted until
-        # the caller approves the candidate through `apply_approved`.
+        # Placeholder ID, as nothing is stored until `apply_approved`.
         refined = UatCase(
             id=-1,
             ac_id=target.ac_id,
@@ -388,7 +403,10 @@ class UatCaseService:
         )
         reply = ConversationMessage(
             role="assistant",
-            text=f"Regenerated '{target.title}' using the additional context you provided.",
+            text=(
+                f"Regenerated '{target.title}' using the additional context you "
+                "provided."
+            ),
         )
         return UatRegenerateSelectedResponse(reply=reply, candidates=[refined])
 
@@ -397,35 +415,23 @@ class UatCaseService:
     ) -> UatCaseGroup | None:
         """Replace one case with the approved candidates, in its place.
 
-        Return the parent AC's updated group, or None when the session
-        or case doesn't exist. Raise `ValueError` when no candidates
-        were approved.
+        Return the parent AC's updated group, or None if the session, case or AC
+        is missing. Raise `ValueError` if no candidates were approved.
         """
-        if self.sessions.get(session_id) is None:
+        if self.session_repository.get(session_id) is None:
             return None
-        target = self.uat.get(session_id, uat_id)
+        target = self.uat_case_repository.get(session_id, uat_id)
         if target is None:
             return None
         if not data.candidates:
             raise ValueError(
-                "Must approve at least one candidate; use Cancel to discard instead.")
+                "Must approve at least one candidate; use Cancel to discard instead."
+            )
 
-        # Capture ac_id before replace_one deletes+commits the target
-        # row — afterwards the `target` ORM object is expired and
-        # re-reading an attribute off it would raise ObjectDeletedError.
+        # Read now, as the row is deleted by replace_one (ObjectDeletedError).
         ac_id = target.ac_id
-        self.uat.replace_one(session_id, ac_id, uat_id, data.candidates)
-        ac_record = self.ac.get(session_id, ac_id)
+        self.uat_case_repository.replace_one(session_id, ac_id, uat_id, data.candidates)
+        ac_record = self.ac_repository.get(session_id, ac_id)
         if ac_record is None:
             return None
         return self._build_group(ac_record)
-
-
-def _scores_of(candidate) -> UatCaseScores:
-    # A ranked candidate's rubric scores in wire form.
-    return UatCaseScores(
-        relevance=candidate.relevance,
-        correctness=candidate.correctness,
-        understandability=candidate.understandability,
-        coverage=candidate.coverage,
-    )
