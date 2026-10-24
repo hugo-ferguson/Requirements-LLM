@@ -4,18 +4,465 @@
  */
 
 export interface paths {
-    "/items": {
+    "/sessions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Items */
-        get: operations["list_items_items_get"];
+        /**
+         * List Sessions
+         * @description Return every session, most recently updated first.
+         */
+        get: operations["list_sessions_sessions_get"];
         put?: never;
-        /** Create Item */
-        post: operations["create_item_items_post"];
+        /**
+         * Create Session
+         * @description Create an empty chat session.
+         */
+        post: operations["create_session_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Detail
+         * @description Return a session together with its message history.
+         */
+        get: operations["get_session_detail_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Session
+         * @description Delete a session with its messages, ACs and test cases.
+         */
+        delete: operations["delete_session_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename Session
+         * @description Rename a session.
+         */
+        patch: operations["rename_session_sessions__session_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Message
+         * @description Store the user's message and return the assistant's reply.
+         */
+        post: operations["post_message_sessions__session_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate
+         * @description Generate and store ranked ACs from the conversation so far.
+         *
+         *     Replaces the session's existing ACs and deletes their UAT cases.
+         */
+        post: operations["generate_sessions__session_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Acceptance Criteria
+         * @description Return the session's acceptance criteria in display order.
+         */
+        get: operations["list_acceptance_criteria_sessions__session_id__acceptance_criteria_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Acceptance Criterion Text
+         * @description Save a reviewer's edit to an AC's text.
+         */
+        patch: operations["update_acceptance_criterion_text_sessions__session_id__acceptance_criteria__ac_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Acceptance Criterion Status
+         * @description Set an AC's review status.
+         */
+        patch: operations["update_acceptance_criterion_status_sessions__session_id__acceptance_criteria__ac_id__status_patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Selected
+         * @description Propose one refined version of an AC, scored but not saved.
+         */
+        post: operations["regenerate_selected_sessions__session_id__acceptance_criteria__ac_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/apply-approved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Approved
+         * @description Replace an AC with the approved candidates and return the new list.
+         *
+         *     UAT cases generated from the replaced AC are deleted.
+         */
+        post: operations["apply_approved_sessions__session_id__acceptance_criteria__ac_id__apply_approved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/{ac_id}/alternatives/{candidate_id}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Select Alternative
+         * @description Show another model's version of an AC in its place.
+         */
+        post: operations["select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/acceptance-criteria/regenerate-all-kickoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate All Kickoff
+         * @description Post the assistant message that starts a full regeneration.
+         *
+         *     The message names any rejected ACs and asks the reviewer for more context.
+         */
+        post: operations["regenerate_all_kickoff_sessions__session_id__acceptance_criteria_regenerate_all_kickoff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Uat Cases
+         * @description Return the session's test cases, grouped by AC.
+         */
+        get: operations["list_uat_cases_sessions__session_id__uat_cases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Uat Cases
+         * @description Generate test cases for each accepted AC, replacing the old ones.
+         */
+        post: operations["generate_uat_cases_sessions__session_id__uat_cases_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Uat Case Text
+         * @description Save a reviewer's edit to a test case's text.
+         */
+        patch: operations["update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Uat Case Status
+         * @description Set a test case's review status.
+         */
+        patch: operations["update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch"];
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Selected
+         * @description Propose one refined version of a test case, scored but not saved.
+         */
+        post: operations["regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/apply-approved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply Approved
+         * @description Replace a test case with the approved candidates.
+         *
+         *     Returns the parent AC's updated group.
+         */
+        post: operations["apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/uat-cases/{uat_id}/alternatives/{candidate_id}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Select Uat Alternative
+         * @description Show another model's version of a test case in its place.
+         */
+        post: operations["select_uat_alternative_sessions__session_id__uat_cases__uat_id__alternatives__candidate_id__select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Document
+         * @description Extract a file's text and, unless it's an image, index it for search.
+         *
+         *     Images aren't stored, so `document_id` is null. Responds 413 if too large,
+         *     422 if unsupported or empty, and 502 if the vision model fails.
+         */
+        post: operations["upload_document_documents_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Document
+         * @description Delete a stored document and its chunks, or respond 404 if it's gone.
+         */
+        delete: operations["delete_document_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Documents
+         * @description Return the `k` stored chunks most similar to the query `q`.
+         */
+        get: operations["search_documents_documents_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Export
+         * @description Return the session's accepted ACs and UAT cases as a JSON document.
+         *
+         *     `warnings` lists what's left out, so the user can confirm first.
+         */
+        get: operations["get_export_sessions__session_id__export_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -29,7 +476,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Report that the API process is up.
+         */
         get: operations["health_health_get"];
         put?: never;
         post?: never;
@@ -43,27 +493,510 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AcceptanceCriterion
+         * @description An acceptance criterion as the frontend sees it.
+         */
+        AcceptanceCriterion: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+            /** Source Agent */
+            source_agent?: string | null;
+            /** Alternatives */
+            alternatives?: components["schemas"]["AcceptanceCriterionAlternative"][];
+            /**
+             * Uat Case Count
+             * @description Number of UAT cases generated from this AC, any status. Used to warn before an edit or regeneration affects them.
+             * @default 0
+             */
+            uat_case_count: number;
+        };
+        /**
+         * AcceptanceCriterionAlternative
+         * @description Another model's version of the same criterion.
+         *
+         *     `candidate_id` is set once stored, so the reviewer can swap it in.
+         */
+        AcceptanceCriterionAlternative: {
+            /** Candidate Id */
+            candidate_id?: number | null;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
+        };
+        /**
+         * AcceptanceCriterionScores
+         * @description The voting layer's four rubric scores, each from 0 to 5.
+         */
+        AcceptanceCriterionScores: {
+            /** Relevance */
+            relevance: number;
+            /** Correctness */
+            correctness: number;
+            /** Understandability */
+            understandability: number;
+            /** Coverage */
+            coverage: number;
+        };
+        /**
+         * AcceptanceCriterionStatusUpdate
+         * @description Request body for accepting, rejecting or resetting an AC.
+         */
+        AcceptanceCriterionStatusUpdate: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /**
+         * AcceptanceCriterionTextUpdate
+         * @description Request body for a reviewer's manual edit of an AC.
+         */
+        AcceptanceCriterionTextUpdate: {
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+        };
+        /**
+         * ApplyApprovedRequest
+         * @description The candidates a reviewer approved to replace an AC.
+         */
+        ApplyApprovedRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["AcceptanceCriterion"][];
+        };
+        /** Body_upload_document_documents_upload_post */
+        Body_upload_document_documents_upload_post: {
+            /** File */
+            file: string;
+            /** Title */
+            title?: string | null;
+            /**
+             * Tags
+             * @description Comma-separated tag names
+             */
+            tags?: string | null;
+        };
+        /**
+         * ChunkRead
+         * @description One stored chunk of a document, as returned by search.
+         */
+        ChunkRead: {
+            /** Id */
+            id: number;
+            /** Document Id */
+            document_id: number;
+            /** Chunk Index */
+            chunk_index: number | null;
+            /** Content */
+            content: string;
+        };
+        /**
+         * ConversationAttachment
+         * @description A file's extracted text, sent along with a chat message.
+         */
+        ConversationAttachment: {
+            /** Filename */
+            filename: string;
+            /** Content */
+            content: string;
+            /**
+             * Document Id
+             * @description ID of the ingested document, if uploaded via /documents/upload.
+             */
+            document_id?: number | null;
+        };
+        /**
+         * ConversationMessage
+         * @description One chat turn, from either the user or the assistant.
+         */
+        ConversationMessage: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments?: components["schemas"]["ConversationAttachment"][];
+        };
+        /**
+         * ExportAcceptanceCriterion
+         * @description An approved AC, with only its approved UAT cases nested under it.
+         */
+        ExportAcceptanceCriterion: {
+            /** Title */
+            title: string;
+            /** Given */
+            given: string;
+            /** When */
+            when: string;
+            /** Then */
+            then: string;
+            scores: components["schemas"]["AcceptanceCriterionScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
+            /** Uat Cases */
+            uat_cases: components["schemas"]["ExportUatCase"][];
+        };
+        /**
+         * ExportDocument
+         * @description The contents of the downloaded JSON file.
+         */
+        ExportDocument: {
+            /** Session Name */
+            session_name: string;
+            /**
+             * Exported At
+             * Format: date-time
+             */
+            exported_at: string;
+            /** Acceptance Criteria */
+            acceptance_criteria: components["schemas"]["ExportAcceptanceCriterion"][];
+        };
+        /**
+         * ExportResponse
+         * @description The export document and the warnings about what it leaves out.
+         */
+        ExportResponse: {
+            document: components["schemas"]["ExportDocument"];
+            warnings: components["schemas"]["ExportWarnings"];
+        };
+        /**
+         * ExportUatCase
+         * @description An approved UAT case, as it appears in the export.
+         */
+        ExportUatCase: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
+        };
+        /**
+         * ExportWarnings
+         * @description What the export leaves out, shown before downloading.
+         */
+        ExportWarnings: {
+            /**
+             * Unapproved Ac Count
+             * @description Number of pending or rejected ACs, which aren't exported.
+             */
+            unapproved_ac_count: number;
+            /**
+             * Approved Ac Without Uat
+             * @description Titles of approved ACs that have no approved UAT case.
+             */
+            approved_ac_without_uat: string[];
+        };
+        /**
+         * GenerateResult
+         * @description The ranked acceptance criteria for a session.
+         */
+        GenerateResult: {
+            /** Acceptance Criteria */
+            acceptance_criteria: components["schemas"]["AcceptanceCriterion"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** ItemCreate */
-        ItemCreate: {
-            /** Name */
-            name: string;
+        /**
+         * MessageCreate
+         * @description Request body for a new user message.
+         */
+        MessageCreate: {
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments?: components["schemas"]["ConversationAttachment"][];
         };
-        /** ItemRead */
-        ItemRead: {
-            /** Name */
-            name: string;
+        /**
+         * MessageRead
+         * @description A stored message as returned by the API.
+         */
+        MessageRead: {
             /** Id */
             id: number;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Text */
+            text: string;
+            /** Attachments */
+            attachments: components["schemas"]["ConversationAttachment"][];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * RegenerateSelectedRequest
+         * @description The conversation that steers regenerating one AC.
+         */
+        RegenerateSelectedRequest: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /**
+         * RegenerateSelectedResponse
+         * @description The assistant's reply and the unsaved replacement candidates.
+         */
+        RegenerateSelectedResponse: {
+            reply: components["schemas"]["ConversationMessage"];
+            /** Candidates */
+            candidates: components["schemas"]["AcceptanceCriterion"][];
+        };
+        /**
+         * SelectAlternativeResponse
+         * @description The AC after swapping in another model's version.
+         */
+        SelectAlternativeResponse: {
+            acceptance_criterion: components["schemas"]["AcceptanceCriterion"];
+            /**
+             * Uat Cases Affected
+             * @description Number of UAT cases written against the old wording.
+             */
+            uat_cases_affected: number;
+        };
+        /**
+         * SessionCreate
+         * @description Request body for creating a session; the name is optional.
+         */
+        SessionCreate: {
+            /** Name */
+            name?: string | null;
+        };
+        /**
+         * SessionDetail
+         * @description A session together with its full message history.
+         */
+        SessionDetail: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Messages */
+            messages: components["schemas"]["MessageRead"][];
+        };
+        /**
+         * SessionSummary
+         * @description A session without its messages, as listed in the sidebar.
+         */
+        SessionSummary: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * SessionUpdate
+         * @description Request body for renaming a session.
+         */
+        SessionUpdate: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * UatApplyApprovedRequest
+         * @description The candidates a reviewer approved to replace a test case.
+         */
+        UatApplyApprovedRequest: {
+            /** Candidates */
+            candidates: components["schemas"]["UatCase"][];
+        };
+        /**
+         * UatCase
+         * @description A UAT test case as the frontend sees it.
+         */
+        UatCase: {
+            /** Id */
+            id: number;
+            /** Ac Id */
+            ac_id: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+            /** Source Agent */
+            source_agent?: string | null;
+            /** Alternatives */
+            alternatives?: components["schemas"]["UatCaseAlternative"][];
+        };
+        /**
+         * UatCaseAlternative
+         * @description Another model's version of the same test case.
+         *
+         *     `candidate_id` is set once stored, so the reviewer can swap it in.
+         */
+        UatCaseAlternative: {
+            /** Candidate Id */
+            candidate_id?: number | null;
+            /** Description */
+            description: string;
+            scores: components["schemas"]["UatCaseScores"];
+            /** Overall Score */
+            overall_score: number;
+            /** Source Agent */
+            source_agent?: string | null;
+        };
+        /**
+         * UatCaseGroup
+         * @description An AC together with the test cases generated from it.
+         */
+        UatCaseGroup: {
+            ac: components["schemas"]["AcceptanceCriterion"];
+            /** Uat Cases */
+            uat_cases: components["schemas"]["UatCase"][];
+        };
+        /**
+         * UatCaseGroupsResult
+         * @description A session's test cases, grouped by AC.
+         */
+        UatCaseGroupsResult: {
+            /** Groups */
+            groups: components["schemas"]["UatCaseGroup"][];
+        };
+        /**
+         * UatCaseScores
+         * @description The voting layer's four rubric scores, each from 0 to 5.
+         */
+        UatCaseScores: {
+            /** Relevance */
+            relevance: number;
+            /** Correctness */
+            correctness: number;
+            /** Understandability */
+            understandability: number;
+            /** Coverage */
+            coverage: number;
+        };
+        /**
+         * UatCaseStatusUpdate
+         * @description Request body for accepting, rejecting or resetting a test case.
+         */
+        UatCaseStatusUpdate: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /**
+         * UatCaseTextUpdate
+         * @description Request body for a reviewer's manual edit of a test case.
+         */
+        UatCaseTextUpdate: {
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+        };
+        /**
+         * UatRegenerateSelectedRequest
+         * @description The conversation that steers regenerating one test case.
+         */
+        UatRegenerateSelectedRequest: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+        };
+        /**
+         * UatRegenerateSelectedResponse
+         * @description The assistant's reply and the unsaved replacement candidates.
+         */
+        UatRegenerateSelectedResponse: {
+            reply: components["schemas"]["ConversationMessage"];
+            /** Candidates */
+            candidates: components["schemas"]["UatCase"][];
+        };
+        /**
+         * UploadRead
+         * @description An upload's outcome: always text, sometimes a stored document.
+         */
+        UploadRead: {
+            /** Document Id */
+            document_id: number | null;
+            /** Title */
+            title: string;
+            /** Filename */
+            filename: string | null;
+            /** Extension */
+            extension: string | null;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Text */
+            text: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -87,7 +1020,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_items_items_get: {
+    list_sessions_sessions_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -102,12 +1035,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ItemRead"][];
+                    "application/json": components["schemas"]["SessionSummary"][];
                 };
             };
         };
     };
-    create_item_items_post: {
+    create_session_sessions_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -116,7 +1049,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ItemCreate"];
+                "application/json": components["schemas"]["SessionCreate"];
             };
         };
         responses: {
@@ -126,7 +1059,771 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ItemRead"];
+                    "application/json": components["schemas"]["SessionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_detail_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_session_sessions__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_message_sessions__session_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_sessions__session_id__generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_acceptance_criteria_sessions__session_id__acceptance_criteria_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_acceptance_criterion_text_sessions__session_id__acceptance_criteria__ac_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptanceCriterionTextUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceCriterion"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_acceptance_criterion_status_sessions__session_id__acceptance_criteria__ac_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptanceCriterionStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptanceCriterion"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_selected_sessions__session_id__acceptance_criteria__ac_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateSelectedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegenerateSelectedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_approved_sessions__session_id__acceptance_criteria__ac_id__apply_approved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyApprovedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_alternative_sessions__session_id__acceptance_criteria__ac_id__alternatives__candidate_id__select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                ac_id: number;
+                candidate_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelectAlternativeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_all_kickoff_sessions__session_id__acceptance_criteria_regenerate_all_kickoff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_uat_cases_sessions__session_id__uat_cases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroupsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_uat_cases_sessions__session_id__uat_cases_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroupsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_uat_case_text_sessions__session_id__uat_cases__uat_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatCaseTextUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_uat_case_status_sessions__session_id__uat_cases__uat_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatCaseStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_selected_sessions__session_id__uat_cases__uat_id__regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatRegenerateSelectedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatRegenerateSelectedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_approved_sessions__session_id__uat_cases__uat_id__apply_approved_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UatApplyApprovedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCaseGroup"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_uat_alternative_sessions__session_id__uat_cases__uat_id__alternatives__candidate_id__select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+                uat_id: number;
+                candidate_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UatCase"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_document_documents_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_document_documents_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_documents_documents_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                k?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_export_sessions__session_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportResponse"];
                 };
             };
             /** @description Validation Error */

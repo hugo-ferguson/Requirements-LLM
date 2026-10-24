@@ -1,3 +1,6 @@
+# Our config.
+src/backend/config/models.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -14,8 +17,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -136,6 +137,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -186,7 +189,7 @@ cython_debug/
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #  and can be added to the global gitignore or merged into this file. However, if you prefer, 
 #  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/
 
 # Ruff stuff:
 .ruff_cache/
@@ -209,6 +212,14 @@ __marimo__/
 # Node / frontend
 node_modules/
 *.tsbuildinfo
+src/frontend/vite.config.js
+src/frontend/vite.config.d.ts
 
 # MacOS
 .DS_Store
+# Local model config (R8): chat, vision, generation and judge models. Names
+# models, base URLs and the env vars holding their API keys, so it is
+# machine-specific. Commit config/models.example.json instead.
+src/backend/config/models.json
+# Superseded by models.json; kept ignored so a stale local copy isn't committed.
+src/backend/config/generation_agents.json

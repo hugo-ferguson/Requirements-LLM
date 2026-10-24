@@ -1,3 +1,5 @@
+"""FastAPI application: middleware, routers and startup checks."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,12 +7,25 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import create_db_and_tables
-from app.routes import items
+from app.llm_config import get_models_config
+from app.routes import (
+    acceptance_criteria,
+    documents,
+    export,
+    sessions,
+    uat_cases,
+)
+from app.vector_store.embeddings import get_embedding_provider
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Validate config, create tables and warm the embedding model."""
+    # Fail at startup if config/models.json is missing or invalid.
+    get_models_config()
     create_db_and_tables()
+    # Load the embedding model now so the first upload isn't slow.
+    get_embedding_provider()
     yield
 
 
@@ -24,9 +39,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(items.router)
+app.include_router(sessions.router)
+app.include_router(acceptance_criteria.router)
+app.include_router(uat_cases.router)
+app.include_router(documents.router)
+app.include_router(export.router)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Report that the API process is up."""
     return {"status": "ok"}

@@ -1,0 +1,147 @@
+"""Prompts for the generation agents."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+SYSTEM_PROMPT = """\
+You are an experienced business analyst writing acceptance criteria for a \
+software feature.
+
+Given a user story and any supporting project context, produce clear, atomic, \
+testable acceptance criteria in Gherkin Given / When / Then form.
+
+Rules:
+- Each criterion covers exactly one distinct, user-observable behaviour.
+- Cover the happy path first, then negative paths, boundaries and error states.
+- Write what the system does, never how it is implemented. No database tables, \
+API endpoints, class names or frameworks.
+- Never use vague wording such as "works correctly", "as expected", or \
+"appropriately".
+- Each of given / when / then is a single sentence fragment written WITHOUT the \
+leading keyword. Write "the user is on the login page", not "Given the user is \
+on the login page".
+- The title is a short imperative label of at most 8 words.
+- Only use facts present in the user story or the supplied project context. If \
+something is genuinely unspecified, choose the most conventional behaviour \
+rather than inventing product-specific detail.
+"""
+
+
+@dataclass
+class GenerationDeps:
+    """Per-run inputs, passed to the agent through `RunContext`."""
+
+    user_story: str
+    context_chunks: list[str] = field(default_factory=list)
+    feedback: str | None = None
+
+    def context_block(self) -> str:
+        """Render the RAG chunks as a system prompt, or say there are none."""
+        if not self.context_chunks:
+            return (
+                "No project context documents were retrieved for this story. "
+                "Base the criteria on the user story alone."
+            )
+
+        numbered = "\n\n".join(
+            f"[Context {index}]\n{chunk.strip()}"
+            for index, chunk in enumerate(self.context_chunks, start=1)
+        )
+        return (
+            "The following excerpts were retrieved from the project's own "
+            "documents. Prefer terminology and behaviour described here over "
+            "generic assumptions.\n\n" + numbered
+        )
+
+    def feedback_block(self) -> str | None:
+        """Render reviewer feedback when regenerating (backlog R20)."""
+        if not self.feedback:
+            return None
+        return (
+            "A reviewer rejected a previous attempt and gave this feedback. "
+            "Address it directly in this generation:\n\n" + self.feedback.strip()
+        )
+
+
+def build_user_prompt(deps: GenerationDeps, max_criteria: int) -> str:
+    """Build the user message for a single-pass run.
+
+    Title-anchored runs also use it as the prompt the judges score against.
+    """
+    return (
+        f"Write up to {max_criteria} acceptance criteria for the following "
+        f"user story.\n\nUser story:\n{deps.user_story.strip()}"
+    )
+
+
+def build_titles_prompt(deps: GenerationDeps, max_criteria: int) -> str:
+    """Build the pass-1 prompt, where one agent writes the titles and its own ACs."""
+    return (
+        f"Write up to {max_criteria} acceptance criteria for the following "
+        f"user story. Each title must name a distinct behaviour — two titles "
+        f"covering the same behaviour is the one thing to avoid here, because "
+        f"these titles are the definitive list every reviewer will work "
+        f"from.\n\nUser story:\n{deps.user_story.strip()}"
+    )
+
+
+def build_descriptions_prompt(deps: GenerationDeps, titles: list[str]) -> str:
+    """Build the pass-2 prompt: given/when/then for each numbered title.
+
+    Agents answer by number, as a reworded title wouldn't match.
+    """
+    numbered = "\n".join(
+        f"{index}. {title}" for index, title in enumerate(titles, start=1)
+    )
+    return (
+        "Below is a fixed, numbered list of acceptance criteria titles for a user "
+        "story. Write your own given / when / then for EVERY title in the list.\n\n"
+        "Rules for this task:\n"
+        "- Return exactly one entry per title, identified by its title_number "
+        "from the list.\n"
+        "- Do not skip, merge or add titles.\n"
+        "- Write the strongest given / when / then you can for the behaviour "
+        "the title names.\n\n"
+        f"Titles:\n{numbered}\n\n"
+        f"User story:\n{deps.user_story.strip()}"
+    )
+
+
+UAT_SYSTEM_PROMPT = """\
+You are a QA engineer writing User Acceptance Test cases for one accepted
+Gherkin acceptance criterion (Given/When/Then).
+
+Each test case needs a short title and a description with concrete steps/data
+a human tester could execute and the expected result. Stay grounded in what
+the criterion actually states — do not invent unrelated functionality.
+"""
+
+
+def build_uat_cases_prompt(acceptance_criterion: str) -> str:
+    """Build the UAT pass-1 prompt, where the anchor writes one AC's cases."""
+    return (
+        "Write 2-4 concrete UAT test cases for the acceptance criterion below. "
+        "Cover the happy path and at least one edge or negative case. Each "
+        "title must name a distinct scenario — these titles are the list every "
+        "other reviewer will work from.\n\n"
+        f"Acceptance criterion:\n{acceptance_criterion.strip()}"
+    )
+
+
+def build_uat_descriptions_prompt(acceptance_criterion: str, titles: list[str]) -> str:
+    """Build the UAT pass-2 prompt: a description per numbered title."""
+    numbered = "\n".join(
+        f"{index}. {title}" for index, title in enumerate(titles, start=1)
+    )
+    return (
+        "Below is a fixed, numbered list of UAT test case titles for an "
+        "acceptance criterion. Write your own description for EVERY title.\n\n"
+        "Rules for this task:\n"
+        "- Return exactly one entry per title, identified by its title_number "
+        "from the list.\n"
+        "- Do not skip, merge or add test cases.\n"
+        "- Give concrete steps/data and the expected result.\n\n"
+        f"Test case titles:\n{numbered}\n\n"
+        f"Acceptance criterion:\n{acceptance_criterion.strip()}"
+    )

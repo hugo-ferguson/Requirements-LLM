@@ -1,0 +1,150 @@
+"""Concurrency limits on the voting layer.
+
+Ollama serves one request at a time, so unlimited requests queued and timed out.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from typing import cast
+
+import pytest
+
+from voting.models import EvaluationInput, JudgeConfig
+from voting.provider import (
+    CombinedJudgeClient,
+    default_timeout,
+    evaluate_with_combined_model,
+    max_parallel_requests,
+)
+
+OLLAMA = JudgeConfig(id="qwen", provider="ollama", model="qwen2.5:7b", max_parallel=1)
+CLOUD = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
+
+
+class _RecordingClient:
+    """Stands in for `CombinedJudgeClient`, tracking overlap."""
+
+    def __init__(self, judge: JudgeConfig, delay: float = 0.02) -> None:
+        self.judge = judge
+        self.provider_name = "Test"
+        self.model = judge.model
+        self.delay = delay
+        self.in_flight = 0
+        self.peak_in_flight = 0
+
+    async def evaluate(self, *, instruction: str, response: str):
+        self.in_flight += 1
+        self.peak_in_flight = max(self.peak_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(self.delay)
+        finally:
+            self.in_flight -= 1
+
+        class _Rubric:
+            score = 4
+            feedback = "fine"
+
+        class _Vote:
+            correctness = coverage = relevance = understandability = _Rubric()
+
+        return _Vote()
+
+
+def _input(candidates: list[str]) -> EvaluationInput:
+    return EvaluationInput(
+        ai="requirements-llm",
+        model="test",
+        prompt="a user story",
+        output=candidates,
+        reference_answer="",
+        judges=[JudgeConfig(id="test", provider="test", model="test")],
+    )
+
+
+def test_a_judge_limited_to_one_request_is_scored_one_at_a_time():
+    client = _RecordingClient(OLLAMA)
+
+    result = asyncio.run(
+        evaluate_with_combined_model(
+            _input(["a", "b", "c", "d", "e"]), cast(CombinedJudgeClient, client)
+        )
+    )
+
+    assert len(result.output) == 5
+    assert client.peak_in_flight == 1, (
+        "concurrent requests to a single-model Ollama queue up, and the "
+        "per-request timeout counts the wait"
+    )
+
+
+def test_cloud_judges_still_run_concurrently():
+    client = _RecordingClient(CLOUD)
+
+    asyncio.run(
+        evaluate_with_combined_model(
+            _input(["a", "b", "c", "d"]), cast(CombinedJudgeClient, client)
+        )
+    )
+
+    assert client.peak_in_flight > 1
+
+
+def test_every_candidate_is_still_scored_when_serialised():
+    client = _RecordingClient(OLLAMA)
+
+    result = asyncio.run(
+        evaluate_with_combined_model(
+            _input(["a", "b", "c"]), cast(CombinedJudgeClient, client)
+        )
+    )
+
+    assert [item.output for item in result.output] == ["a", "b", "c"]
+    assert all(item.overall_score == 4 for item in result.output)
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [("4", 4), ("1", 1), ("0", 1), ("-3", 1), ("not-a-number", 1), ("", 1)],
+)
+def test_parallelism_override_is_read_from_the_environment(monkeypatch, raw, expected):
+    if raw:
+        monkeypatch.setenv("VOTING_MAX_PARALLEL", raw)
+    else:
+        monkeypatch.delenv("VOTING_MAX_PARALLEL", raising=False)
+
+    assert max_parallel_requests(OLLAMA) == expected
+
+
+def test_timeout_is_overridable_for_slow_local_hardware(monkeypatch):
+    monkeypatch.setenv("VOTING_TIMEOUT_SECONDS", "600")
+    assert default_timeout() == 600.0
+
+    monkeypatch.setenv("VOTING_TIMEOUT_SECONDS", "garbage")
+    assert default_timeout() == 120.0
+
+
+def test_one_judge_limit_covers_concurrent_scoring_runs():
+    """UAT generation scores every AC at once, so the limit must span runs."""
+    judge = JudgeConfig(
+        id="claude-limited",
+        provider="anthropic",
+        model="claude-sonnet-5-5",
+        max_parallel=2,
+    )
+    client = _RecordingClient(judge)
+
+    async def three_runs_at_once():
+        await asyncio.gather(
+            *(
+                evaluate_with_combined_model(
+                    _input([f"{run}{letter}" for letter in "abc"]),
+                    cast(CombinedJudgeClient, client),
+                )
+                for run in "xyz"
+            )
+        )
+
+    asyncio.run(three_runs_at_once())
+
+    assert client.peak_in_flight == 2

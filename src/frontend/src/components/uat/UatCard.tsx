@@ -1,0 +1,151 @@
+import { useEffect, useState } from "react";
+import type { UatCase, UatCaseTextUpdate } from "../../api/uatCases";
+import { ScorePill } from "../ac/ScorePill";
+import { OverallScoreBadge } from "../ac/OverallScoreBadge";
+import { AcceptRejectButtons } from "../ac/AcceptRejectButtons";
+import { AlternativeList, AlternativesToggle, useAlternativeSwap } from "../shared/AlternativeList";
+
+interface UatCardProps {
+  uatCase: UatCase;
+  /** Zero-based position in its group, shown as "#UAT 1" and so on. */
+  index: number;
+  isSelected?: boolean;
+  /** Swaps the text for inputs, with Save and Cancel buttons. */
+  isEditing?: boolean;
+  /** Makes the card's body clickable. */
+  onSelect?: () => void;
+  /** Shows the edit (pencil) button. */
+  onEditStart?: () => void;
+  onEditCancel?: () => void;
+  onEditSave?: (fields: UatCaseTextUpdate) => void;
+  onAccept: () => void;
+  onReject: () => void;
+  /** Enables the other-versions dropdown; resolves once the swap is saved. */
+  onSelectAlternative?: (candidateId: number) => Promise<void>;
+}
+
+/** One UAT case with its scores and review buttons, editable in place. */
+export function UatCard({
+  uatCase,
+  index,
+  isSelected = false,
+  isEditing = false,
+  onSelect,
+  onEditStart,
+  onEditCancel,
+  onEditSave,
+  onAccept,
+  onReject,
+  onSelectAlternative,
+}: UatCardProps) {
+  const [draft, setDraft] = useState<UatCaseTextUpdate>(uatCase);
+  const alternatives = uatCase.alternatives ?? [];
+  const alternativeSwap = useAlternativeSwap(onSelectAlternative);
+
+  // Reset the draft on entering edit mode, so cancelled edits don't carry over.
+  useEffect(() => {
+    if (isEditing) {
+      setDraft({ title: uatCase.title, description: uatCase.description });
+    }
+  }, [isEditing, uatCase]);
+
+  const cardClasses = `rounded-xl border bg-white p-4 shadow-sm ${
+    isSelected ? "border-primary ring-2 ring-primary ring-offset-2" : "border-gray-200"
+  }`;
+
+  if (isEditing) {
+    return (
+      <div className={cardClasses}>
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-400">#UAT {index + 1}</span>
+          <input
+            value={draft.title}
+            onChange={(event) =>
+              setDraft((previous) => ({ ...previous, title: event.target.value }))
+            }
+            className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 font-bold text-gray-900 outline-none focus:border-primary"
+          />
+        </div>
+        <textarea
+          value={draft.description}
+          onChange={(event) =>
+            setDraft((previous) => ({ ...previous, description: event.target.value }))
+          }
+          rows={3}
+          className="w-full resize-none rounded-lg border border-gray-200 p-2 text-sm text-gray-900 outline-none focus:border-primary"
+        />
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => onEditSave?.(draft)}
+            className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary-hover"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={onEditCancel}
+            className="rounded-full bg-gray-100 px-5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cardClasses}>
+      <div className="flex items-start gap-4">
+        <div onClick={onSelect} className={`min-w-0 flex-1 ${onSelect ? "cursor-pointer" : ""}`}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-400">#UAT {index + 1}</span>
+            <span className="font-bold text-gray-900">{uatCase.title}</span>
+            {uatCase.source_agent && (
+              <span className="text-xs font-medium text-gray-400">by {uatCase.source_agent}</span>
+            )}
+            {onEditStart && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEditStart();
+                }}
+                aria-label="Edit"
+                className="text-gray-400 hover:text-gray-700"
+              >
+                ✎
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-gray-600">{uatCase.description}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <ScorePill label="Relevance" value={uatCase.scores.relevance} />
+            <ScorePill label="Correctness" value={uatCase.scores.correctness} />
+            <ScorePill label="Understandability" value={uatCase.scores.understandability} />
+            <ScorePill label="Coverage" value={uatCase.scores.coverage} />
+          </div>
+          {onSelectAlternative && alternatives.length > 0 && (
+            <AlternativesToggle
+              count={alternatives.length}
+              isExpanded={alternativeSwap.isExpanded}
+              onToggle={alternativeSwap.toggle}
+            />
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <OverallScoreBadge value={uatCase.overall_score} />
+          <AcceptRejectButtons status={uatCase.status} onAccept={onAccept} onReject={onReject} />
+        </div>
+      </div>
+      {onSelectAlternative && alternativeSwap.isExpanded && alternatives.length > 0 && (
+        <AlternativeList
+          alternatives={alternatives}
+          swappingId={alternativeSwap.swappingId}
+          onSwap={alternativeSwap.swap}
+          renderBody={(alternative) => alternative.description}
+        />
+      )}
+    </div>
+  );
+}

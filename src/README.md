@@ -1,51 +1,42 @@
-# Requirements-LLM — App Skeleton
+# Requirements-LLM: developer guide
 
-Base application skeleton for the FIT4002 client project. This is just the
-foundation (backend, frontend, DB, containerization) — the AI pipeline
-(user story → acceptance criteria → UAT test cases, via Pydantic AI) is not
-implemented yet.
+How the code is laid out and how to work on it. To run the app as a user, see
+the [top-level README](../README.md).
 
 ## Stack
 
-| Layer    | Choice                                             |
-| -------- | --------------------------------------------------- |
-| Backend  | Python + FastAPI, layered (routes → services → repositories) |
-| ORM      | SQLModel (Pydantic-based, shared model style with the future agent layer) |
-| Database | PostgreSQL, one local container per developer (own local data, not shared) |
-| Frontend | React + TypeScript (Vite), typed API client generated from OpenAPI |
-| Auth     | None for v1 — data is session-scoped, not account-scoped |
-| Infra    | Docker Compose (`frontend`, `backend`, `db`) |
+| Layer | Choice |
+| --- | --- |
+| Backend | Python 3.12+, FastAPI, layered as routes → services → repositories |
+| Models | PydanticAI agents, configured in `backend/config/models.json` |
+| Database | PostgreSQL with pgvector, through SQLModel. One local container per developer |
+| Frontend | React + TypeScript (Vite, Tailwind), with an API client typed from the backend's OpenAPI schema |
+| Auth | None. Data is scoped to chat sessions, not accounts |
+| Infra | Docker Compose (`frontend`, `backend`, `db`) |
 
 ## Running it
 
-1. Copy the env template and adjust if needed:
+1. Copy the env template and the model config, then fill in your API keys:
    ```
    cp .env.example .env
+   cp backend/config/models.example.json backend/config/models.json
    ```
-2. Start everything:
-   ```
-   docker compose up --build
-   ```
-3. Open:
-   - Frontend: http://localhost:5173
-   - Backend docs (Swagger UI): http://localhost:8000/docs
-   - Backend health check: http://localhost:8000/health
+2. Start everything: `docker compose up --build`
+3. Open the frontend at http://localhost:5173, or the API docs at
+   http://localhost:8000/docs.
 
-Postgres data persists across restarts in the `db_data` named volume. It's
-local to your machine only — nobody else on the team sees your data, and you
-don't see theirs. To wipe your local DB: `docker compose down -v`.
+Postgres data lives in the `db_data` volume on your machine only. To wipe it,
+run `docker compose down -v`.
 
-### Running without Docker (optional, for faster iteration)
+### Running without Docker
 
-Backend (requires [uv](https://docs.astral.sh/uv/)):
+Backend (needs [uv](https://docs.astral.sh/uv/), and Postgres at the
+`DATABASE_URL` in `.env`, for example from `docker compose up -d db`):
 ```
 cd backend
 uv sync
 uv run uvicorn app.main:app --reload
 ```
-You'll need a Postgres instance reachable at the `DATABASE_URL` in your
-`.env` — either `docker compose up db` in another terminal, or point it at a
-local Postgres install.
 
 Frontend:
 ```
@@ -59,61 +50,70 @@ npm run dev
 ```
 src/
 ├── docker-compose.yml
-├── .env.example          # copy to .env (gitignored, per-developer)
+├── .env.example                # copy to .env (gitignored)
+├── openapi.json                # generated, see "Regenerating the typed API client"
 ├── backend/
-│   ├── Dockerfile
-│   ├── pyproject.toml    # deps, managed with uv
-│   ├── scripts/
-│   │   └── export_openapi.py   # dumps OpenAPI schema for the frontend codegen step
+│   ├── config/
+│   │   └── models.example.json # copy to models.json: chat, vision, generation and judge models
+│   ├── ai_prompts/             # rubric prompts the voting judges read
+│   ├── llm/spec.py             # turns one models.json entry into a PydanticAI model
+│   ├── scripts/export_openapi.py
 │   ├── tests/
+│   ├── voting/                 # LLM judges that score candidates; also runs as an MCP server
 │   └── app/
 │       ├── main.py             # FastAPI app, middleware, router registration
-│       ├── config.py           # env-driven settings (pydantic-settings)
-│       ├── db.py                # engine + session setup
-│       ├── models.py            # SQLModel table + request/response schemas
-│       ├── routes/              # HTTP layer — request/response only, no business logic
-│       ├── services/            # business logic, independent of HTTP and DB details
-│       └── repositories/        # all direct DB access (SQLModel queries) lives here
+│       ├── config.py           # settings from the environment
+│       ├── llm_config.py       # loads config/models.json
+│       ├── db.py               # engine and session setup
+│       ├── dependencies.py     # FastAPI dependency providers shared by routes
+│       ├── models_*.py         # SQLModel tables and request/response schemas
+│       ├── routes/             # HTTP only: parse the request, call a service, shape the response
+│       ├── services/           # business logic, independent of HTTP and SQL
+│       ├── repositories/       # database queries for sessions, messages, ACs and UAT cases
+│       ├── generation/         # the ensemble: agents, prompts and the parallel orchestrator
+│       ├── ingest/             # text extraction (PDF, text, images) and chunking
+│       └── vector_store/       # embeddings and pgvector search
 └── frontend/
-    ├── Dockerfile
-    ├── package.json
     └── src/
-        ├── api/
-        │   ├── client.ts         # thin typed fetch wrapper
-        │   ├── items.ts          # typed calls for the items resource
-        │   └── schema.d.ts       # generated from the backend's OpenAPI schema — don't hand-edit
-        ├── components/           # ItemList, ItemForm
-        ├── App.tsx
-        └── main.tsx
+        ├── api/                # one typed module per resource; schema.d.ts is generated
+        ├── components/         # reusable UI, grouped by feature (ac, chat, uat, shared)
+        ├── hooks/              # data fetching and state per page
+        ├── pages/              # one component per route
+        └── layouts/            # app shell, session sidebar and tabs
 ```
 
 ### Why this layering?
 
-`routes/` should only ever deal with HTTP concerns (parsing the request,
-calling a service, shaping the response). `services/` holds the actual
-business rules and doesn't know about FastAPI or SQLModel. `repositories/`
-is the only place that talks to the database. It's more structure than this
-tiny example needs on its own, but it's the pattern to keep using as the
-real feature set (acceptance criteria generation, test case generation)
-gets added — new backend features should follow the same three layers
-rather than putting logic directly in a route handler.
+Keeping HTTP, business rules and database access apart means each can change
+without the others, and services can be tested without a web server. New
+backend features should follow the same three layers rather than putting
+logic in a route handler. On the frontend, components call the typed modules
+in `src/api/`, never `fetch` directly.
 
-## The example resource: `items`
+## Tests and code style
 
-A minimal `id / name / created_at` resource used to prove the whole stack
-end-to-end:
+The backend tests need Postgres with pgvector on `localhost:5432` and an
+`app_test` database. Create it once:
+```
+docker compose up -d db
+docker compose exec db psql -U postgres -c "CREATE DATABASE app_test"
+```
+Set `TEST_DATABASE_URL` to use a different database.
 
-- `POST /items` — create an item (validated via the `ItemCreate` SQLModel schema)
-- `GET /items` — list all items
+| Task | Backend (`src/backend`) | Frontend (`src/frontend`) |
+| --- | --- | --- |
+| Format | `uv run ruff format` | `npm run format` |
+| Lint | `uv run ruff check` | `npm run lint` (type check) |
+| Test | `uv run pytest` | (none yet) |
 
-The frontend's homepage lists items and has a form to create new ones,
-using `frontend/src/api/items.ts` — no raw `fetch` calls in components.
+`uv run python tests/run_tests.py` also writes a CSV and Markdown summary of
+the test run. Naming, docstring and comment conventions are in
+[docs/code-style.md](../docs/code-style.md).
 
 ## Regenerating the typed API client
 
-Whenever backend routes or models change, refresh the frontend's generated
-types so type errors show up at compile time instead of at runtime:
-
+When backend routes or models change, regenerate the frontend's types so
+mismatches show up at compile time:
 ```
 cd backend
 uv run python scripts/export_openapi.py   # writes ../openapi.json
@@ -121,18 +121,27 @@ uv run python scripts/export_openapi.py   # writes ../openapi.json
 cd ../frontend
 npm run generate-api                      # writes src/api/schema.d.ts
 ```
-
-Commit the updated `schema.d.ts` (and `openapi.json`) alongside the backend
-change that caused it.
+Commit both generated files with the backend change that caused them.
 
 ## Environment variables
 
-See `.env.example` for the full list.  Nothing sensitive is committed —
-`.env` is gitignored. Later, the Pydantic AI agent's LLM API key will also
-live in `.env` (a placeholder is already there).
+See `.env.example` for the full list. `.env` is gitignored. Model choices
+live in `backend/config/models.json` (also gitignored), which names the
+environment variable holding each API key but never the key itself.
 
-## Out of scope for this skeleton
+## Local Prometheus voting
 
-- The AI pipeline itself (acceptance criteria / UAT test case generation).
-- Authentication.
-- Deployment/hosting beyond local Docker.
+Install and start Ollama, enable the `prometheus` judge in
+`backend/config/models.json`, and pull its model (`ggozad/prometheus2:latest`
+in the example file). Set its `base_url` to `http://localhost:11434/v1` when
+the backend runs on the host, or `http://host.docker.internal:11434/v1` when
+the backend runs in Docker.
+
+To use the voting module from an MCP client, launch it over stdio from
+`src/backend`:
+```
+uv run python -m voting.voting
+```
+The tool is named `evaluate_acceptance_criteria`. Prometheus scores each
+output once per rubric (`correctness`, `coverage`, `relevance` and
+`understandability`).

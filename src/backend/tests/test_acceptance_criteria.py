@@ -1,0 +1,314 @@
+"""API tests for reviewing and regenerating acceptance criteria."""
+
+from fastapi.testclient import TestClient
+
+
+def _create_session(client: TestClient) -> dict:
+    """Create an empty session and return it."""
+    response = client.post("/sessions", json={})
+    assert response.status_code == 201
+    return response.json()
+
+
+def _generate(client: TestClient, session_id: int) -> list[dict]:
+    """Post a user story, then generate and return the session's ACs.
+
+    Generation refuses an empty conversation (see NoUserStoryError).
+    """
+    client.post(
+        f"/sessions/{session_id}/messages",
+        json={
+            "text": "As a user, I want to log in with my email and password.",
+            "attachments": [],
+        },
+    )
+    response = client.post(f"/sessions/{session_id}/generate")
+    assert response.status_code == 200
+    return response.json()["acceptance_criteria"]
+
+
+def test_generate_persists_criteria_with_real_ids_and_pending_status(
+    client: TestClient,
+) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    assert len(criteria) >= 1
+    assert all(criterion["status"] == "pending" for criterion in criteria)
+    assert all(isinstance(criterion["id"], int) for criterion in criteria)
+
+    listed = client.get(f"/sessions/{session['id']}/acceptance-criteria")
+    assert listed.status_code == 200
+    assert listed.json()["acceptance_criteria"] == criteria
+
+
+def test_generate_replaces_existing_batch(client: TestClient) -> None:
+    session = _create_session(client)
+    _generate(client, session["id"])
+    second = _generate(client, session["id"])
+
+    # The second batch replaces the first instead of being added to it.
+    listed = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
+    assert listed["acceptance_criteria"] == second
+
+
+def test_list_acceptance_criteria_404_for_missing_session(client: TestClient) -> None:
+    response = client.get("/sessions/9999/acceptance-criteria")
+    assert response.status_code == 404
+
+
+def test_update_text_saves_edit_and_leaves_other_fields_untouched(
+    client: TestClient,
+) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    target = criteria[0]
+
+    response = client.patch(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}",
+        json={
+            "title": "Edited title",
+            "given": "edited given",
+            "when": "edited when",
+            "then": "edited then",
+        },
+    )
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["title"] == "Edited title"
+    assert updated["given"] == "edited given"
+    assert updated["scores"] == target["scores"]
+    assert updated["overall_score"] == target["overall_score"]
+    assert updated["status"] == target["status"]
+
+
+def test_update_text_404_for_missing_ac_or_session(client: TestClient) -> None:
+    session = _create_session(client)
+    _generate(client, session["id"])
+    body = {"title": "t", "given": "g", "when": "w", "then": "t"}
+
+    assert (
+        client.patch(
+            f"/sessions/{session['id']}/acceptance-criteria/9999", json=body
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch("/sessions/9999/acceptance-criteria/1", json=body).status_code
+        == 404
+    )
+
+
+def test_update_status_toggle(client: TestClient) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    target = criteria[0]
+
+    accepted = client.patch(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/status",
+        json={"status": "accepted"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "accepted"
+
+    back_to_pending = client.patch(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/status",
+        json={"status": "pending"},
+    )
+    assert back_to_pending.json()["status"] == "pending"
+
+
+def test_update_status_404_for_missing_ac_or_session(client: TestClient) -> None:
+    session = _create_session(client)
+    _generate(client, session["id"])
+    body = {"status": "rejected"}
+
+    assert (
+        client.patch(
+            f"/sessions/{session['id']}/acceptance-criteria/9999/status", json=body
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            "/sessions/9999/acceptance-criteria/1/status", json=body
+        ).status_code
+        == 404
+    )
+
+
+def test_regenerate_selected_returns_candidates_without_mutating_persisted_list(
+    client: TestClient,
+) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    target = criteria[0]
+    before = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
+
+    response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/regenerate",
+        json={
+            "messages": [
+                {"role": "user", "text": "more context please", "attachments": []}
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reply"]["role"] == "assistant"
+    assert isinstance(body["reply"]["text"], str) and body["reply"]["text"]
+    # Regeneration refines the selected AC into exactly one candidate.
+    assert len(body["candidates"]) == 1
+
+    after = client.get(f"/sessions/{session['id']}/acceptance-criteria").json()
+    assert after == before
+
+
+def test_regenerate_selected_404_for_missing_ac(client: TestClient) -> None:
+    session = _create_session(client)
+    response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/9999/regenerate",
+        json={"messages": []},
+    )
+    assert response.status_code == 404
+
+
+def test_apply_approved_replaces_target_and_leaves_rest_untouched(
+    client: TestClient,
+) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    target = criteria[1]
+    others = [criterion for criterion in criteria if criterion["id"] != target["id"]]
+
+    regenerate_response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/regenerate",
+        json={"messages": []},
+    )
+    candidates = regenerate_response.json()["candidates"]
+
+    apply_response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/apply-approved",
+        json={"candidates": candidates},
+    )
+    assert apply_response.status_code == 200
+    updated_list = apply_response.json()["acceptance_criteria"]
+
+    updated_ids = {criterion["id"] for criterion in updated_list}
+    assert target["id"] not in updated_ids
+    for other in others:
+        assert other["id"] in updated_ids
+    assert len(updated_list) == len(others) + len(candidates)
+
+
+def test_apply_approved_clears_uat_cases_generated_for_the_replaced_ac(
+    client: TestClient,
+) -> None:
+    """Apply-approved must delete an AC's UAT cases before replacing its row.
+
+    Otherwise the foreign key fails. The Postgres test database enforces it.
+    """
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    target = criteria[0]
+    client.patch(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/status",
+        json={"status": "accepted"},
+    )
+    uat_generate = client.post(f"/sessions/{session['id']}/uat-cases/generate")
+    assert uat_generate.status_code == 200
+    assert len(uat_generate.json()["groups"]) == 1
+
+    regenerate_response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/regenerate",
+        json={"messages": []},
+    )
+    candidates = regenerate_response.json()["candidates"]
+
+    apply_response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{target['id']}/apply-approved",
+        json={"candidates": candidates},
+    )
+    assert apply_response.status_code == 200
+
+    uat_listed = client.get(f"/sessions/{session['id']}/uat-cases")
+    assert uat_listed.status_code == 200
+    assert uat_listed.json()["groups"] == []
+
+
+def test_apply_approved_400_when_no_candidates(client: TestClient) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/{criteria[0]['id']}/apply-approved",
+        json={"candidates": []},
+    )
+    assert response.status_code == 400
+
+
+def test_apply_approved_404_for_missing_ac(client: TestClient) -> None:
+    session = _create_session(client)
+    _generate(client, session["id"])
+    response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/9999/apply-approved",
+        json={
+            "candidates": [
+                {
+                    "id": -1,
+                    "title": "t",
+                    "given": "g",
+                    "when": "w",
+                    "then": "t",
+                    "scores": {
+                        "relevance": 5,
+                        "correctness": 5,
+                        "understandability": 5,
+                        "coverage": 5,
+                    },
+                    "overall_score": 5,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_regenerate_all_kickoff_message_references_rejected_titles(
+    client: TestClient,
+) -> None:
+    session = _create_session(client)
+    criteria = _generate(client, session["id"])
+    rejected = criteria[0]
+    client.patch(
+        f"/sessions/{session['id']}/acceptance-criteria/{rejected['id']}/status",
+        json={"status": "rejected"},
+    )
+
+    response = client.post(
+        f"/sessions/{session['id']}/acceptance-criteria/regenerate-all-kickoff"
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["role"] == "assistant"
+    assert rejected["title"] in body["text"]
+
+    # _generate already posted messages, so check the kickoff is the newest.
+    detail = client.get(f"/sessions/{session['id']}").json()
+    assert detail["messages"][-1]["role"] == "assistant"
+    assert detail["messages"][-1]["text"] == body["text"]
+    assert detail["updated_at"] >= session["updated_at"]
+
+
+def test_regenerate_all_kickoff_404_for_missing_session(client: TestClient) -> None:
+    response = client.post("/sessions/9999/acceptance-criteria/regenerate-all-kickoff")
+    assert response.status_code == 404
+
+
+def test_delete_session_with_acceptance_criteria(client: TestClient) -> None:
+    session = _create_session(client)
+    _generate(client, session["id"])
+
+    response = client.delete(f"/sessions/{session['id']}")
+    assert response.status_code == 204
+    assert (
+        client.get(f"/sessions/{session['id']}/acceptance-criteria").status_code == 404
+    )
