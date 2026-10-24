@@ -5,24 +5,37 @@ import { ChatThread } from "../components/chat/ChatThread";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
 import { useConfirm } from "../components/shared/ConfirmDialog";
 import { acceptanceCriteriaApi } from "../api/acceptanceCriteria";
-import type { AcceptanceCriterion } from "../api/acceptanceCriteria";
+import type {
+  AcceptanceCriterion,
+  AcceptanceCriterionStatus,
+  AcceptanceCriterionTextUpdate,
+} from "../api/acceptanceCriteria";
 import { uatCasesApi } from "../api/uatCases";
 import { useAcceptanceCriteria } from "../hooks/useAcceptanceCriteria";
 import { useRegenerateSelected } from "../hooks/useRegenerateSelected";
+import type { RegenerateMessage } from "../hooks/useRegenerateSelected";
 import { ROUTES } from "../routes";
-import type { Attachment } from "../types/conversation";
 
 type Mode = "list" | "regenerate";
 
-function testCases(count: number): string {
+/** `1` -> "1 test case", `3` -> "3 test cases". */
+function formatTestCaseCount(count: number): string {
   return `${count} test case${count === 1 ? "" : "s"}`;
 }
 
+/** The AC Review tab: review and regenerate ACs, then generate test cases. */
 export function AcReviewPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { items, isLoading, loadError, updateText, updateStatus, applyApproved, selectAlternative } =
-    useAcceptanceCriteria(sessionId!);
+  const {
+    criteria,
+    isLoading,
+    loadError,
+    updateText,
+    updateStatus,
+    applyApproved,
+    selectAlternative,
+  } = useAcceptanceCriteria(sessionId!);
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -38,60 +51,59 @@ export function AcReviewPage() {
   const { confirm, dialog } = useConfirm();
 
   const fetchCandidates = useCallback(
-    (
-      targetId: number,
-      messages: { role: "user" | "assistant"; text: string; attachments: Attachment[] }[],
-    ) => acceptanceCriteriaApi.regenerateSelected(sessionId!, targetId, { messages }),
+    (targetId: number, messages: RegenerateMessage[]) =>
+      acceptanceCriteriaApi.regenerateSelected(sessionId!, targetId, { messages }),
     [sessionId],
   );
-  const regenerate = useRegenerateSelected<AcceptanceCriterion>(regenerateTargetId, fetchCandidates);
+  const regenerate = useRegenerateSelected<AcceptanceCriterion>(
+    regenerateTargetId,
+    fetchCandidates,
+  );
 
-  function handleSelect(id: number) {
-    setSelectedId((prev) => (prev === id ? null : id));
+  function handleSelect(criterionId: number) {
+    setSelectedId((previous) => (previous === criterionId ? null : criterionId));
   }
 
-  function handleAccept(id: number, currentStatus: string) {
-    updateStatus(id, currentStatus === "accepted" ? "pending" : "accepted");
+  function handleAccept(criterionId: number, currentStatus: AcceptanceCriterionStatus) {
+    updateStatus(criterionId, currentStatus === "accepted" ? "pending" : "accepted");
   }
 
-  function handleReject(id: number, currentStatus: string) {
-    updateStatus(id, currentStatus === "rejected" ? "pending" : "rejected");
+  function handleReject(criterionId: number, currentStatus: AcceptanceCriterionStatus) {
+    updateStatus(criterionId, currentStatus === "rejected" ? "pending" : "rejected");
   }
 
-  /**
-   * Asks before a change that leaves an AC's test cases describing wording it
-   * no longer has. Resolves true straight away when the AC has none.
-   */
-  function confirmStaleUat(item: AcceptanceCriterion, index: number, action: string) {
-    if (item.uat_case_count === 0) return Promise.resolve(true);
+  // Warns that the AC's test cases will go out of date. True if it has none.
+  function confirmStaleTestCases(criterion: AcceptanceCriterion, index: number, action: string) {
+    if (criterion.uat_case_count === 0) return Promise.resolve(true);
+    const testCasePhrase = formatTestCaseCount(criterion.uat_case_count);
     return confirm({
       title: "This AC has test cases",
       message:
-        `AC #${index + 1} has ${testCases(item.uat_case_count)} written against its current ` +
+        `AC #${index + 1} has ${testCasePhrase} written against its current ` +
         `wording. ${action} will leave them out of date; you can regenerate them on the UAT page.`,
     });
   }
 
   async function handleEditSave(
-    item: AcceptanceCriterion,
+    criterion: AcceptanceCriterion,
     index: number,
-    fields: { title: string; given: string; when: string; then: string },
+    fields: AcceptanceCriterionTextUpdate,
   ) {
     // Declining keeps the card in edit mode with the draft intact.
-    if (!(await confirmStaleUat(item, index, "Saving this edit"))) return;
-    await updateText(item.id, fields);
+    if (!(await confirmStaleTestCases(criterion, index, "Saving this edit"))) return;
+    await updateText(criterion.id, fields);
     setEditingId(null);
   }
 
   async function handleSelectAlternative(
-    item: AcceptanceCriterion,
+    criterion: AcceptanceCriterion,
     index: number,
     candidateId: number,
   ) {
     setSwapError(null);
-    if (!(await confirmStaleUat(item, index, "Switching to this version"))) return;
+    if (!(await confirmStaleTestCases(criterion, index, "Switching to this version"))) return;
     try {
-      await selectAlternative(item.id, candidateId);
+      await selectAlternative(criterion.id, candidateId);
     } catch {
       setSwapError("Couldn't switch to that version. Please try again.");
     }
@@ -113,20 +125,20 @@ export function AcReviewPage() {
 
   async function handleApplyApproved() {
     if (regenerateTargetId == null || regenerate.approvedCandidates.length === 0) return;
-    const targetIndex = items.findIndex((item) => item.id === regenerateTargetId);
-    const target = items[targetIndex];
-    // The backend deletes the replaced AC's test cases, so this one is not
-    // just "out of date".
+    const targetIndex = criteria.findIndex((criterion) => criterion.id === regenerateTargetId);
+    const target = criteria[targetIndex];
+    // The backend deletes the replaced AC's test cases.
     if (target && target.uat_case_count > 0) {
-      const confirmed = await confirm({
+      const testCasePhrase = formatTestCaseCount(target.uat_case_count);
+      const isConfirmed = await confirm({
         title: "Delete this AC's test cases?",
         message:
-          `Replacing AC #${targetIndex + 1} will delete its ${testCases(target.uat_case_count)}. ` +
+          `Replacing AC #${targetIndex + 1} will delete its ${testCasePhrase}. ` +
           "This can't be undone.",
         confirmLabel: "Delete test cases & replace",
-        destructive: true,
+        isDestructive: true,
       });
-      if (!confirmed) return;
+      if (!isConfirmed) return;
     }
     setApplyError(null);
     setIsApplying(true);
@@ -175,16 +187,17 @@ export function AcReviewPage() {
     return <div className="flex h-full items-center justify-center text-red-600">{loadError}</div>;
   }
 
-  const acceptedCount = items.filter((item) => item.status === "accepted").length;
+  const acceptedCount = criteria.filter((criterion) => criterion.status === "accepted").length;
 
   if (mode === "regenerate" && regenerateTargetId != null) {
-    const targetIndex = items.findIndex((item) => item.id === regenerateTargetId);
-    const target = items[targetIndex];
+    const targetIndex = criteria.findIndex((criterion) => criterion.id === regenerateTargetId);
+    const target = criteria[targetIndex];
 
     return (
       <div className="flex h-full flex-col overflow-y-auto p-6">
         <div className="space-y-3">
           {target && (
+            // Read-only, shown as rejected because the candidates replace it.
             <AcCard
               criterion={{ ...target, status: "rejected" }}
               index={targetIndex}
@@ -197,29 +210,35 @@ export function AcReviewPage() {
         {regenerate.candidates.length > 0 && <hr className="my-4 border-gray-200" />}
 
         <div className="space-y-3">
-          {regenerate.candidates.map((candidate, i) => {
-            const displayIndex = i === 0 ? targetIndex : items.length + (i - 1);
-            const approved = regenerate.approvedIndexes.has(i);
+          {regenerate.candidates.map((candidate, candidateIndex) => {
+            const displayIndex =
+              candidateIndex === 0 ? targetIndex : criteria.length + (candidateIndex - 1);
+            const isApproved = regenerate.approvedIndexes.has(candidateIndex);
             return (
               <AcCard
-                key={i}
-                criterion={{ ...candidate, status: approved ? "accepted" : "rejected" }}
+                key={candidateIndex}
+                criterion={{ ...candidate, status: isApproved ? "accepted" : "rejected" }}
                 index={displayIndex}
-                onAccept={() => regenerate.setApproved(i, true)}
-                onReject={() => regenerate.setApproved(i, false)}
+                onAccept={() => regenerate.setApproved(candidateIndex, true)}
+                onReject={() => regenerate.setApproved(candidateIndex, false)}
               />
             );
           })}
         </div>
 
         <div className="mt-4 flex-1">
-          <ChatThread messages={regenerate.miniChatMessages} pending={regenerate.isSending} />
+          <ChatThread
+            messages={regenerate.miniChatMessages}
+            isAwaitingReply={regenerate.isSending}
+          />
         </div>
 
         {regenerate.uploadError && (
           <p className="mb-2 text-sm text-red-600">{regenerate.uploadError}</p>
         )}
-        {regenerate.sendError && <p className="mb-2 text-sm text-red-600">{regenerate.sendError}</p>}
+        {regenerate.sendError && (
+          <p className="mb-2 text-sm text-red-600">{regenerate.sendError}</p>
+        )}
         <ChatInputBar
           pendingAttachments={regenerate.pendingAttachments}
           onAttachFiles={regenerate.attachFiles}
@@ -258,21 +277,21 @@ export function AcReviewPage() {
       {dialog}
       {swapError && <p className="mb-3 text-sm text-red-600">{swapError}</p>}
       <div className="flex-1 space-y-3">
-        {items.map((item, index) => (
+        {criteria.map((criterion, index) => (
           <AcCard
-            key={item.id}
-            criterion={item}
+            key={criterion.id}
+            criterion={criterion}
             index={index}
-            selected={item.id === selectedId}
-            editing={item.id === editingId}
-            onSelect={() => handleSelect(item.id)}
-            onEditStart={() => setEditingId(item.id)}
+            isSelected={criterion.id === selectedId}
+            isEditing={criterion.id === editingId}
+            onSelect={() => handleSelect(criterion.id)}
+            onEditStart={() => setEditingId(criterion.id)}
             onEditCancel={() => setEditingId(null)}
-            onEditSave={(fields) => handleEditSave(item, index, fields)}
-            onAccept={() => handleAccept(item.id, item.status)}
-            onReject={() => handleReject(item.id, item.status)}
+            onEditSave={(fields) => handleEditSave(criterion, index, fields)}
+            onAccept={() => handleAccept(criterion.id, criterion.status)}
+            onReject={() => handleReject(criterion.id, criterion.status)}
             onSelectAlternative={(candidateId) =>
-              handleSelectAlternative(item, index, candidateId)
+              handleSelectAlternative(criterion, index, candidateId)
             }
           />
         ))}

@@ -1,5 +1,6 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+/** A non-2xx response. `message` is the raw response body. */
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -9,23 +10,26 @@ export class ApiError extends Error {
   }
 }
 
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // The browser has to set its own multipart Content-Type (it carries the
-  // boundary), so only JSON bodies get the header.
-  const isFormData = init?.body instanceof FormData;
+/** Fetches JSON from the backend. Throws {@link ApiError} on non-2xx; 204 gives `undefined`. */
+export async function request<ResponseBody>(
+  path: string,
+  options?: RequestInit,
+): Promise<ResponseBody> {
+  // The browser sets the multipart Content-Type itself, as it includes the boundary.
+  const isFormData = options?.body instanceof FormData;
   const headers = isFormData
-    ? init?.headers
-    : { "Content-Type": "application/json", ...init?.headers };
+    ? options?.headers
+    : { "Content-Type": "application/json", ...options?.headers };
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
 
-  if (!res.ok) {
-    throw new ApiError(res.status, await res.text());
+  if (!response.ok) {
+    throw new ApiError(response.status, await response.text());
   }
 
-  if (res.status === 204) {
-    return undefined as T;
+  if (response.status === 204) {
+    return undefined as ResponseBody;
   }
 
-  return (await res.json()) as T;
+  return (await response.json()) as ResponseBody;
 }

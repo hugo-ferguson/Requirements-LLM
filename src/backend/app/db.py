@@ -12,8 +12,7 @@ engine = create_engine(settings.database_url, echo=settings.sql_echo)
 
 def create_db_and_tables() -> None:
     """Enable pgvector if available, then create any missing tables."""
-    # pgvector is Postgres-only, and other dialects don't understand
-    # "CREATE EXTENSION" at all, so the step is skipped for them.
+    # Only PostgreSQL has pgvector.
     if engine.dialect.name == "postgresql":
         with engine.begin() as connection:
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

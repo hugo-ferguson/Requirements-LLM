@@ -1,6 +1,7 @@
 import { Outlet, useParams } from "react-router";
 import { TabBar } from "./TabBar";
 
+/** The frame for one session: the tab bar above the current tab. */
 export function SessionLayout() {
   const { sessionId } = useParams<{ sessionId: string }>();
 

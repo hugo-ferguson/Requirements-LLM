@@ -1,22 +1,36 @@
-"""The batch voting entry point and how it merges judges' votes."""
+"""The batch voting entry point: judge selection and the saved JSON."""
 
 import asyncio
 import json
 
-from voting.models import EvaluatedOutput, JudgeConfig, ProviderFeedback, RubricAverage, RubricFeedback, VotingResult
+from voting.models import (
+    EvaluatedOutput,
+    JudgeConfig,
+    ProviderFeedback,
+    RubricAverage,
+    RubricFeedback,
+    VotingResult,
+)
+from voting.voting_layer import run_voting_layer
 
 JUDGES = [
     JudgeConfig(id="gemini", provider="google", model="gemini-3.6-flash"),
-    JudgeConfig(id="prometheus", provider="ollama",
-                model="ggozad/prometheus2:latest", style="per_rubric"),
+    JudgeConfig(
+        id="prometheus",
+        provider="ollama",
+        model="ggozad/prometheus2:latest",
+        style="per_rubric",
+    ),
     JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5"),
 ]
 
 
 def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
-    async def fake_evaluate_inputs(items):
-        assert [[judge.id for judge in item.judges]
-                for item in items] == [["gemini", "prometheus"]] * 2
+    async def fake_evaluate_inputs(evaluation_inputs):
+        assert [
+            [judge.id for judge in evaluation_input.judges]
+            for evaluation_input in evaluation_inputs
+        ] == [["gemini", "prometheus"]] * 2
         return [
             VotingResult(
                 ai="TestAI",
@@ -31,13 +45,19 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
                                 model="gemini-flash-latest",
                                 feedback=[
                                     RubricFeedback(
-                                        rubric="correctness", value=4, feedback="Good"),
+                                        rubric="correctness", value=4, feedback="Good"
+                                    ),
                                     RubricFeedback(
-                                        rubric="coverage", value=3, feedback="Okay"),
+                                        rubric="coverage", value=3, feedback="Okay"
+                                    ),
                                     RubricFeedback(
-                                        rubric="relevance", value=4, feedback="Relevant"),
+                                        rubric="relevance", value=4, feedback="Relevant"
+                                    ),
                                     RubricFeedback(
-                                        rubric="understandability", value=5, feedback="Clear"),
+                                        rubric="understandability",
+                                        value=5,
+                                        feedback="Clear",
+                                    ),
                                 ],
                                 overall_score=4.0,
                             )
@@ -46,8 +66,7 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
                             RubricAverage(rubric="correctness", value=4.0),
                             RubricAverage(rubric="coverage", value=3.0),
                             RubricAverage(rubric="relevance", value=4.0),
-                            RubricAverage(
-                                rubric="understandability", value=5.0),
+                            RubricAverage(rubric="understandability", value=5.0),
                         ],
                         overall_score=4.0,
                     )
@@ -68,13 +87,19 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
                                 model="ggozad/prometheus2:latest",
                                 feedback=[
                                     RubricFeedback(
-                                        rubric="correctness", value=3, feedback="Okay"),
+                                        rubric="correctness", value=3, feedback="Okay"
+                                    ),
                                     RubricFeedback(
-                                        rubric="coverage", value=2, feedback="Limited"),
+                                        rubric="coverage", value=2, feedback="Limited"
+                                    ),
                                     RubricFeedback(
-                                        rubric="relevance", value=4, feedback="Relevant"),
+                                        rubric="relevance", value=4, feedback="Relevant"
+                                    ),
                                     RubricFeedback(
-                                        rubric="understandability", value=4, feedback="Readable"),
+                                        rubric="understandability",
+                                        value=4,
+                                        feedback="Readable",
+                                    ),
                                 ],
                                 overall_score=3.25,
                             )
@@ -83,8 +108,7 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
                             RubricAverage(rubric="correctness", value=3.0),
                             RubricAverage(rubric="coverage", value=2.0),
                             RubricAverage(rubric="relevance", value=4.0),
-                            RubricAverage(
-                                rubric="understandability", value=4.0),
+                            RubricAverage(rubric="understandability", value=4.0),
                         ],
                         overall_score=3.25,
                     )
@@ -94,10 +118,8 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
             ),
         ]
 
-    monkeypatch.setattr(
-        "voting.voting_layer.evaluate_inputs", fake_evaluate_inputs)
-    monkeypatch.setattr("voting.voting_layer.load_judges",
-                        lambda: list(JUDGES))
+    monkeypatch.setattr("voting.voting_layer.evaluate_inputs", fake_evaluate_inputs)
+    monkeypatch.setattr("voting.voting_layer.load_judges", lambda: list(JUDGES))
 
     inputs = [
         {
@@ -115,13 +137,9 @@ def test_run_voting_layer_returns_results_and_saves_file(tmp_path, monkeypatch):
     ]
 
     output_path = tmp_path / "votingLayerOutput.json"
-    result = asyncio.run(
-        __import__("voting.voting_layer", fromlist=["run_voting_layer"]).run_voting_layer(
-            inputs,
-            ["gemini", "prometheus"],
-            output_path=output_path,
-        )
+    payload = asyncio.run(
+        run_voting_layer(inputs, ["gemini", "prometheus"], output_path=output_path)
     )
 
-    assert len(result) == 2
-    assert json.loads(output_path.read_text(encoding="utf-8")) == result
+    assert len(payload) == 2
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload

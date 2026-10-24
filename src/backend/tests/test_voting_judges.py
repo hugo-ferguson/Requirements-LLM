@@ -17,12 +17,13 @@ from voting.models import (
 )
 
 RUBRICS = ("correctness", "coverage", "relevance", "understandability")
-CLAUDE = JudgeConfig(id="claude", provider="anthropic",
-                     model="claude-sonnet-5-5")
+CLAUDE = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5")
 LUNA = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
-def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> VotingResult:
+def _judged(
+    evaluation_input: EvaluationInput, judge_name: str, score: int
+) -> VotingResult:
     """Return one judge's result, with every rubric at `score`."""
     return VotingResult(
         ai=evaluation_input.ai,
@@ -33,16 +34,19 @@ def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> Voting
                 output=output,
                 feedback=[
                     ProviderFeedback(
-                        ai=judge,
-                        model=judge,
+                        ai=judge_name,
+                        model=judge_name,
                         feedback=[
-                            RubricFeedback(rubric=r, value=score, feedback="") for r in RUBRICS
+                            RubricFeedback(rubric=rubric, value=score, feedback="")
+                            for rubric in RUBRICS
                         ],
                         overall_score=float(score),
                     )
                 ],
-                rubric_averages=[RubricAverage(
-                    rubric=r, value=float(score)) for r in RUBRICS],
+                rubric_averages=[
+                    RubricAverage(rubric=rubric, value=float(score))
+                    for rubric in RUBRICS
+                ],
                 overall_score=float(score),
             )
             for output in evaluation_input.output
@@ -50,7 +54,9 @@ def _judged(evaluation_input: EvaluationInput, judge: str, score: int) -> Voting
     )
 
 
-def test_score_candidates_uses_the_enabled_judges_from_the_models_config(monkeypatch) -> None:
+def test_score_candidates_uses_the_enabled_judges_from_the_models_config(
+    monkeypatch,
+) -> None:
     seen: list[list[str]] = []
 
     async def fake_evaluate_input(evaluation_input):
@@ -82,10 +88,10 @@ def test_score_candidates_asks_every_given_judge(monkeypatch) -> None:
 def test_two_judges_are_averaged(monkeypatch) -> None:
     scores = {"claude": 4, "luna": 2}
 
-    async def judge(judge_config, evaluation_input):
-        return _judged(evaluation_input, judge_config.id, scores[judge_config.id])
+    async def fake_evaluate_with_judge(judge, evaluation_input):
+        return _judged(evaluation_input, judge.id, scores[judge.id])
 
-    monkeypatch.setattr(voting, "_evaluate_with_judge", judge)
+    monkeypatch.setattr(voting, "_evaluate_with_judge", fake_evaluate_with_judge)
     evaluation_input = EvaluationInput(
         ai="t", model="t", prompt="p", output=["a"], judges=[CLAUDE, LUNA]
     )
@@ -93,17 +99,19 @@ def test_two_judges_are_averaged(monkeypatch) -> None:
     [result] = asyncio.run(voting.evaluate_input(evaluation_input)).output
 
     assert result.overall_score == 3.0
-    assert {avg.rubric: avg.value for avg in result.rubric_averages}[
-        "coverage"] == 3.0
+    averages = {average.rubric: average.value for average in result.rubric_averages}
+    assert averages["coverage"] == 3.0
 
 
-def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(monkeypatch) -> None:
-    async def judge(judge_config, evaluation_input):
-        if judge_config.id == "luna":
+def test_a_failing_judge_is_averaged_out_and_the_candidate_is_still_rated(
+    monkeypatch,
+) -> None:
+    async def fake_evaluate_with_judge(judge, evaluation_input):
+        if judge.id == "luna":
             raise RuntimeError("luna is down")
-        return _judged(evaluation_input, judge_config.id, 4)
+        return _judged(evaluation_input, judge.id, 4)
 
-    monkeypatch.setattr(voting, "_evaluate_with_judge", judge)
+    monkeypatch.setattr(voting, "_evaluate_with_judge", fake_evaluate_with_judge)
     monkeypatch.setattr(scoring, "_evaluate_input", voting.evaluate_input)
 
     [score] = scoring.score_candidates("prompt", ["a"], judges=[CLAUDE, LUNA])

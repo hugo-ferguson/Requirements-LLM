@@ -1,39 +1,35 @@
 import { useEffect, useState } from "react";
-import type { UatCase } from "../../api/uatCases";
+import type { UatCase, UatCaseTextUpdate } from "../../api/uatCases";
 import { ScorePill } from "../ac/ScorePill";
 import { OverallScoreBadge } from "../ac/OverallScoreBadge";
 import { AcceptRejectButtons } from "../ac/AcceptRejectButtons";
-import {
-  AlternativeList,
-  AlternativesToggle,
-  useAlternativeSwap,
-} from "../shared/AlternativeList";
-
-interface EditFields {
-  title: string;
-  description: string;
-}
+import { AlternativeList, AlternativesToggle, useAlternativeSwap } from "../shared/AlternativeList";
 
 interface UatCardProps {
   uatCase: UatCase;
+  /** Zero-based position in its group, shown as "#UAT 1" and so on. */
   index: number;
-  selected?: boolean;
-  editing?: boolean;
+  isSelected?: boolean;
+  /** Swaps the text for inputs, with Save and Cancel buttons. */
+  isEditing?: boolean;
+  /** Makes the card's body clickable. */
   onSelect?: () => void;
+  /** Shows the edit (pencil) button. */
   onEditStart?: () => void;
   onEditCancel?: () => void;
-  onEditSave?: (fields: EditFields) => void;
+  onEditSave?: (fields: UatCaseTextUpdate) => void;
   onAccept: () => void;
   onReject: () => void;
   /** Enables the other-versions dropdown; resolves once the swap is saved. */
   onSelectAlternative?: (candidateId: number) => Promise<void>;
 }
 
+/** One UAT case with its scores and review buttons, editable in place. */
 export function UatCard({
   uatCase,
   index,
-  selected = false,
-  editing = false,
+  isSelected = false,
+  isEditing = false,
   onSelect,
   onEditStart,
   onEditCancel,
@@ -42,36 +38,39 @@ export function UatCard({
   onReject,
   onSelectAlternative,
 }: UatCardProps) {
-  const [draft, setDraft] = useState<EditFields>(uatCase);
+  const [draft, setDraft] = useState<UatCaseTextUpdate>(uatCase);
   const alternatives = uatCase.alternatives ?? [];
-  const swap = useAlternativeSwap(onSelectAlternative);
+  const alternativeSwap = useAlternativeSwap(onSelectAlternative);
 
-  // Re-seed the draft from the current values each time edit mode is entered,
-  // so a previous (cancelled) edit never leaks into a later edit session.
+  // Reset the draft on entering edit mode, so cancelled edits don't carry over.
   useEffect(() => {
-    if (editing) {
+    if (isEditing) {
       setDraft({ title: uatCase.title, description: uatCase.description });
     }
-  }, [editing, uatCase]);
+  }, [isEditing, uatCase]);
 
   const cardClasses = `rounded-xl border bg-white p-4 shadow-sm ${
-    selected ? "border-primary ring-2 ring-primary ring-offset-2" : "border-gray-200"
+    isSelected ? "border-primary ring-2 ring-primary ring-offset-2" : "border-gray-200"
   }`;
 
-  if (editing) {
+  if (isEditing) {
     return (
       <div className={cardClasses}>
         <div className="mb-3 flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-400">#UAT {index + 1}</span>
           <input
             value={draft.title}
-            onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+            onChange={(event) =>
+              setDraft((previous) => ({ ...previous, title: event.target.value }))
+            }
             className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 font-bold text-gray-900 outline-none focus:border-primary"
           />
         </div>
         <textarea
           value={draft.description}
-          onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
+          onChange={(event) =>
+            setDraft((previous) => ({ ...previous, description: event.target.value }))
+          }
           rows={3}
           className="w-full resize-none rounded-lg border border-gray-200 p-2 text-sm text-gray-900 outline-none focus:border-primary"
         />
@@ -129,8 +128,8 @@ export function UatCard({
           {onSelectAlternative && alternatives.length > 0 && (
             <AlternativesToggle
               count={alternatives.length}
-              expanded={swap.expanded}
-              onToggle={swap.toggle}
+              isExpanded={alternativeSwap.isExpanded}
+              onToggle={alternativeSwap.toggle}
             />
           )}
         </div>
@@ -139,12 +138,12 @@ export function UatCard({
           <AcceptRejectButtons status={uatCase.status} onAccept={onAccept} onReject={onReject} />
         </div>
       </div>
-      {onSelectAlternative && swap.expanded && alternatives.length > 0 && (
+      {onSelectAlternative && alternativeSwap.isExpanded && alternatives.length > 0 && (
         <AlternativeList
           alternatives={alternatives}
-          swappingId={swap.swappingId}
-          onUse={swap.use}
-          renderBody={(alt) => alt.description}
+          swappingId={alternativeSwap.swappingId}
+          onSwap={alternativeSwap.swap}
+          renderBody={(alternative) => alternative.description}
         />
       )}
     </div>

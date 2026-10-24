@@ -5,12 +5,12 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.models_uat_cases import (
+    UatApplyApprovedRequest,
     UatCase,
     UatCaseGroup,
     UatCaseGroupsResult,
     UatCaseStatusUpdate,
     UatCaseTextUpdate,
-    UatApplyApprovedRequest,
     UatRegenerateSelectedRequest,
     UatRegenerateSelectedResponse,
 )
@@ -20,8 +20,7 @@ from app.repositories.uat_cases import UatCaseRepository
 from app.services.agents import GenerationError
 from app.services.uat_cases import UatCaseService
 
-router = APIRouter(
-    prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
+router = APIRouter(prefix="/sessions/{session_id}/uat-cases", tags=["uat-cases"])
 
 
 def get_uat_case_service(session: Session = Depends(get_session)) -> UatCaseService:
@@ -38,7 +37,7 @@ def list_uat_cases(
     session_id: int, service: UatCaseService = Depends(get_uat_case_service)
 ) -> UatCaseGroupsResult:
     """Return the session's test cases, grouped by AC."""
-    result = service.list_items(session_id)
+    result = service.list_for_session(session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return result
@@ -48,7 +47,7 @@ def list_uat_cases(
 async def generate_uat_cases(
     session_id: int, service: UatCaseService = Depends(get_uat_case_service)
 ) -> UatCaseGroupsResult:
-    """Generate test cases for each accepted AC, replacing old ones."""
+    """Generate test cases for each accepted AC, replacing the old ones."""
     try:
         result = await service.generate(session_id)
     except GenerationError as error:
@@ -93,7 +92,7 @@ def regenerate_selected(
     data: UatRegenerateSelectedRequest,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatRegenerateSelectedResponse:
-    """Propose replacements for one test case without saving them."""
+    """Propose one refined version of a test case, scored but not saved."""
     try:
         result = service.regenerate_selected(session_id, uat_id, data)
     except GenerationError as error:
@@ -110,11 +109,14 @@ def apply_approved(
     data: UatApplyApprovedRequest,
     service: UatCaseService = Depends(get_uat_case_service),
 ) -> UatCaseGroup:
-    """Replace a test case with the candidates the reviewer approved."""
+    """Replace a test case with the approved candidates.
+
+    Returns the parent AC's updated group.
+    """
     try:
         group = service.apply_approved(session_id, uat_id, data)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     if group is None:
         raise HTTPException(status_code=404, detail="UAT case not found")
     return group
@@ -130,6 +132,5 @@ def select_uat_alternative(
     """Show another model's version of a test case in its place."""
     result = service.select_alternative(session_id, uat_id, candidate_id)
     if result is None:
-        raise HTTPException(
-            status_code=404, detail="UAT case or alternative not found")
+        raise HTTPException(status_code=404, detail="UAT case or alternative not found")
     return result

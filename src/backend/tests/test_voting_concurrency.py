@@ -1,12 +1,6 @@
-"""Concurrency bounds on the voting layer.
+"""Concurrency limits on the voting layer.
 
-Regression cover for a bug seen in a live run: 3 of 5 candidates timed
-out at exactly 120.0s while the first two scored fine. Ollama serves one
-request per model at a time, so an unbounded `asyncio.gather` queues the
-rest — and the per-request timeout counts that queue time, so later
-candidates expire before they ever start. Downstream that reads as an
-unrated candidate, which always loses its group, so a capacity problem
-silently picked the winner.
+Ollama serves one request at a time, so unlimited requests queued and timed out.
 """
 
 from __future__ import annotations
@@ -24,9 +18,7 @@ from voting.provider import (
     max_parallel_requests,
 )
 
-
-OLLAMA = JudgeConfig(id="qwen", provider="ollama",
-                     model="qwen2.5:7b", max_parallel=1)
+OLLAMA = JudgeConfig(id="qwen", provider="ollama", model="qwen2.5:7b", max_parallel=1)
 CLOUD = JudgeConfig(id="luna", provider="openai", model="gpt-6-luna")
 
 
@@ -75,7 +67,8 @@ def test_a_judge_limited_to_one_request_is_scored_one_at_a_time():
 
     result = asyncio.run(
         evaluate_with_combined_model(
-            _input(["a", "b", "c", "d", "e"]), cast(CombinedJudgeClient, client))
+            _input(["a", "b", "c", "d", "e"]), cast(CombinedJudgeClient, client)
+        )
     )
 
     assert len(result.output) == 5
@@ -86,11 +79,13 @@ def test_a_judge_limited_to_one_request_is_scored_one_at_a_time():
 
 
 def test_cloud_judges_still_run_concurrently():
-    """Cap only local single-model judges, not every judge."""
     client = _RecordingClient(CLOUD)
 
-    asyncio.run(evaluate_with_combined_model(
-        _input(["a", "b", "c", "d"]), cast(CombinedJudgeClient, client)))
+    asyncio.run(
+        evaluate_with_combined_model(
+            _input(["a", "b", "c", "d"]), cast(CombinedJudgeClient, client)
+        )
+    )
 
     assert client.peak_in_flight > 1
 
@@ -98,8 +93,11 @@ def test_cloud_judges_still_run_concurrently():
 def test_every_candidate_is_still_scored_when_serialised():
     client = _RecordingClient(OLLAMA)
 
-    result = asyncio.run(evaluate_with_combined_model(
-        _input(["a", "b", "c"]), cast(CombinedJudgeClient, client)))
+    result = asyncio.run(
+        evaluate_with_combined_model(
+            _input(["a", "b", "c"]), cast(CombinedJudgeClient, client)
+        )
+    )
 
     assert [item.output for item in result.output] == ["a", "b", "c"]
     assert all(item.overall_score == 4 for item in result.output)
@@ -127,19 +125,24 @@ def test_timeout_is_overridable_for_slow_local_hardware(monkeypatch):
 
 
 def test_one_judge_limit_covers_concurrent_scoring_runs():
-    """Hold one judge's limit across concurrent scoring runs.
-
-    UAT generation scores every accepted AC at once. The judge's limit
-    has to hold across those runs, not apply separately to each, or the
-    total trips the provider's org-wide concurrency limit.
-    """
-    judge = JudgeConfig(id="claude-limited", provider="anthropic",
-                        model="claude-sonnet-5-5", max_parallel=2)
+    """UAT generation scores every AC at once, so the limit must span runs."""
+    judge = JudgeConfig(
+        id="claude-limited",
+        provider="anthropic",
+        model="claude-sonnet-5-5",
+        max_parallel=2,
+    )
     client = _RecordingClient(judge)
 
     async def three_runs_at_once():
         await asyncio.gather(
-            *(evaluate_with_combined_model(_input([f"{run}{c}" for c in "abc"]), cast(CombinedJudgeClient, client)) for run in "xyz")
+            *(
+                evaluate_with_combined_model(
+                    _input([f"{run}{letter}" for letter in "abc"]),
+                    cast(CombinedJudgeClient, client),
+                )
+                for run in "xyz"
+            )
         )
 
     asyncio.run(three_runs_at_once())

@@ -3,6 +3,7 @@ interface AttachmentChipProps {
   onRemove?: () => void;
 }
 
+/** An attachment's filename, with a remove button when `onRemove` is given. */
 export function AttachmentChip({ filename, onRemove }: AttachmentChipProps) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-sm text-gray-700 shadow-sm">

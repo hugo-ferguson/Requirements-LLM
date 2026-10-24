@@ -3,13 +3,7 @@ import { documentsApi } from "../api/documents";
 import { uploadFilesAsAttachments } from "../lib/attachments";
 import type { Attachment } from "../types/conversation";
 
-/**
- * Deletes an ingested document that never made it into a message.
- *
- * Best-effort and deliberately not awaited: the chip disappears either way,
- * and a failed cleanup is worth a console warning, not an error in the user's
- * face about a file they've already discarded.
- */
+/** Deletes an unsent attachment's document. Failures only log a warning. */
 function discardDocument(attachment: Attachment): void {
   if (attachment.document_id == null) return;
   documentsApi.remove(attachment.document_id).catch((error) => {
@@ -17,15 +11,10 @@ function discardDocument(attachment: Attachment): void {
   });
 }
 
-/**
- * Owns the attachments waiting to be sent with the next message.
- *
- * Attaching a file uploads it to the backend's ingest pipeline, which can take
- * a while — a PDF is parsed and a local vision model reads images — so the
- * upload has its own in-flight and error state, separate from sending.
- */
+/** Holds the attachments for the next message, with upload progress and errors. */
 export function useAttachmentUploads() {
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
+  // Files in the current upload batch, or 0.
   const [uploadCount, setUploadCount] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -35,10 +24,10 @@ export function useAttachmentUploads() {
     try {
       const { attachments, errors } = await uploadFilesAsAttachments(files);
       if (attachments.length > 0) {
-        setPendingAttachments((prev) => [...prev, ...attachments]);
+        setPendingAttachments((previous) => [...previous, ...attachments]);
       }
       if (errors.length > 0) {
-        setUploadError(errors.map((error) => error.message).join(" "));
+        setUploadError(errors.join(" "));
       }
     } finally {
       setUploadCount(0);
@@ -48,22 +37,18 @@ export function useAttachmentUploads() {
   const removeAttachment = useCallback(
     (index: number) => {
       const removed = pendingAttachments[index];
-      setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
+      setPendingAttachments((previous) =>
+        previous.filter((_, attachmentIndex) => attachmentIndex !== index),
+      );
       if (removed) discardDocument(removed);
     },
     [pendingAttachments],
   );
 
-  /**
-   * Forgets the pending attachments because they've been sent — the message
-   * owns them now, so the ingested documents must stay.
-   */
+  // After sending. The message owns the documents now, so keep them.
   const clearAttachments = useCallback(() => setPendingAttachments([]), []);
 
-  /**
-   * Drops the pending attachments because the user backed out, deleting the
-   * documents they ingested.
-   */
+  // When the user backs out. Also deletes the documents.
   const discardAttachments = useCallback(() => {
     pendingAttachments.forEach(discardDocument);
     setPendingAttachments([]);

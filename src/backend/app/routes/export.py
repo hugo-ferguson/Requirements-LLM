@@ -1,3 +1,5 @@
+"""HTTP route for exporting a session's approved requirements."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
@@ -12,6 +14,7 @@ router = APIRouter(prefix="/sessions/{session_id}/export", tags=["export"])
 
 
 def get_export_service(session: Session = Depends(get_session)) -> ExportService:
+    """Build the export service for one request."""
     return ExportService(
         SessionRepository(session),
         AcceptanceCriteriaRepository(session),
@@ -23,6 +26,10 @@ def get_export_service(session: Session = Depends(get_session)) -> ExportService
 def get_export(
     session_id: int, service: ExportService = Depends(get_export_service)
 ) -> ExportResponse:
+    """Return the session's accepted ACs and UAT cases as a JSON document.
+
+    `warnings` lists what's left out, so the user can confirm first.
+    """
     result = service.build(session_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")

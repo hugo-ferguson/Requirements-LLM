@@ -1,41 +1,38 @@
 import { useEffect, useState } from "react";
-import type { AcceptanceCriterion } from "../../api/acceptanceCriteria";
+import type {
+  AcceptanceCriterion,
+  AcceptanceCriterionTextUpdate,
+} from "../../api/acceptanceCriteria";
 import { ScorePill } from "./ScorePill";
 import { OverallScoreBadge } from "./OverallScoreBadge";
 import { AcceptRejectButtons } from "./AcceptRejectButtons";
-import {
-  AlternativeList,
-  AlternativesToggle,
-  useAlternativeSwap,
-} from "../shared/AlternativeList";
-
-interface EditFields {
-  title: string;
-  given: string;
-  when: string;
-  then: string;
-}
+import { AlternativeList, AlternativesToggle, useAlternativeSwap } from "../shared/AlternativeList";
 
 interface AcCardProps {
   criterion: AcceptanceCriterion;
+  /** Zero-based position, shown as "#1" and so on. */
   index: number;
-  selected?: boolean;
-  editing?: boolean;
+  isSelected?: boolean;
+  /** Swaps the text for inputs, with Save and Cancel buttons. */
+  isEditing?: boolean;
+  /** Makes the card's body clickable. */
   onSelect?: () => void;
+  /** Shows the edit (pencil) button. */
   onEditStart?: () => void;
   onEditCancel?: () => void;
-  onEditSave?: (fields: EditFields) => void;
+  onEditSave?: (fields: AcceptanceCriterionTextUpdate) => void;
   onAccept: () => void;
   onReject: () => void;
   /** Enables the other-versions dropdown; resolves once the swap is saved. */
   onSelectAlternative?: (candidateId: number) => Promise<void>;
 }
 
+/** One acceptance criterion with its scores and review buttons, editable in place. */
 export function AcCard({
   criterion,
   index,
-  selected = false,
-  editing = false,
+  isSelected = false,
+  isEditing = false,
   onSelect,
   onEditStart,
   onEditCancel,
@@ -44,14 +41,13 @@ export function AcCard({
   onReject,
   onSelectAlternative,
 }: AcCardProps) {
-  const [draft, setDraft] = useState<EditFields>(criterion);
+  const [draft, setDraft] = useState<AcceptanceCriterionTextUpdate>(criterion);
   const alternatives = criterion.alternatives ?? [];
-  const swap = useAlternativeSwap(onSelectAlternative);
+  const alternativeSwap = useAlternativeSwap(onSelectAlternative);
 
-  // Re-seed the draft from the current values each time edit mode is entered,
-  // so a previous (cancelled) edit never leaks into a later edit session.
+  // Reset the draft on entering edit mode, so cancelled edits don't carry over.
   useEffect(() => {
-    if (editing) {
+    if (isEditing) {
       setDraft({
         title: criterion.title,
         given: criterion.given,
@@ -59,20 +55,22 @@ export function AcCard({
         then: criterion.then,
       });
     }
-  }, [editing, criterion]);
+  }, [isEditing, criterion]);
 
   const cardClasses = `rounded-xl border bg-white p-4 shadow-sm ${
-    selected ? "border-primary ring-2 ring-primary ring-offset-2" : "border-gray-200"
+    isSelected ? "border-primary ring-2 ring-primary ring-offset-2" : "border-gray-200"
   }`;
 
-  if (editing) {
+  if (isEditing) {
     return (
       <div className={cardClasses}>
         <div className="mb-3 flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-400">#{index + 1}</span>
           <input
             value={draft.title}
-            onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+            onChange={(event) =>
+              setDraft((previous) => ({ ...previous, title: event.target.value }))
+            }
             className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 font-bold text-gray-900 outline-none focus:border-primary"
           />
         </div>
@@ -83,7 +81,7 @@ export function AcCard({
               <textarea
                 value={draft[field]}
                 onChange={(event) =>
-                  setDraft((prev) => ({ ...prev, [field]: event.target.value }))
+                  setDraft((previous) => ({ ...previous, [field]: event.target.value }))
                 }
                 rows={3}
                 className="resize-none rounded-lg border border-gray-200 p-2 text-sm text-gray-900 outline-none focus:border-primary"
@@ -114,10 +112,7 @@ export function AcCard({
   return (
     <div className={cardClasses}>
       <div className="flex items-start gap-4">
-        <div
-          onClick={onSelect}
-          className={`min-w-0 flex-1 ${onSelect ? "cursor-pointer" : ""}`}
-        >
+        <div onClick={onSelect} className={`min-w-0 flex-1 ${onSelect ? "cursor-pointer" : ""}`}>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-400">#{index + 1}</span>
             <span className="font-bold text-gray-900">{criterion.title}</span>
@@ -150,8 +145,8 @@ export function AcCard({
           {onSelectAlternative && alternatives.length > 0 && (
             <AlternativesToggle
               count={alternatives.length}
-              expanded={swap.expanded}
-              onToggle={swap.toggle}
+              isExpanded={alternativeSwap.isExpanded}
+              onToggle={alternativeSwap.toggle}
             />
           )}
         </div>
@@ -160,12 +155,14 @@ export function AcCard({
           <AcceptRejectButtons status={criterion.status} onAccept={onAccept} onReject={onReject} />
         </div>
       </div>
-      {onSelectAlternative && swap.expanded && alternatives.length > 0 && (
+      {onSelectAlternative && alternativeSwap.isExpanded && alternatives.length > 0 && (
         <AlternativeList
           alternatives={alternatives}
-          swappingId={swap.swappingId}
-          onUse={swap.use}
-          renderBody={(alt) => `GIVEN ${alt.given}, WHEN ${alt.when}, THEN ${alt.then}`}
+          swappingId={alternativeSwap.swappingId}
+          onSwap={alternativeSwap.swap}
+          renderBody={(alternative) =>
+            `GIVEN ${alternative.given}, WHEN ${alternative.when}, THEN ${alternative.then}`
+          }
         />
       )}
     </div>

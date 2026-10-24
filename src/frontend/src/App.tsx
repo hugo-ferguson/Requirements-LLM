@@ -9,6 +9,7 @@ import { ExportPage } from "./pages/ExportPage";
 import { SessionsProvider } from "./context/SessionsContext";
 import { TAB_PATHS } from "./routes";
 
+/** The app's routes. Unknown paths go back to the start page. */
 export default function App() {
   return (
     <SessionsProvider>

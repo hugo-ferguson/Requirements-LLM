@@ -1,10 +1,6 @@
-"""Builds one PydanticAI agent per roster entry.
+"""Build one PydanticAI agent per roster entry.
 
-Every agent shares the same `deps_type` and system prompt, and every
-agent in a given pass shares the same `output_type`. Only the underlying
-model changes. That shared contract is what makes the ensemble outputs
-comparable, and it is why adding a model is a config edit rather than a
-code change.
+Agents in a pass differ only by model, so their outputs are comparable.
 """
 
 from __future__ import annotations
@@ -12,7 +8,6 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import Model
 
-from app.llm_config import GenerationAgentConfig
 from app.generation.models import (
     GeneratedCriteriaSet,
     GeneratedCriterion,
@@ -24,6 +19,7 @@ from app.generation.models import (
     NumberedUatCaseSet,
 )
 from app.generation.prompts import SYSTEM_PROMPT, GenerationDeps
+from app.llm_config import GenerationAgentConfig
 from llm.spec import build_model, with_output_mode
 
 GenerationAgent = Agent[GenerationDeps, GeneratedCriteriaSet]
@@ -35,57 +31,67 @@ GenerationOutput = (
 )
 
 
-def _stub_output(config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet):
-    """Return deterministic output for the `test` provider.
+def _stub_output(
+    config: GenerationAgentConfig, output_type: GenerationOutput
+) -> (
+    GeneratedCriteriaSet
+    | NumberedCriteriaSet
+    | GeneratedUatCaseSet
+    | NumberedUatCaseSet
+):
+    """Return fixed output for the `test` provider.
 
-    Two criteria are identical across every test agent and one is seeded
-    with the agent id, so a two-agent test roster pools four distinct
-    candidates (the two shared ones once each, plus one per agent) and
-    still exercises the cross-agent dedupe path.
-    As a pass-2 follower it answers titles 1-3 with the same text, by
-    number. UAT output follows the same pattern with two cases.
+    Two criteria are shared by every agent and one is unique, to exercise dedupe.
     """
     if output_type in (GeneratedUatCaseSet, NumberedUatCaseSet):
         return _stub_uat_output(config, output_type)
-    full = _stub_criteria(config)
+    criteria_set = _stub_criteria(config)
     if output_type is NumberedCriteriaSet:
         return NumberedCriteriaSet(
             criteria=[
-                NumberedCriterion(title_number=n, given=c.given,
-                                  when=c.when, then=c.then)
-                for n, c in enumerate(full.criteria, start=1)
+                NumberedCriterion(
+                    title_number=number,
+                    given=criterion.given,
+                    when=criterion.when,
+                    then=criterion.then,
+                )
+                for number, criterion in enumerate(criteria_set.criteria, start=1)
             ]
         )
-    return full
+    return criteria_set
 
 
 def _stub_uat_output(
     config: GenerationAgentConfig, output_type: GenerationOutput
 ) -> GeneratedUatCaseSet | NumberedUatCaseSet:
-    # The UAT counterpart of `_stub_output`: two cases, tagged with the
-    # agent id so each agent's version is distinguishable.
+    """Return two stub UAT cases, tagged with the agent ID."""
     cases = [
         GeneratedUatCase(
             title="Log in with valid credentials",
-            description=f"{config.id}: enter a registered email and password; the home page opens",
+            description=(
+                f"{config.id}: enter a registered email and password; "
+                "the home page opens"
+            ),
         ),
         GeneratedUatCase(
             title="Reject a wrong password",
-            description=f"{config.id}: enter a wrong password; an error shows and login fails",
+            description=(
+                f"{config.id}: enter a wrong password; an error shows and login fails"
+            ),
         ),
     ]
     if output_type is NumberedUatCaseSet:
         return NumberedUatCaseSet(
             cases=[
-                NumberedUatCase(title_number=n, description=c.description)
-                for n, c in enumerate(cases, start=1)
+                NumberedUatCase(title_number=number, description=case.description)
+                for number, case in enumerate(cases, start=1)
             ]
         )
     return GeneratedUatCaseSet(cases=cases)
 
 
 def _stub_criteria(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
-    # Two criteria shared by every agent, and one unique to `config`.
+    """Return two criteria every agent shares, and one unique to `config`."""
     return GeneratedCriteriaSet(
         user_story_summary="Stubbed summary for offline tests.",
         criteria=[
@@ -111,14 +117,8 @@ def _stub_criteria(config: GenerationAgentConfig) -> GeneratedCriteriaSet:
     )
 
 
-def _build_model(
-    config: GenerationAgentConfig, output_type: GenerationOutput = GeneratedCriteriaSet
-) -> Model:
-    """Translate a roster entry into a concrete PydanticAI model object.
-
-    The `test` provider answers with `_stub_output`; every real provider
-    goes through the one generic builder.
-    """
+def _build_model(config: GenerationAgentConfig, output_type: GenerationOutput) -> Model:
+    """Build the model for a roster entry, stubbing the `test` provider."""
     if config.provider == "test":
         from pydantic_ai.models.test import TestModel
 
@@ -134,13 +134,16 @@ def build_agent(
     system_prompt: str = SYSTEM_PROMPT,
     with_context: bool = True,
 ) -> GenerationAgent:
-    """Construct a generation agent for one roster entry.
+    """Build a generation agent for one roster entry.
 
-    `output_type` is `NumberedCriteriaSet` for pass-2 followers in
-    title-anchored generation, and the full criteria set everywhere
-    else. UAT generation passes its own output types and system prompt,
-    and `with_context=False`: it works from one AC, not the user story
-    and its retrieved documents.
+    Args:
+        config: The roster entry.
+        output_type: The `*Set` model the agent returns.
+        system_prompt: The base system prompt.
+        with_context: Whether to append project context and reviewer feedback.
+
+    Raises:
+        ModelBuildError: The provider is unknown or its API key is missing.
     """
     agent: GenerationAgent = Agent(
         _build_model(config, output_type),
@@ -155,13 +158,13 @@ def build_agent(
         return agent
 
     @agent.system_prompt
-    def inject_project_context(ctx: RunContext[GenerationDeps]) -> str:
+    def inject_project_context(run_context: RunContext[GenerationDeps]) -> str:
         """Append the retrieved project context (backlog R11)."""
-        return ctx.deps.context_block()
+        return run_context.deps.context_block()
 
     @agent.system_prompt
-    def inject_reviewer_feedback(ctx: RunContext[GenerationDeps]) -> str:
+    def inject_reviewer_feedback(run_context: RunContext[GenerationDeps]) -> str:
         """Append reviewer feedback when regenerating (backlog R20)."""
-        return ctx.deps.feedback_block() or ""
+        return run_context.deps.feedback_block() or ""
 
     return agent

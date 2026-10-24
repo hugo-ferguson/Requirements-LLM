@@ -8,13 +8,18 @@ interface ChatInputBarProps {
   pendingAttachments: Attachment[];
   onAttachFiles: (files: FileList) => void;
   onRemoveAttachment: (index: number) => void;
+  /** Receives the trimmed text. */
   onSend: (text: string) => void;
+  /** Disables typing, attaching and sending. */
   disabled: boolean;
   isUploading?: boolean;
+  /** How many files are uploading, for the "Reading N files…" chip. */
   uploadCount?: number;
+  /** An extra control after the Send button. */
   trailingAction?: ReactNode;
 }
 
+/** The chat input: attach files, type and send. */
 export function ChatInputBar({
   pendingAttachments,
   onAttachFiles,
@@ -32,16 +37,16 @@ export function ChatInputBar({
     if (event.target.files && event.target.files.length > 0) {
       onAttachFiles(event.target.files);
     }
+    // Clear the input so choosing the same file again still fires a change.
     event.target.value = "";
   }
 
-  const sendDisabled =
+  const isSendDisabled =
     disabled || isUploading || (!text.trim() && pendingAttachments.length === 0);
 
   function handleSend() {
-    const trimmed = text.trim();
-    if (sendDisabled) return;
-    onSend(trimmed);
+    if (isSendDisabled) return;
+    onSend(text.trim());
     setText("");
   }
 
@@ -56,11 +61,11 @@ export function ChatInputBar({
     <div>
       {(pendingAttachments.length > 0 || isUploading) && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          {pendingAttachments.map((attachment, i) => (
+          {pendingAttachments.map((attachment, index) => (
             <AttachmentChip
-              key={`${attachment.filename}-${i}`}
+              key={`${attachment.filename}-${index}`}
               filename={attachment.filename}
-              onRemove={() => onRemoveAttachment(i)}
+              onRemove={() => onRemoveAttachment(index)}
             />
           ))}
           {isUploading && (
@@ -104,7 +109,7 @@ export function ChatInputBar({
         <button
           type="button"
           onClick={handleSend}
-          disabled={sendDisabled}
+          disabled={isSendDisabled}
           className="rounded-full bg-primary px-5 py-2 font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         >
           Send

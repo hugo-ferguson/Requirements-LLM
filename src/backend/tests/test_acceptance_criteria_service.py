@@ -17,9 +17,11 @@ from app.repositories.acceptance_criteria import AcceptanceCriteriaRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.uat_cases import UatCaseRepository
-from app.services.acceptance_criteria import AcceptanceCriteriaService
+from app.services.acceptance_criteria import (
+    AcceptanceCriteriaService,
+    GeneratedCriterion,
+)
 from app.services.agents import GenerationError
-from app.services.conversation import GeneratedCriterion
 from app.services.scoring import CandidateScore
 
 
@@ -36,10 +38,10 @@ def db_session_fixture():
 
 def _seed_ac(db_session: Session) -> tuple[int, int]:
     """Create a session with one AC; return (session_id, ac_id)."""
-    sessions = SessionRepository(db_session)
-    ac_repo = AcceptanceCriteriaRepository(db_session)
+    session_repository = SessionRepository(db_session)
+    ac_repository = AcceptanceCriteriaRepository(db_session)
 
-    chat_session = sessions.create("test session")
+    chat_session = session_repository.create("test session")
     seeded = AcceptanceCriterion(
         id=0,
         title="Original title",
@@ -47,11 +49,12 @@ def _seed_ac(db_session: Session) -> tuple[int, int]:
         when="original when",
         then="original then",
         scores=AcceptanceCriterionScores(
-            relevance=1, correctness=1, understandability=1, coverage=1),
+            relevance=1, correctness=1, understandability=1, coverage=1
+        ),
         overall_score=1,
     )
     assert chat_session.id is not None
-    [record] = ac_repo.persist_batch(chat_session.id, [seeded])
+    [record] = ac_repository.persist_batch(chat_session.id, [seeded])
     assert record.id is not None
     return chat_session.id, record.id
 
@@ -59,50 +62,62 @@ def _seed_ac(db_session: Session) -> tuple[int, int]:
 def _service(
     db_session: Session, agent: Agent[None, GeneratedCriterion], scorer=None
 ) -> AcceptanceCriteriaService:
+    """Build the service on `agent`, with a fixed-score scorer by default."""
     return AcceptanceCriteriaService(
         SessionRepository(db_session),
         AcceptanceCriteriaRepository(db_session),
         MessageRepository(db_session),
         UatCaseRepository(db_session),
-        regen_agent=agent,
+        regeneration_agent=agent,
         scorer=scorer
-        or (lambda prompt, candidates, *, reference_answer="", settings=None: [
-            CandidateScore(relevance=3.5, correctness=4,
-                           understandability=4.5, coverage=3, overall=3.75)
-            for _ in candidates
-        ]),
+        or (
+            lambda prompt, candidates, *, reference_answer="", settings=None: [
+                CandidateScore(
+                    relevance=3.5,
+                    correctness=4,
+                    understandability=4.5,
+                    coverage=3,
+                    overall=3.75,
+                )
+                for _ in candidates
+            ]
+        ),
     )
 
 
-def _tool_response(info: AgentInfo, **fields) -> ModelResponse:
+def _tool_response(agent_info: AgentInfo, **fields) -> ModelResponse:
+    """Return a model response that calls the agent's output tool with `fields`."""
     return ModelResponse(
-        parts=[ToolCallPart(tool_name=info.output_tools[0].name, args=fields)]
+        parts=[ToolCallPart(tool_name=agent_info.output_tools[0].name, args=fields)]
     )
 
 
-def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_and_scorer(
+def test_regenerate_selected_returns_one_candidate_from_the_model_and_scorer(
     db_session: Session,
 ) -> None:
     session_id, ac_id = _seed_ac(db_session)
 
-    def refine(messages, info):
+    def refine(messages, agent_info):
         return _tool_response(
-            info,
+            agent_info,
             title="Refined title",
             given="refined given",
             when="refined when",
             then="refined then",
         )
 
-    service = _service(db_session, Agent(FunctionModel(
-        refine), output_type=GeneratedCriterion, system_prompt="test"))
+    service = _service(
+        db_session,
+        Agent(
+            FunctionModel(refine), output_type=GeneratedCriterion, system_prompt="test"
+        ),
+    )
 
     response = service.regenerate_selected(
         session_id,
         ac_id,
         RegenerateSelectedRequest(
-            messages=[ConversationMessage(
-                role="user", text="please tighten this up")]
+            messages=[ConversationMessage(role="user", text="please tighten this up")]
         ),
     )
 
@@ -120,14 +135,19 @@ def test_regenerate_selected_returns_exactly_one_candidate_reflecting_the_model_
 def test_regenerate_selected_returns_none_for_a_missing_ac(db_session: Session) -> None:
     session_id, _ = _seed_ac(db_session)
 
-    def refine(messages, info):
+    def refine(messages, agent_info):
         raise AssertionError("should not be called for a missing AC")
 
-    service = _service(db_session, Agent(FunctionModel(
-        refine), output_type=GeneratedCriterion, system_prompt="test"))
+    service = _service(
+        db_session,
+        Agent(
+            FunctionModel(refine), output_type=GeneratedCriterion, system_prompt="test"
+        ),
+    )
 
     result = service.regenerate_selected(
-        session_id, 9999, RegenerateSelectedRequest(messages=[]))
+        session_id, 9999, RegenerateSelectedRequest(messages=[])
+    )
 
     assert result is None
 
@@ -137,14 +157,19 @@ def test_regenerate_selected_raises_generation_error_when_the_model_fails(
 ) -> None:
     session_id, ac_id = _seed_ac(db_session)
 
-    def explode(messages, info):
+    def explode(messages, agent_info):
         raise RuntimeError("upstream is down")
 
-    service = _service(db_session, Agent(FunctionModel(
-        explode), output_type=GeneratedCriterion, system_prompt="test"))
+    service = _service(
+        db_session,
+        Agent(
+            FunctionModel(explode), output_type=GeneratedCriterion, system_prompt="test"
+        ),
+    )
 
     with pytest.raises(GenerationError) as caught:
         service.regenerate_selected(
-            session_id, ac_id, RegenerateSelectedRequest(messages=[]))
+            session_id, ac_id, RegenerateSelectedRequest(messages=[])
+        )
 
     assert "upstream is down" in str(caught.value)

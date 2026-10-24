@@ -10,10 +10,10 @@ class ConversationAttachment(SQLModel):
 
     filename: str
     content: str
-    # Set when the attachment came from /documents/upload, so the
-    # message can be traced back to the ingested (and embedded)
-    # document.
-    document_id: int | None = None
+    document_id: int | None = Field(
+        default=None,
+        description="ID of the ingested document, if uploaded via /documents/upload.",
+    )
 
 
 class ConversationMessage(SQLModel):
@@ -40,12 +40,9 @@ class AcceptanceCriterionScores(SQLModel):
 
 
 class AcceptanceCriterionAlternative(SQLModel):
-    """A losing candidate for the same title as its parent criterion.
+    """Another model's version of the same criterion.
 
-    Carries no `status`: an alternative is not a reviewable item in its
-    own right, it is the answer to "what did the other model say?". It
-    does carry `candidate_id` once persisted, so the reviewer can swap
-    it in.
+    `candidate_id` is set once stored, so the reviewer can swap it in.
     """
 
     candidate_id: int | None = None
@@ -69,16 +66,16 @@ class AcceptanceCriterion(SQLModel):
     overall_score: float = Field(ge=0, le=5)
     status: Literal["pending", "accepted", "rejected"] = "pending"
 
-    # Both fields are additive with defaults, so an existing client that
-    # knows nothing about them keeps working unchanged — the frontend
-    # can adopt the alternatives UI whenever it is ready rather than in
-    # lockstep with this.
+    # Defaults let older clients and apply-approved requests omit these.
     source_agent: str | None = None
     alternatives: list[AcceptanceCriterionAlternative] = Field(default_factory=list)
-    # UAT cases generated against this AC, whatever their status. Lets the
-    # frontend warn before an edit leaves them out of date (or a regeneration
-    # deletes them). Additive with a default, like the fields above.
-    uat_case_count: int = 0
+    uat_case_count: int = Field(
+        default=0,
+        description=(
+            "Number of UAT cases generated from this AC, any status. Used to "
+            "warn before an edit or regeneration affects them."
+        ),
+    )
 
 
 class GenerateResult(SQLModel):

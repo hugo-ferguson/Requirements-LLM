@@ -12,6 +12,7 @@ interface ScorePillProps {
   value: number;
 }
 
+/** One of the judges' four scores, coloured by which score it is. */
 export function ScorePill({ label, value }: ScorePillProps) {
   return (
     <span

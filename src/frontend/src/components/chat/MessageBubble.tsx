@@ -5,6 +5,7 @@ interface MessageBubbleProps {
   message: ChatMessage;
 }
 
+/** One chat message: the user's on the right, the assistant's on the left. */
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
   return (
@@ -17,8 +18,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
         {message.attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
-            {message.attachments.map((attachment, i) => (
-              <AttachmentChip key={`${attachment.filename}-${i}`} filename={attachment.filename} />
+            {message.attachments.map((attachment, index) => (
+              <AttachmentChip
+                key={`${attachment.filename}-${index}`}
+                filename={attachment.filename}
+              />
             ))}
           </div>
         )}

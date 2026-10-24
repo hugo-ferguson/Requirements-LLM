@@ -1,6 +1,6 @@
 """Table and API models for chat sessions and their messages."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import JSON, Column
@@ -10,16 +10,12 @@ from app.models_conversation import ConversationAttachment
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    """Return the current time in UTC."""
+    return datetime.now(UTC)
 
 
 class ChatSession(SQLModel, table=True):
-    """A persisted chat session, like a single ChatGPT conversation.
-
-    Named `ChatSession` (not `Session`) to avoid clashing with
-    `sqlmodel.Session`, which is already used throughout the app as the
-    DB session type.
-    """
+    """A stored chat session. Named to avoid clashing with `sqlmodel.Session`."""
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = "New session"
@@ -28,14 +24,13 @@ class ChatSession(SQLModel, table=True):
 
 
 class Message(SQLModel, table=True):
-    """A single persisted message within a ChatSession."""
+    """A single stored message in a chat session."""
 
     id: int | None = Field(default=None, primary_key=True)
     session_id: int = Field(foreign_key="chatsession.id", index=True)
     role: str
     text: str
-    attachments: list[dict] = Field(
-        default_factory=list, sa_column=Column(JSON))
+    attachments: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=_utcnow)
 
 

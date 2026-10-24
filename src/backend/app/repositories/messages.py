@@ -6,16 +6,19 @@ from app.models_session import Message
 
 
 class MessageRepository:
-    """Owns all direct database access for Message rows."""
+    """Reads and writes `Message` rows."""
 
     def __init__(self, session: Session):
         """Bind the repository to one database session."""
         self.session = session
 
-    def create(self, session_id: int, role: str, text: str, attachments: list[dict]) -> Message:
+    def create(
+        self, session_id: int, role: str, text: str, attachments: list[dict]
+    ) -> Message:
         """Store a message in a session and return it."""
-        message = Message(session_id=session_id, role=role,
-                          text=text, attachments=attachments)
+        message = Message(
+            session_id=session_id, role=role, text=text, attachments=attachments
+        )
         self.session.add(message)
         self.session.commit()
         self.session.refresh(message)
@@ -24,8 +27,9 @@ class MessageRepository:
     def list_for_session(self, session_id: int) -> list[Message]:
         """Return a session's messages, oldest first."""
         statement = (
-            select(Message).where(Message.session_id ==
-                                  session_id).order_by(col(Message.id).asc())
+            select(Message)
+            .where(Message.session_id == session_id)
+            .order_by(col(Message.id).asc())
         )
         return list(self.session.exec(statement).all())
 

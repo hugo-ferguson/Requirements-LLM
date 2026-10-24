@@ -5,9 +5,11 @@ import type { SessionSummary } from "../api/sessions";
 
 interface SessionsContextValue {
   sessions: SessionSummary[];
+  /** True until the first load finishes. */
   isLoading: boolean;
+  /** Set when the list couldn't be loaded. */
   error: string | null;
-  refresh: () => Promise<void>;
+  /** Resolves to the new session after the list reloads. */
   createSession: (name?: string) => Promise<SessionSummary>;
   renameSession: (sessionId: string, name: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -15,6 +17,7 @@ interface SessionsContextValue {
 
 const SessionsContext = createContext<SessionsContextValue | null>(null);
 
+/** Loads the session list and shares it. Every change reloads the list. */
 export function SessionsProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,8 +26,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const list = await sessionsApi.list();
-      setSessions(list);
+      setSessions(await sessionsApi.list());
     } catch {
       setError("Couldn't load sessions. Please try again.");
     } finally {
@@ -63,13 +65,14 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   return (
     <SessionsContext.Provider
-      value={{ sessions, isLoading, error, refresh, createSession, renameSession, deleteSession }}
+      value={{ sessions, isLoading, error, createSession, renameSession, deleteSession }}
     >
       {children}
     </SessionsContext.Provider>
   );
 }
 
+/** The shared session list and its actions. Throws outside a {@link SessionsProvider}. */
 export function useSessions(): SessionsContextValue {
   const context = useContext(SessionsContext);
   if (!context) {

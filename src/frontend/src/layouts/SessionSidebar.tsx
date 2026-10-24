@@ -10,13 +10,14 @@ interface SessionRowProps {
   isActive: boolean;
 }
 
+/** One session in the sidebar. Hovering shows its rename and delete buttons. */
 function SessionRow({ session, isActive }: SessionRowProps) {
   const navigate = useNavigate();
   const { renameSession, deleteSession } = useSessions();
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftName, setDraftName] = useState(session.name);
 
-  function startRename() {
+  function handleStartRename() {
     setDraftName(session.name);
     setIsRenaming(true);
   }
@@ -35,9 +36,7 @@ function SessionRow({ session, isActive }: SessionRowProps) {
       commitRename();
     } else if (event.key === "Escape") {
       event.preventDefault();
-      // Reset the draft before closing: removing a focused input from the DOM
-      // fires a native blur, which would otherwise re-trigger commitRename
-      // with the (discarded) edited text still in state.
+      // Reset the draft first: removing the input fires blur, which calls commitRename.
       setDraftName(session.name);
       setIsRenaming(false);
     }
@@ -79,9 +78,11 @@ function SessionRow({ session, isActive }: SessionRowProps) {
       <span className="ml-2 hidden shrink-0 gap-1 group-hover:flex">
         <button
           type="button"
-          onClick={startRename}
+          onClick={handleStartRename}
           aria-label="Rename session"
-          className={isActive ? "text-white/80 hover:text-white" : "text-gray-500 hover:text-gray-900"}
+          className={
+            isActive ? "text-white/80 hover:text-white" : "text-gray-500 hover:text-gray-900"
+          }
         >
           ✎
         </button>
@@ -89,7 +90,9 @@ function SessionRow({ session, isActive }: SessionRowProps) {
           type="button"
           onClick={handleDelete}
           aria-label="Delete session"
-          className={isActive ? "text-white/80 hover:text-white" : "text-gray-500 hover:text-gray-900"}
+          className={
+            isActive ? "text-white/80 hover:text-white" : "text-gray-500 hover:text-gray-900"
+          }
         >
           🗑
         </button>
@@ -98,6 +101,7 @@ function SessionRow({ session, isActive }: SessionRowProps) {
   );
 }
 
+/** The sidebar listing every session, with a button to start a new one. */
 export function SessionSidebar() {
   const navigate = useNavigate();
   const { sessionId: activeSessionId } = useParams<{ sessionId: string }>();

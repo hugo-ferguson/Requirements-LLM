@@ -10,38 +10,38 @@ from app.models_conversation import AcceptanceCriterion
 
 
 class AcceptanceCriteriaRepository:
-    """Owns all direct database access for acceptance criterion rows."""
+    """Reads and writes acceptance criteria and their candidates."""
 
     def __init__(self, session: Session):
         """Bind the repository to one database session."""
         self.session = session
 
     def persist_batch(
-        self, session_id: int, items: list[AcceptanceCriterion]
+        self, session_id: int, criteria: list[AcceptanceCriterion]
     ) -> list[AcceptanceCriterionRecord]:
-        """Replace a session's ACs with a newly generated batch."""
+        """Replace a session's ACs and candidates with a new batch, kept in order."""
         self.delete_for_session(session_id)
         records = [
             AcceptanceCriterionRecord(
                 session_id=session_id,
                 position=index,
-                title=item.title,
-                given=item.given,
-                when=item.when,
-                then=item.then,
-                relevance=item.scores.relevance,
-                correctness=item.scores.correctness,
-                understandability=item.scores.understandability,
-                coverage=item.scores.coverage,
-                overall_score=item.overall_score,
+                title=criterion.title,
+                given=criterion.given,
+                when=criterion.when,
+                then=criterion.then,
+                relevance=criterion.scores.relevance,
+                correctness=criterion.scores.correctness,
+                understandability=criterion.scores.understandability,
+                coverage=criterion.scores.coverage,
+                overall_score=criterion.overall_score,
                 status="pending",
             )
-            for index, item in enumerate(items)
+            for index, criterion in enumerate(criteria)
         ]
         for record in records:
             self.session.add(record)
 
-        self._persist_candidates(session_id, items)
+        self._persist_candidates(session_id, criteria)
 
         self.session.commit()
         for record in records:
@@ -49,53 +49,49 @@ class AcceptanceCriteriaRepository:
         return records
 
     def _persist_candidates(
-        self, session_id: int, items: list[AcceptanceCriterion]
+        self, session_id: int, criteria: list[AcceptanceCriterion]
     ) -> None:
-        """Store every candidate behind each criterion, winner included.
+        """Store every version of each criterion, the winner included.
 
-        Written in the same transaction as the criteria themselves so
-        the two can never disagree about what was generated. Criteria
-        carrying no alternatives still get their winner row, which keeps
-        provenance uniform whether or not title-anchored generation was
-        used.
+        Doesn't commit. Every criterion gets a winner row to record its source agent.
         """
         self.delete_candidates_for_session(session_id)
 
-        for position, item in enumerate(items):
+        for position, criterion in enumerate(criteria):
             rows = [
                 AcceptanceCriterionCandidateRecord(
                     session_id=session_id,
                     criterion_position=position,
-                    source_agent=item.source_agent or "unknown",
+                    source_agent=criterion.source_agent or "unknown",
                     is_winner=True,
-                    title=item.title,
-                    given=item.given,
-                    when=item.when,
-                    then=item.then,
-                    relevance=item.scores.relevance,
-                    correctness=item.scores.correctness,
-                    understandability=item.scores.understandability,
-                    coverage=item.scores.coverage,
-                    overall_score=item.overall_score,
+                    title=criterion.title,
+                    given=criterion.given,
+                    when=criterion.when,
+                    then=criterion.then,
+                    relevance=criterion.scores.relevance,
+                    correctness=criterion.scores.correctness,
+                    understandability=criterion.scores.understandability,
+                    coverage=criterion.scores.coverage,
+                    overall_score=criterion.overall_score,
                 )
             ]
             rows.extend(
                 AcceptanceCriterionCandidateRecord(
                     session_id=session_id,
                     criterion_position=position,
-                    source_agent=alt.source_agent or "unknown",
+                    source_agent=alternative.source_agent or "unknown",
                     is_winner=False,
-                    title=item.title,
-                    given=alt.given,
-                    when=alt.when,
-                    then=alt.then,
-                    relevance=alt.scores.relevance,
-                    correctness=alt.scores.correctness,
-                    understandability=alt.scores.understandability,
-                    coverage=alt.scores.coverage,
-                    overall_score=alt.overall_score,
+                    title=criterion.title,
+                    given=alternative.given,
+                    when=alternative.when,
+                    then=alternative.then,
+                    relevance=alternative.scores.relevance,
+                    correctness=alternative.scores.correctness,
+                    understandability=alternative.scores.understandability,
+                    coverage=alternative.scores.coverage,
+                    overall_score=alternative.overall_score,
                 )
-                for alt in item.alternatives
+                for alternative in criterion.alternatives
             )
             for row in rows:
                 self.session.add(row)
@@ -125,19 +121,17 @@ class AcceptanceCriteriaRepository:
     def candidates_by_position(
         self, session_id: int
     ) -> dict[int, list[AcceptanceCriterionCandidateRecord]]:
-        """Return a session's candidates keyed by criterion position."""
+        """Return a session's candidates keyed by criterion position, best first."""
         grouped: dict[int, list[AcceptanceCriterionCandidateRecord]] = {}
         for candidate in self.candidates_for_session(session_id):
-            grouped.setdefault(candidate.criterion_position,
-                               []).append(candidate)
+            grouped.setdefault(candidate.criterion_position, []).append(candidate)
         return grouped
 
     def get_candidate(
         self, session_id: int, candidate_id: int
     ) -> AcceptanceCriterionCandidateRecord | None:
         """Return a candidate, or None if it isn't in this session."""
-        candidate = self.session.get(
-            AcceptanceCriterionCandidateRecord, candidate_id)
+        candidate = self.session.get(AcceptanceCriterionCandidateRecord, candidate_id)
         if candidate is None or candidate.session_id != session_id:
             return None
         return candidate
@@ -149,20 +143,15 @@ class AcceptanceCriteriaRepository:
     ) -> AcceptanceCriterionRecord:
         """Make `candidate` the displayed version of `record`.
 
-        The version it replaces is demoted to an alternative.
-        The outgoing version is saved from the record's *current* text,
-        not from the winner row as generated, so a reviewer's manual
-        edit becomes an alternative they can swap back to instead of
-        being lost. Title and status are left alone: the title belongs
-        to the group, not to a candidate, and swapping wording is not a
-        review decision.
+        The current text, manual edits included, becomes an alternative.
+        Title and status don't change.
         """
-        position_rows = self.candidates_by_position(
-            record.session_id).get(record.position, [])
+        position_rows = self.candidates_by_position(record.session_id).get(
+            record.position, []
+        )
         outgoing = next((row for row in position_rows if row.is_winner), None)
         if outgoing is None:
-            # An AC from regenerate-selected has no candidate rows of
-            # its own.
+            # An AC from regenerate-selected has no candidate rows of its own.
             outgoing = AcceptanceCriterionCandidateRecord(
                 session_id=record.session_id,
                 criterion_position=record.position,
@@ -217,10 +206,19 @@ class AcceptanceCriteriaRepository:
 
     def list_rejected(self, session_id: int) -> list[AcceptanceCriterionRecord]:
         """Return the criteria a reviewer has rejected."""
-        return [r for r in self.list_for_session(session_id) if r.status == "rejected"]
+        return [
+            record
+            for record in self.list_for_session(session_id)
+            if record.status == "rejected"
+        ]
 
     def update_text(
-        self, record: AcceptanceCriterionRecord, title: str, given: str, when: str, then: str
+        self,
+        record: AcceptanceCriterionRecord,
+        title: str,
+        given: str,
+        when: str,
+        then: str,
     ) -> AcceptanceCriterionRecord:
         """Overwrite a criterion's text with a reviewer's edit."""
         record.title = title
@@ -243,44 +241,47 @@ class AcceptanceCriteriaRepository:
         return record
 
     def replace_one(
-        self, session_id: int, target_id: int, new_items: list[AcceptanceCriterion]
+        self,
+        session_id: int,
+        target_id: int,
+        replacements: list[AcceptanceCriterion],
     ) -> list[AcceptanceCriterionRecord]:
-        """Swap one persisted item for one or more new items, in place.
+        """Replace one criterion with one or more new ones, in its place.
 
-        The new items take the freed position in order, so the first
-        visually replaces the original and any extras follow it,
-        pushing later items down. Positions are renormalised to 0..N-1
-        afterwards so there are never gaps.
+        Positions are renumbered from 0. Replacements are stored as accepted,
+        and the replaced criterion's candidates are deleted.
+
+        Returns:
+            The criteria in their new order, or unchanged if `target_id` isn't found.
         """
         existing = self.list_for_session(session_id)
-        target = next((r for r in existing if r.id == target_id), None)
+        target = next((record for record in existing if record.id == target_id), None)
         if target is None:
             return existing
 
         target_position = target.position
-        remaining = [r for r in existing if r.id != target_id]
+        remaining = [record for record in existing if record.id != target_id]
         self.session.delete(target)
 
         new_records = [
             AcceptanceCriterionRecord(
                 session_id=session_id,
-                position=0,  # Renormalised below.
-                title=item.title,
-                given=item.given,
-                when=item.when,
-                then=item.then,
-                relevance=item.scores.relevance,
-                correctness=item.scores.correctness,
-                understandability=item.scores.understandability,
-                coverage=item.scores.coverage,
-                overall_score=item.overall_score,
+                position=0,  # Renumbered below.
+                title=replacement.title,
+                given=replacement.given,
+                when=replacement.when,
+                then=replacement.then,
+                relevance=replacement.scores.relevance,
+                correctness=replacement.scores.correctness,
+                understandability=replacement.scores.understandability,
+                coverage=replacement.scores.coverage,
+                overall_score=replacement.overall_score,
                 status="accepted",
             )
-            for item in new_items
+            for replacement in replacements
         ]
 
-        merged = remaining[:target_position] + \
-            new_records + remaining[target_position:]
+        merged = remaining[:target_position] + new_records + remaining[target_position:]
         new_position_by_old = {
             record.position: index
             for index, record in enumerate(merged)
@@ -290,13 +291,9 @@ class AcceptanceCriteriaRepository:
             record.position = index
             self.session.add(record)
 
-        # Candidates are keyed by position, so they must follow the
-        # renumbering above or alternatives end up attached to a
-        # neighbouring criterion. The replaced criterion's own
-        # candidates go with it.
+        # Candidates are keyed by position, so move them with the renumbering.
         for candidate in self.candidates_for_session(session_id):
-            new_position = new_position_by_old.get(
-                candidate.criterion_position)
+            new_position = new_position_by_old.get(candidate.criterion_position)
             if new_position is None:
                 self.session.delete(candidate)
             else:
@@ -309,12 +306,7 @@ class AcceptanceCriteriaRepository:
 
     def delete_for_session(self, session_id: int) -> None:
         """Delete a session's criteria and their candidates."""
-        # Candidates go with their criteria, always. Keeping this here
-        # rather than in the caller means every delete path — session
-        # teardown and the wholesale replace in persist_batch alike —
-        # cleans up both, and a stale candidate row can never outlive
-        # the criterion it belonged to and block the session from being
-        # deleted.
+        # Done here for every caller, as leftover candidates block session deletion.
         self.delete_candidates_for_session(session_id)
         for record in self.list_for_session(session_id):
             self.session.delete(record)

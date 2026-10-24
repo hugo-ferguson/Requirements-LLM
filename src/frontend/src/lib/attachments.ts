@@ -2,7 +2,7 @@ import { ApiError } from "../api/client";
 import { documentsApi } from "../api/documents";
 import type { Attachment } from "../types/conversation";
 
-/** Extensions the backend's ingest pipeline can extract text from. */
+/** Extensions the backend can extract text from. */
 export const SUPPORTED_EXTENSIONS = [
   ".txt",
   ".md",
@@ -14,25 +14,16 @@ export const SUPPORTED_EXTENSIONS = [
   ".gif",
 ] as const;
 
-/** Value for an <input type="file"> accept attribute. */
+/** Value for an `<input type="file">` accept attribute. */
 export const ATTACHMENT_ACCEPT = SUPPORTED_EXTENSIONS.join(",");
 
-/**
- * Largest file sent for upload. Mirrors MAX_UPLOAD_BYTES in
- * backend/app/ingest/limits.py, which is the source of truth — this copy only
- * saves uploading a file the backend would reject. The backend also limits
- * the extracted text, which can only be checked after upload.
- */
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Upload size limit. Must match MAX_UPLOAD_BYTES in src/backend/app/ingest/limits.py. */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
-export interface AttachmentUploadError {
-  filename: string;
-  message: string;
-}
-
-export interface AttachmentUploadResult {
+interface AttachmentUploadResult {
   attachments: Attachment[];
-  errors: AttachmentUploadError[];
+  /** One user-facing message per failed file. */
+  errors: string[];
 }
 
 function messageForError(filename: string, error: unknown): string {
@@ -40,37 +31,31 @@ function messageForError(filename: string, error: unknown): string {
     return `Reading ${filename} took too long and was stopped. Please try again.`;
   }
   if (error instanceof TypeError) {
-    // fetch rejects with a TypeError when the request never reaches a server.
+    // fetch throws a TypeError when it can't reach the server.
     return `Couldn't reach the server to upload ${filename} — is the backend running?`;
   }
   if (error instanceof ApiError) {
-    // FastAPI reports the reason (unsupported type, no text found, vision
-    // model unreachable) in a JSON detail field.
+    // The backend puts the reason in a JSON `detail` field.
     try {
-      const detail = JSON.parse(error.message)?.detail;
+      const detail: unknown = JSON.parse(error.message)?.detail;
       if (typeof detail === "string") return detail;
     } catch {
-      // Not JSON — fall through to the generic message.
+      // Not JSON, so use the generic message below.
     }
   }
   return `Couldn't upload ${filename}. Please try again.`;
 }
 
-/**
- * Sends each file to the backend for ingest and turns the extracted text into
- * chat attachments. Files are uploaded one at a time because image extraction
- * runs a local vision model that does not benefit from concurrency.
- */
+/** Uploads files one at a time, so the vision model gets one image at once. */
 export async function uploadFilesAsAttachments(files: FileList): Promise<AttachmentUploadResult> {
   const attachments: Attachment[] = [];
-  const errors: AttachmentUploadError[] = [];
+  const errors: string[] = [];
 
   for (const file of Array.from(files)) {
     if (file.size > MAX_UPLOAD_BYTES) {
-      errors.push({
-        filename: file.name,
-        message: `${file.name} is larger than the ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB upload limit.`,
-      });
+      errors.push(
+        `${file.name} is larger than the ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB upload limit.`,
+      );
       continue;
     }
     try {
@@ -81,7 +66,7 @@ export async function uploadFilesAsAttachments(files: FileList): Promise<Attachm
         document_id: uploaded.document_id,
       });
     } catch (error) {
-      errors.push({ filename: file.name, message: messageForError(file.name, error) });
+      errors.push(messageForError(file.name, error));
     }
   }
 

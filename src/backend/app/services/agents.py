@@ -2,30 +2,28 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
-
 from pydantic_ai import Agent
 
-from app.config import Settings
 from app.llm_config import get_models_config
 from llm.spec import build_model, with_output_mode
-
-OutputT = TypeVar("OutputT")
 
 
 class GenerationError(RuntimeError):
     """Raised when an agent can't be reached or returns nothing usable.
 
-    Shared by every agent-backed service (AC generation, chat, AC/UAT
-    regeneration, UAT generation) so routes have exactly one exception
-    type to map to HTTP 502.
+    Routes map it to HTTP 502. Chat never raises it.
     """
 
 
-def build_agent(
-    settings: Settings, output_type: type[OutputT], system_prompt: str
+def build_agent[OutputT](
+    output_type: type[OutputT], system_prompt: str
 ) -> Agent[None, OutputT]:
-    """Build a single-output-type PydanticAI agent on `chat_model`."""
+    """Build a PydanticAI agent on the configured `chat_model`.
+
+    Raises:
+        ModelsConfigError: config/models.json is missing or invalid.
+        ModelBuildError: The provider is unknown or its API key is missing.
+    """
     chat_model = get_models_config().chat_model
     return Agent(
         build_model(chat_model),

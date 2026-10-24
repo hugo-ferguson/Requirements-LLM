@@ -1,14 +1,8 @@
-"""Prompt construction for the generation agents.
-
-The system prompt is identical across every agent in the ensemble — the
-only thing that varies is the model behind it. That is what makes the
-outputs comparable when the voting layer scores them.
-"""
+"""Prompts for the generation agents."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-
 
 SYSTEM_PROMPT = """\
 You are an experienced business analyst writing acceptance criteria for a \
@@ -36,20 +30,14 @@ rather than inventing product-specific detail.
 
 @dataclass
 class GenerationDeps:
-    """Per-run dependencies injected through PydanticAI's `RunContext`.
-
-    Holding these in an object rather than string-formatting them into
-    the user prompt means the same agent instance serves every session:
-    nothing about a particular request is baked into the agent at
-    construction time.
-    """
+    """Per-run inputs, passed to the agent through `RunContext`."""
 
     user_story: str
     context_chunks: list[str] = field(default_factory=list)
     feedback: str | None = None
 
     def context_block(self) -> str:
-        """Render retrieved RAG chunks as an appended system message."""
+        """Render the RAG chunks as a system prompt, or say there are none."""
         if not self.context_chunks:
             return (
                 "No project context documents were retrieved for this story. "
@@ -77,10 +65,9 @@ class GenerationDeps:
 
 
 def build_user_prompt(deps: GenerationDeps, max_criteria: int) -> str:
-    """Build the per-run user message.
+    """Build the user message for a single-pass run.
 
-    Context and feedback go in through system prompts, so this stays
-    short and stable.
+    Title-anchored runs also use it as the prompt the judges score against.
     """
     return (
         f"Write up to {max_criteria} acceptance criteria for the following "
@@ -89,14 +76,7 @@ def build_user_prompt(deps: GenerationDeps, max_criteria: int) -> str:
 
 
 def build_titles_prompt(deps: GenerationDeps, max_criteria: int) -> str:
-    """Build the pass-1 prompt: one agent fixes the title set.
-
-    The titles become the grouping key every other agent writes against,
-    which is what makes candidates from different models comparable.
-    Descriptions are requested here too — this agent's own criteria are
-    a full candidate in their own right, so asking for titles alone
-    would waste the call.
-    """
+    """Build the pass-1 prompt, where one agent writes the titles and its own ACs."""
     return (
         f"Write up to {max_criteria} acceptance criteria for the following "
         f"user story. Each title must name a distinct behaviour — two titles "
@@ -106,19 +86,14 @@ def build_titles_prompt(deps: GenerationDeps, max_criteria: int) -> str:
     )
 
 
-def build_descriptions_prompt(
-    deps: GenerationDeps, titles: list[str]
-) -> str:
-    """Build the pass-2 prompt: given/when/then for fixed titles.
+def build_descriptions_prompt(deps: GenerationDeps, titles: list[str]) -> str:
+    """Build the pass-2 prompt: given/when/then for each numbered title.
 
-    Every agent answers the same titles, so their outputs line up
-    one-to-one and the voting layer compares like against like instead
-    of scoring an arbitrary union. Answers are identified by title
-    number, not by copying the title back: the number is the join key,
-    and the orchestrator attaches the anchor's exact title itself.
+    Agents answer by number, as a reworded title wouldn't match.
     """
-    numbered = "\n".join(f"{index}. {title}" for index,
-                         title in enumerate(titles, start=1))
+    numbered = "\n".join(
+        f"{index}. {title}" for index, title in enumerate(titles, start=1)
+    )
     return (
         "Below is a fixed, numbered list of acceptance criteria titles for a user "
         "story. Write your own given / when / then for EVERY title in the list.\n\n"
@@ -144,7 +119,7 @@ the criterion actually states — do not invent unrelated functionality.
 
 
 def build_uat_cases_prompt(acceptance_criterion: str) -> str:
-    """Build the UAT pass-1 prompt: the anchor writes one AC's cases."""
+    """Build the UAT pass-1 prompt, where the anchor writes one AC's cases."""
     return (
         "Write 2-4 concrete UAT test cases for the acceptance criterion below. "
         "Cover the happy path and at least one edge or negative case. Each "
@@ -155,13 +130,10 @@ def build_uat_cases_prompt(acceptance_criterion: str) -> str:
 
 
 def build_uat_descriptions_prompt(acceptance_criterion: str, titles: list[str]) -> str:
-    """Build the UAT pass-2 prompt: a description per numbered title.
-
-    Answers are identified by number, like `build_descriptions_prompt`,
-    so a reworded title can't drop an agent's answer.
-    """
-    numbered = "\n".join(f"{index}. {title}" for index,
-                         title in enumerate(titles, start=1))
+    """Build the UAT pass-2 prompt: a description per numbered title."""
+    numbered = "\n".join(
+        f"{index}. {title}" for index, title in enumerate(titles, start=1)
+    )
     return (
         "Below is a fixed, numbered list of UAT test case titles for an "
         "acceptance criterion. Write your own description for EVERY title.\n\n"

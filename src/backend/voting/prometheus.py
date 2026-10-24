@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
 from llm.spec import build_model, with_output_mode
-from voting.provider import INVALID_REPLY_RETRIES, judge_gate, judge_settings, log_cache_usage
 from voting.models import (
-    EvaluationInput,
     EvaluatedOutput,
+    EvaluationInput,
     JudgeConfig,
     PrometheusVote,
     ProviderFeedback,
@@ -20,19 +18,23 @@ from voting.models import (
     RubricFeedback,
     VotingResult,
 )
+from voting.provider import (
+    INVALID_REPLY_RETRIES,
+    PROMPT_DIR,
+    RUBRIC_NAMES,
+    error_output,
+    judge_gate,
+    judge_settings,
+    log_cache_usage,
+)
 
-
-RUBRIC_NAMES = ("correctness", "coverage", "relevance", "understandability")
-RUBRIC_DIR = Path(__file__).resolve().parent.parent / \
-    "ai_prompts" / "voting_layer"
-SYSTEM_PROMPT = "You are the Prometheus voting evaluator. Follow the supplied rubric exactly."
+SYSTEM_PROMPT = (
+    "You are the Prometheus voting evaluator. Follow the supplied rubric exactly."
+)
 
 
 class PrometheusJudgeClient:
-    """Scores one rubric per call.
-
-    Used for judges with `style: "per_rubric"`.
-    """
+    """Scores one rubric per call, for judges with `style: "per_rubric"`."""
 
     def __init__(self, judge: JudgeConfig, *, model: Model | None = None) -> None:
         """Build the judge's agent; tests may pass their own `model`."""
@@ -46,11 +48,12 @@ class PrometheusJudgeClient:
             retries=INVALID_REPLY_RETRIES,
         )
 
-    async def evaluate(self, *, instruction: str, response: str, rubric_name: str) -> PrometheusVote:
+    async def evaluate(
+        self, *, instruction: str, response: str, rubric_name: str
+    ) -> PrometheusVote:
         """Return the judge's vote on one rubric for `response`."""
-        rubric = (
-            RUBRIC_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
-        prompt = rubric.replace("{orig_instruction}", instruction)
+        template = (PROMPT_DIR / f"{rubric_name}.txt").read_text(encoding="utf-8")
+        prompt = template.replace("{orig_instruction}", instruction)
         prompt = prompt.replace("{orig_response}", response)
 
         result = await self.agent.run(prompt)
@@ -58,22 +61,19 @@ class PrometheusJudgeClient:
         return result.output
 
 
-async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: JudgeConfig) -> VotingResult:
+async def evaluate_with_prometheus(
+    evaluation_input: EvaluationInput, judge: JudgeConfig
+) -> VotingResult:
     """Score every output with one per-rubric judge, four calls each.
 
-    A failed call degrades that rubric (or a failed output, all of its
-    rubrics) to the -1 sentinel; a cancellation still propagates.
+    A failed call scores -1 on its rubric. Cancellation still propagates.
     """
     evaluator = PrometheusJudgeClient(judge)
-    # Same queue-timeout trap as the combined path, and worse here: this
-    # fans out four rubric calls per candidate, so an unbounded gather
-    # over N candidates puts 4N requests in front of a server that runs
-    # one at a time. See `max_parallel_requests` for why serialising
-    # costs nothing.
+    # Limits concurrent calls, so queued requests don't time out.
     gate = judge_gate(judge)
 
     async def evaluate_output(output: str) -> EvaluatedOutput:
-        async def scored(rubric_name: str) -> PrometheusVote:
+        async def score_rubric(rubric_name: str) -> PrometheusVote:
             async with gate:
                 return await evaluator.evaluate(
                     instruction=evaluation_input.prompt,
@@ -81,35 +81,42 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
                     rubric_name=rubric_name,
                 )
 
-        results = await asyncio.gather(
-            *(scored(rubric_name) for rubric_name in RUBRIC_NAMES),
+        votes = await asyncio.gather(
+            *(score_rubric(rubric_name) for rubric_name in RUBRIC_NAMES),
             return_exceptions=True,
         )
 
         rubric_feedback: list[RubricFeedback] = []
-        for rubric_name, res in zip(RUBRIC_NAMES, results, strict=True):
-            if isinstance(res, Exception):
-                error_message = f"Error evaluating rubric {rubric_name}: {res.__class__.__name__}: {res}"
-                rubric_feedback.append(RubricFeedback(
-                    rubric=rubric_name, value=-1, feedback=error_message))
-            elif isinstance(res, BaseException):
-                # A BaseException that isn't an Exception (e.g.
-                # cancellation) must propagate rather than be scored as
-                # a failed rubric.
-                raise res
+        for rubric_name, vote in zip(RUBRIC_NAMES, votes, strict=True):
+            if isinstance(vote, Exception):
+                error_message = (
+                    f"Error evaluating rubric {rubric_name}: "
+                    f"{vote.__class__.__name__}: {vote}"
+                )
+                rubric_feedback.append(
+                    RubricFeedback(rubric=rubric_name, value=-1, feedback=error_message)
+                )
+            elif isinstance(vote, BaseException):
+                # Cancellation isn't an Exception, and must propagate.
+                raise vote
             else:
-                rubric_feedback.append(RubricFeedback(
-                    rubric=rubric_name, value=res.score, feedback=res.feedback))
+                rubric_feedback.append(
+                    RubricFeedback(
+                        rubric=rubric_name, value=vote.score, feedback=vote.feedback
+                    )
+                )
 
         provider_feedback = ProviderFeedback(
             ai=judge.display_name,
             model=evaluator.model,
             feedback=rubric_feedback,
-            overall_score=sum(
-                item.value for item in rubric_feedback) / len(rubric_feedback),
+            overall_score=sum(feedback.value for feedback in rubric_feedback)
+            / len(rubric_feedback),
         )
-        rubric_averages = [RubricAverage(rubric=item.rubric, value=float(
-            item.value)) for item in rubric_feedback]
+        rubric_averages = [
+            RubricAverage(rubric=feedback.rubric, value=float(feedback.value))
+            for feedback in rubric_feedback
+        ]
         return EvaluatedOutput(
             output=output,
             feedback=[provider_feedback],
@@ -117,41 +124,29 @@ async def evaluate_with_prometheus(evaluation_input: EvaluationInput, judge: Jud
             overall_score=provider_feedback.overall_score,
         )
 
-    raw_output_votes = await asyncio.gather(
+    results = await asyncio.gather(
         *(evaluate_output(output) for output in evaluation_input.output),
         return_exceptions=True,
     )
 
     evaluated_outputs: list[EvaluatedOutput] = []
-    for idx, item in enumerate(raw_output_votes):
-        if isinstance(item, Exception):
-            error_feedback = [
-                RubricFeedback(
-                    rubric=rubric_name,
-                    value=-1,
-                    feedback=f"Error evaluating output {idx}: {item.__class__.__name__}: {item}",
-                )
-                for rubric_name in RUBRIC_NAMES
-            ]
-            provider_feedback = ProviderFeedback(
-                ai=judge.display_name,
-                model=evaluator.model,
-                feedback=error_feedback,
-                overall_score=-1.0,
-            )
+    for index, (output, result) in enumerate(
+        zip(evaluation_input.output, results, strict=True)
+    ):
+        if isinstance(result, Exception):
             evaluated_outputs.append(
-                EvaluatedOutput(
-                    output=evaluation_input.output[idx],
-                    feedback=[provider_feedback],
-                    rubric_averages=[RubricAverage(
-                        rubric=name, value=-1.0) for name in RUBRIC_NAMES],
-                    overall_score=-1.0,
+                error_output(
+                    output,
+                    judge.display_name,
+                    evaluator.model,
+                    f"Error evaluating output {index}: "
+                    f"{result.__class__.__name__}: {result}",
                 )
             )
-        elif isinstance(item, BaseException):
-            raise item
+        elif isinstance(result, BaseException):
+            raise result
         else:
-            evaluated_outputs.append(item)
+            evaluated_outputs.append(result)
 
     return VotingResult(
         ai=evaluation_input.ai,

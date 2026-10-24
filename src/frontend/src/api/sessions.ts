@@ -1,20 +1,24 @@
 import { request } from "./client";
 import type { paths } from "./schema";
 
+/** A session as the sidebar lists it. */
 export type SessionSummary =
   paths["/sessions"]["get"]["responses"]["200"]["content"]["application/json"][number];
-export type SessionDetail =
+type SessionDetail =
   paths["/sessions/{session_id}"]["get"]["responses"]["200"]["content"]["application/json"];
+/** A saved chat message as the API returns it. */
 export type MessageRead =
   paths["/sessions/{session_id}/messages"]["post"]["responses"]["201"]["content"]["application/json"];
-export type GenerateResult =
+type GenerateResult =
   paths["/sessions/{session_id}/generate"]["post"]["responses"]["200"]["content"]["application/json"];
 type MessageCreate =
   paths["/sessions/{session_id}/messages"]["post"]["requestBody"]["content"]["application/json"];
 
+/** Calls for sessions, their chat and AC generation. */
 export const sessionsApi = {
   list: (): Promise<SessionSummary[]> => request<SessionSummary[]>("/sessions"),
 
+  /** Creates a session. Without a name, the backend calls it "New session". */
   create: (name?: string): Promise<SessionSummary> =>
     request<SessionSummary>("/sessions", {
       method: "POST",
@@ -33,12 +37,14 @@ export const sessionsApi = {
   remove: (sessionId: string): Promise<void> =>
     request<void>(`/sessions/${sessionId}`, { method: "DELETE" }),
 
-  sendMessage: (sessionId: string, data: MessageCreate): Promise<MessageRead> =>
+  /** Saves the user's message and resolves to the assistant's reply. */
+  sendMessage: (sessionId: string, message: MessageCreate): Promise<MessageRead> =>
     request<MessageRead>(`/sessions/${sessionId}/messages`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(message),
     }),
 
+  /** Generates ACs from the chat. Replaces existing ACs and deletes their UAT cases. */
   generate: (sessionId: string): Promise<GenerateResult> =>
     request<GenerateResult>(`/sessions/${sessionId}/generate`, { method: "POST" }),
 };

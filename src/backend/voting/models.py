@@ -10,35 +10,23 @@ from pydantic import BaseModel, Field
 
 from llm.spec import ModelSpec
 
-
-# The app's model config. The voting package reads its `judges` section
-# only when run standalone (the scripts here, the MCP server); the app
-# passes judges in explicitly.
-DEFAULT_MODELS_CONFIG = Path(__file__).resolve(
-).parent.parent / "config" / "models.json"
+# Judges are read from here only when run standalone. The app passes them in.
+DEFAULT_MODELS_CONFIG = (
+    Path(__file__).resolve().parent.parent / "config" / "models.json"
+)
 
 
 class JudgeConfig(ModelSpec):
-    """One scoring judge, from `judges` in config/models.json.
+    """One scoring judge, from `judges` in config/models.json."""
 
-    The model fields (`provider`, `model`, `temperature`, `output_mode`,
-    ...) are the same as every other entry in that file; the rest say
-    how the judge votes.
-    """
-
-    id: str = Field(
-        description="Label used in logs and results, e.g. 'claude'")
+    id: str = Field(description="Label used in logs and results, e.g. 'claude'")
     enabled: bool = True
-    # One call scoring all four rubrics, or Prometheus-style, one call
-    # each.
+    # One call for all four rubrics, or one call per rubric.
     style: Literal["combined", "per_rubric"] = "combined"
-    # Mark the shared rubric prefix for caching, and score one candidate
-    # before the rest so they read the cache it writes. Anthropic needs
-    # the marker; OpenAI and Gemini cache long prefixes on their own.
+    # Cache the shared prompt prefix, scoring one candidate first to fill it.
+    # Only Anthropic needs this; OpenAI and Gemini cache on their own.
     cache_prompt: bool = False
-    # Requests in flight at once. 1 for Ollama, which serves one request
-    # per model at a time, so extra concurrency only queues against the
-    # timeout.
+    # Concurrent requests. Use 1 for Ollama, which serves one at a time.
     max_parallel: int = Field(default=8, ge=1)
 
     @property
@@ -50,8 +38,7 @@ class JudgeConfig(ModelSpec):
 def load_judges(path: Path = DEFAULT_MODELS_CONFIG) -> list[JudgeConfig]:
     """Return the enabled judges from a models config file."""
     payload = json.loads(path.read_text(encoding="utf-8"))
-    judges = [JudgeConfig.model_validate(item)
-              for item in payload.get("judges", [])]
+    judges = [JudgeConfig.model_validate(entry) for entry in payload.get("judges", [])]
     return [judge for judge in judges if judge.enabled]
 
 
@@ -63,8 +50,7 @@ class EvaluationInput(BaseModel):
     prompt: str
     output: list[str] = Field(min_length=1)
     reference_answer: str = ""
-    judges: list[JudgeConfig] = Field(
-        default_factory=load_judges, min_length=1)
+    judges: list[JudgeConfig] = Field(default_factory=load_judges, min_length=1)
 
 
 class PrometheusVote(BaseModel):
@@ -82,14 +68,6 @@ class CombinedVote(BaseModel):
     coverage: PrometheusVote
     relevance: PrometheusVote
     understandability: PrometheusVote
-
-
-class Vote(PrometheusVote):
-    """A rubric vote tied to the output it scored."""
-
-    output_index: int
-    output: str
-    rubric: str
 
 
 class RubricFeedback(BaseModel):
@@ -117,7 +95,7 @@ class RubricAverage(BaseModel):
 
 
 class EvaluatedOutput(BaseModel):
-    """One candidate output with every judge's feedback and averages."""
+    """One candidate output with every judge's feedback and the averages."""
 
     output: str
     feedback: list[ProviderFeedback]

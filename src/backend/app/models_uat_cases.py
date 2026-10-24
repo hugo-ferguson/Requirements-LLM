@@ -1,6 +1,6 @@
 """Table and API models for UAT test cases and their candidates."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlmodel import Field, SQLModel
@@ -9,21 +9,17 @@ from app.models_conversation import AcceptanceCriterion, ConversationMessage
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    """Return the current time in UTC."""
+    return datetime.now(UTC)
 
 
 class UatCaseRecord(SQLModel, table=True):
-    """A persisted UAT test case belonging to one acceptance criterion.
-
-    Named `UatCaseRecord` (not `UatCase`) to avoid clashing with the
-    wire schema of that name below, same rationale as
-    `AcceptanceCriterionRecord`.
-    """
+    """A stored UAT test case under one AC. `UatCase` is the API shape."""
 
     id: int | None = Field(default=None, primary_key=True)
     session_id: int = Field(foreign_key="chatsession.id", index=True)
     ac_id: int = Field(foreign_key="acceptancecriterionrecord.id", index=True)
-    position: int  # Scoped per ac_id, not per session.
+    position: int  # Within the parent AC, not the session.
 
     title: str
     description: str
@@ -39,13 +35,10 @@ class UatCaseRecord(SQLModel, table=True):
 
 
 class UatCaseCandidateRecord(SQLModel, table=True):
-    """Every agent's version of one UAT case, winners and losers alike.
+    """Every agent's version of one test case, the winner included.
 
-    The UAT counterpart of `AcceptanceCriterionCandidateRecord`, keyed
-    the same way: by the case's parent AC and its position within that
-    AC's list. No foreign key, for the same reason — cases are rewritten
-    wholesale, and a hard reference would block that or cascade into the
-    candidate history.
+    Keyed by parent AC and case position. `ac_id` isn't a foreign key, as
+    cascading deletes would wipe the history or block regeneration.
     """
 
     id: int | None = Field(default=None, primary_key=True)
@@ -80,7 +73,7 @@ class UatCaseScores(SQLModel):
 class UatCaseAlternative(SQLModel):
     """Another model's version of the same test case.
 
-    Swap it in as the displayed version by its `candidate_id`.
+    `candidate_id` is set once stored, so the reviewer can swap it in.
     """
 
     candidate_id: int | None = None
@@ -100,21 +93,20 @@ class UatCase(SQLModel):
     scores: UatCaseScores
     overall_score: float = Field(ge=0, le=5)
     status: Literal["pending", "accepted", "rejected"] = "pending"
-    # Additive with defaults, like the AC equivalents, so older clients
-    # keep working.
+    # Defaults let older clients and apply-approved requests omit these.
     source_agent: str | None = None
     alternatives: list[UatCaseAlternative] = Field(default_factory=list)
 
 
 class UatCaseGroup(SQLModel):
-    """An accepted AC together with the test cases written for it."""
+    """An AC together with the test cases generated from it."""
 
     ac: AcceptanceCriterion
     uat_cases: list[UatCase]
 
 
 class UatCaseGroupsResult(SQLModel):
-    """Every AC's group of test cases for a session."""
+    """A session's test cases, grouped by AC."""
 
     groups: list[UatCaseGroup]
 
@@ -127,7 +119,7 @@ class UatCaseTextUpdate(SQLModel):
 
 
 class UatCaseStatusUpdate(SQLModel):
-    """Request body for accepting, rejecting or resetting a case."""
+    """Request body for accepting, rejecting or resetting a test case."""
 
     status: Literal["pending", "accepted", "rejected"]
 
@@ -139,13 +131,13 @@ class UatRegenerateSelectedRequest(SQLModel):
 
 
 class UatRegenerateSelectedResponse(SQLModel):
-    """The assistant's reply and the unsaved replacement cases."""
+    """The assistant's reply and the unsaved replacement candidates."""
 
     reply: ConversationMessage
     candidates: list[UatCase]
 
 
 class UatApplyApprovedRequest(SQLModel):
-    """The cases a reviewer approved to replace a test case."""
+    """The candidates a reviewer approved to replace a test case."""
 
     candidates: list[UatCase]

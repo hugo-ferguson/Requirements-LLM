@@ -1,1 +1,1 @@
-"""Ensemble generation layer (Layer 2 of the StoryToSpec pipeline)."""
+"""Ensemble generation (layer 2 of the pipeline)."""

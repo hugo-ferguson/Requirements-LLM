@@ -5,19 +5,27 @@ import { UatCard } from "../components/uat/UatCard";
 import { ChatThread } from "../components/chat/ChatThread";
 import { ChatInputBar } from "../components/chat/ChatInputBar";
 import { uatCasesApi } from "../api/uatCases";
-import type { UatCase } from "../api/uatCases";
+import type { UatCase, UatCaseStatus, UatCaseTextUpdate } from "../api/uatCases";
 import { useUatCases } from "../hooks/useUatCases";
 import { useRegenerateSelected } from "../hooks/useRegenerateSelected";
+import type { RegenerateMessage } from "../hooks/useRegenerateSelected";
 import { ROUTES } from "../routes";
-import type { Attachment } from "../types/conversation";
 
 type Mode = "list" | "regenerate";
 
+/** The UAT Review tab: review and regenerate test cases, grouped by AC. */
 export function UatReviewPage() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { groups, isLoading, loadError, updateText, updateStatus, applyApproved, selectAlternative } =
-    useUatCases(sessionId!);
+  const {
+    groups,
+    isLoading,
+    loadError,
+    updateText,
+    updateStatus,
+    applyApproved,
+    selectAlternative,
+  } = useUatCases(sessionId!);
 
   const [expandedAcId, setExpandedAcId] = useState<number | null>(null);
   const [selectedUatId, setSelectedUatId] = useState<number | null>(null);
@@ -29,29 +37,32 @@ export function UatReviewPage() {
   const [swapError, setSwapError] = useState<string | null>(null);
 
   const fetchCandidates = useCallback(
-    (
-      targetId: number,
-      messages: { role: "user" | "assistant"; text: string; attachments: Attachment[] }[],
-    ) => uatCasesApi.regenerateSelected(sessionId!, targetId, { messages }),
+    (targetId: number, messages: RegenerateMessage[]) =>
+      uatCasesApi.regenerateSelected(sessionId!, targetId, { messages }),
     [sessionId],
   );
   const regenerate = useRegenerateSelected<UatCase>(regenerateTargetId, fetchCandidates);
 
   function handleToggleExpand(acId: number) {
-    setExpandedAcId((prev) => (prev === acId ? null : acId));
+    setExpandedAcId((previous) => (previous === acId ? null : acId));
     setSelectedUatId(null);
   }
 
   function handleSelect(uatId: number) {
-    setSelectedUatId((prev) => (prev === uatId ? null : uatId));
+    setSelectedUatId((previous) => (previous === uatId ? null : uatId));
   }
 
-  function handleAccept(uatId: number, currentStatus: string) {
+  function handleAccept(uatId: number, currentStatus: UatCaseStatus) {
     updateStatus(uatId, currentStatus === "accepted" ? "pending" : "accepted");
   }
 
-  function handleReject(uatId: number, currentStatus: string) {
+  function handleReject(uatId: number, currentStatus: UatCaseStatus) {
     updateStatus(uatId, currentStatus === "rejected" ? "pending" : "rejected");
+  }
+
+  async function handleEditSave(uatId: number, fields: UatCaseTextUpdate) {
+    await updateText(uatId, fields);
+    setEditingUatId(null);
   }
 
   async function handleSelectAlternative(uatId: number, candidateId: number) {
@@ -106,26 +117,34 @@ export function UatReviewPage() {
     return <div className="flex h-full items-center justify-center text-red-600">{loadError}</div>;
   }
 
-  const totalAccepted = groups.reduce(
-    (sum, group) => sum + group.uat_cases.filter((c) => c.status === "accepted").length,
+  const acceptedCount = groups.reduce(
+    (total, group) =>
+      total + group.uat_cases.filter((uatCase) => uatCase.status === "accepted").length,
     0,
   );
 
   if (mode === "regenerate" && regenerateTargetId != null) {
-    const groupIndex = groups.findIndex((g) =>
-      g.uat_cases.some((c) => c.id === regenerateTargetId),
+    const groupIndex = groups.findIndex((group) =>
+      group.uat_cases.some((uatCase) => uatCase.id === regenerateTargetId),
     );
     const targetGroup = groups[groupIndex];
-    const targetIndex = targetGroup?.uat_cases.findIndex((c) => c.id === regenerateTargetId) ?? -1;
+    const targetIndex =
+      targetGroup?.uat_cases.findIndex((uatCase) => uatCase.id === regenerateTargetId) ?? -1;
     const target = targetGroup?.uat_cases[targetIndex];
 
     return (
       <div className="flex h-full flex-col overflow-y-auto p-6">
         <div className="space-y-3">
           {targetGroup && (
-            <AcGroupHeader ac={targetGroup.ac} index={groupIndex} expanded onToggle={() => {}} />
+            <AcGroupHeader
+              criterion={targetGroup.ac}
+              index={groupIndex}
+              isExpanded
+              onToggle={() => {}}
+            />
           )}
           {target && (
+            // Read-only, shown as rejected because the candidates replace it.
             <UatCard
               uatCase={{ ...target, status: "rejected" }}
               index={targetIndex}
@@ -138,29 +157,37 @@ export function UatReviewPage() {
         {regenerate.candidates.length > 0 && <hr className="my-4 border-gray-200" />}
 
         <div className="space-y-3">
-          {regenerate.candidates.map((candidate, i) => {
-            const displayIndex = i === 0 ? targetIndex : (targetGroup?.uat_cases.length ?? 0) + (i - 1);
-            const approved = regenerate.approvedIndexes.has(i);
+          {regenerate.candidates.map((candidate, candidateIndex) => {
+            const displayIndex =
+              candidateIndex === 0
+                ? targetIndex
+                : (targetGroup?.uat_cases.length ?? 0) + (candidateIndex - 1);
+            const isApproved = regenerate.approvedIndexes.has(candidateIndex);
             return (
               <UatCard
-                key={i}
-                uatCase={{ ...candidate, status: approved ? "accepted" : "rejected" }}
+                key={candidateIndex}
+                uatCase={{ ...candidate, status: isApproved ? "accepted" : "rejected" }}
                 index={displayIndex}
-                onAccept={() => regenerate.setApproved(i, true)}
-                onReject={() => regenerate.setApproved(i, false)}
+                onAccept={() => regenerate.setApproved(candidateIndex, true)}
+                onReject={() => regenerate.setApproved(candidateIndex, false)}
               />
             );
           })}
         </div>
 
         <div className="mt-4 flex-1">
-          <ChatThread messages={regenerate.miniChatMessages} pending={regenerate.isSending} />
+          <ChatThread
+            messages={regenerate.miniChatMessages}
+            isAwaitingReply={regenerate.isSending}
+          />
         </div>
 
         {regenerate.uploadError && (
           <p className="mb-2 text-sm text-red-600">{regenerate.uploadError}</p>
         )}
-        {regenerate.sendError && <p className="mb-2 text-sm text-red-600">{regenerate.sendError}</p>}
+        {regenerate.sendError && (
+          <p className="mb-2 text-sm text-red-600">{regenerate.sendError}</p>
+        )}
         <ChatInputBar
           pendingAttachments={regenerate.pendingAttachments}
           onAttachFiles={regenerate.attachFiles}
@@ -200,9 +227,9 @@ export function UatReviewPage() {
         {groups.map((group, index) => (
           <div key={group.ac.id}>
             <AcGroupHeader
-              ac={group.ac}
+              criterion={group.ac}
               index={index}
-              expanded={expandedAcId === group.ac.id}
+              isExpanded={expandedAcId === group.ac.id}
               onToggle={() => handleToggleExpand(group.ac.id)}
             />
             {expandedAcId === group.ac.id && (
@@ -212,15 +239,12 @@ export function UatReviewPage() {
                     key={uatCase.id}
                     uatCase={uatCase}
                     index={uatIndex}
-                    selected={uatCase.id === selectedUatId}
-                    editing={uatCase.id === editingUatId}
+                    isSelected={uatCase.id === selectedUatId}
+                    isEditing={uatCase.id === editingUatId}
                     onSelect={() => handleSelect(uatCase.id)}
                     onEditStart={() => setEditingUatId(uatCase.id)}
                     onEditCancel={() => setEditingUatId(null)}
-                    onEditSave={async (fields) => {
-                      await updateText(uatCase.id, fields);
-                      setEditingUatId(null);
-                    }}
+                    onEditSave={(fields) => handleEditSave(uatCase.id, fields)}
                     onAccept={() => handleAccept(uatCase.id, uatCase.status)}
                     onReject={() => handleReject(uatCase.id, uatCase.status)}
                     onSelectAlternative={(candidateId) =>
@@ -246,7 +270,7 @@ export function UatReviewPage() {
         <button
           type="button"
           onClick={handleContinue}
-          disabled={totalAccepted === 0}
+          disabled={acceptedCount === 0}
           className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
         >
           Continue →

@@ -4,9 +4,8 @@ from voting.models import EvaluationInput, JudgeConfig
 
 
 def test_judges_travel_on_the_evaluation_input() -> None:
-    judge = JudgeConfig(id="gemini", provider="google",
-                        model="gemini-3.6-flash")
-    evaluation = EvaluationInput(
+    judge = JudgeConfig(id="gemini", provider="google", model="gemini-3.6-flash")
+    evaluation_input = EvaluationInput(
         ai="test-ai",
         model="test-model",
         prompt="Check this response",
@@ -14,12 +13,11 @@ def test_judges_travel_on_the_evaluation_input() -> None:
         judges=[judge],
     )
 
-    assert evaluation.judges == [judge]
+    assert evaluation_input.judges == [judge]
 
 
 def test_judge_defaults_send_nothing_a_provider_might_reject() -> None:
-    judge = JudgeConfig(id="claude", provider="anthropic",
-                        model="claude-sonnet-5-5")
+    judge = JudgeConfig(id="claude", provider="anthropic", model="claude-sonnet-5-5")
 
     assert judge.temperature is None
     assert judge.cache_prompt is False

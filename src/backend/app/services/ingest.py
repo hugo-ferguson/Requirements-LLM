@@ -17,14 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 class EmptyDocumentError(ValueError):
-    """Raised when a file yields no text to embed."""
+    """Raised when no text can be extracted from a file."""
 
 
 class FileTooLargeError(ValueError):
-    """Raised when a file, or the text extracted from it, exceeds app.ingest.limits."""
+    """Raised when a file, or the text extracted from it, is over the limits."""
 
 
 def _megabytes(size: int) -> str:
+    """Format a size in bytes as megabytes, e.g. "10.0 MB"."""
     return f"{size / (1024 * 1024):.1f} MB"
 
 
@@ -32,8 +33,7 @@ def _megabytes(size: int) -> str:
 class IngestResult:
     """The text extracted from an upload, and the document it became.
 
-    `document` is None for files that are read but deliberately not
-    stored; see `IngestService.ingest_file`.
+    `document` is None and `chunk_count` 0 for images, which aren't stored.
     """
 
     document: Document | None
@@ -50,7 +50,7 @@ class IngestService:
         embedding_provider: EmbeddingProvider,
         settings: Settings,
     ):
-        """Wire up storage, embeddings and chunking settings."""
+        """Wire up storage, embeddings and the chunking settings."""
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
         self.settings = settings
@@ -63,34 +63,34 @@ class IngestService:
         title: str | None = None,
         tags: list[str] | None = None,
     ) -> IngestResult:
-        """Extracts, chunks and embeds a file, then stores it as one Document.
+        """Extract, chunk and embed a file, then store it as one Document.
 
-        Images are the exception: their text goes straight back to the caller
-        and is never stored. A screenshot transcribes to a few hundred tokens
-        — measured across a real screenshot set, five images came to 789
-        tokens, one chunk each — so it fits in a prompt many times over and
-        embedding it only adds a retrieval hop and rows nothing queries.
-        Documents that can actually outgrow a prompt (PDFs, long text) are
-        still chunked and embedded.
+        Images only return their text. They're short enough to send in the
+        prompt, so they aren't stored.
 
-        Returns the extracted text, plus the stored document and its chunk
-        count when the file was stored.
+        Args:
+            data: The file's contents.
+            filename: The file's name. Its extension picks the extractor.
+            title: The document's title. Defaults to `filename`.
+            tags: Tag names to attach.
 
-        Raises FileTooLargeError when the file or its extracted text is over
-        the limits in app.ingest.limits; nothing is stored in either case.
+        Raises:
+            FileTooLargeError: If the file or its text is over the limits.
+            EmptyDocumentError: If the file yields no text.
+            UnsupportedFileError: If the extension isn't supported.
+            ImageExtractionError: If the vision model fails or returns no text.
         """
         if len(data) > MAX_UPLOAD_BYTES:
-            # Not the file's real size: the upload route stops reading one
-            # byte past the limit.
+            # Real size unknown: the route reads only one byte past the limit.
             raise FileTooLargeError(
-                f"{filename} is larger than the {_megabytes(MAX_UPLOAD_BYTES)} upload limit."
+                f"{filename} is larger than the "
+                f"{_megabytes(MAX_UPLOAD_BYTES)} upload limit."
             )
 
-        # Progress is logged at each stage: uvicorn only logs a request once it
-        # finishes, so without these a slow upload looks exactly like a dead one.
+        # Log each stage, so a slow upload doesn't look stuck.
         started = time.perf_counter()
         logger.info("ingest %r: started (%d KB)", filename, len(data) // 1024)
-        text = extract_text(data, filename, self.settings)
+        text = extract_text(data, filename)
         extension = Path(filename).suffix.lower()
         logger.info(
             "ingest %r: extracted %d characters in %.1fs",
@@ -112,17 +112,12 @@ class IngestService:
                 )
             return IngestResult(document=None, chunk_count=0, text=text)
 
-        chunks = chunk_text(
-            text, self.settings.chunk_size, self.settings.chunk_overlap
-        )
+        chunks = chunk_text(text, self.settings.chunk_size, self.settings.chunk_overlap)
 
         if not chunks:
-            raise EmptyDocumentError(
-                f"No text could be extracted from {filename!r}"
-            )
+            raise EmptyDocumentError(f"No text could be extracted from {filename!r}")
 
-        # Embed before writing anything, so a provider failure leaves no
-        # half-ingested document behind.
+        # Embed first, so a failure stores nothing.
         logger.info("ingest %r: embedding %d chunk(s)", filename, len(chunks))
         embeddings = self.embedding_provider.embed_texts(chunks)
 
@@ -130,7 +125,7 @@ class IngestService:
             source_type="upload",
             title=title or filename,
             filename=filename,
-            extension=Path(filename).suffix.lower() or None,
+            extension=extension or None,
             tags=tags,
         )
 
@@ -143,7 +138,7 @@ class IngestService:
                     embedding=embedding,
                 )
                 for index, (content, embedding) in enumerate(
-                    zip(chunks, embeddings)
+                    zip(chunks, embeddings, strict=False)
                 )
             ]
         )
@@ -158,15 +153,11 @@ class IngestService:
         return IngestResult(document=document, chunk_count=len(chunks), text=text)
 
     def delete_document(self, document_id: int) -> bool:
-        """Remove an ingested document; False if it doesn't exist.
-
-        Used when an attachment is discarded before it's sent, so
-        abandoned uploads don't linger in the search index.
-        """
+        """Remove an ingested document, returning False if it doesn't exist."""
         return self.vector_store.delete_document(document_id)
 
-    def search(self, query: str, k: int = 5) -> list[DocumentChunk]:
-        """Find the `k` stored chunks most similar to a text query."""
+    def search(self, query: str, top_k: int = 5) -> list[DocumentChunk]:
+        """Return the `top_k` chunks most similar to `query`."""
         return self.vector_store.similarity_search(
-            self.embedding_provider.embed_query(query), k
+            self.embedding_provider.embed_query(query), top_k
         )
